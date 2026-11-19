@@ -1,0 +1,1253 @@
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+const BUILT_INS: &[&str] = &["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"];
+const SCOPED_FIELDS: &[&str] = &[
+    "rules",
+    "proxy-groups",
+    "routepilot-disabled-rules",
+    "routepilot-disabled-groups",
+    "routepilot-independent-exits",
+];
+
+pub fn active_subscription(profile: &Value) -> Option<&str> {
+    profile["routepilot-active-subscription"]
+        .as_str()
+        .filter(|name| profile["proxy-providers"].get(*name).is_some())
+}
+
+pub fn select_subscription(profile: &mut Value, name: Option<String>) -> Result<(), String> {
+    if name
+        .as_ref()
+        .is_some_and(|name| profile["proxy-providers"].get(name).is_none())
+    {
+        return Err("该订阅已移除，请重新选择。".into());
+    }
+    let name = name.or_else(|| {
+        active_subscription(profile).map(str::to_owned).or_else(|| {
+            profile["proxy-providers"]
+                .as_object()?
+                .keys()
+                .next()
+                .cloned()
+        })
+    });
+    profile["routepilot-active-subscription"] = json!(name);
+    Ok(())
+}
+
+fn scoped_profile(profile: &Value) -> std::borrow::Cow<'_, Value> {
+    let Some(name) = active_subscription(profile) else {
+        return std::borrow::Cow::Borrowed(profile);
+    };
+    let mut view = profile.clone();
+    let map = view
+        .as_object_mut()
+        .expect("an active subscription requires an object");
+    let saved = &profile["routepilot-subscription-scopes"][name];
+    for &field in SCOPED_FIELDS {
+        if let Some(value) = saved.get(field) {
+            map.insert(field.into(), value.clone());
+        } else {
+            map.remove(field);
+        }
+    }
+    map.entry("rules").or_insert_with(|| json!(["MATCH,AUTO"]));
+    map.insert(
+        "proxy-providers".into(),
+        json!({name: profile["proxy-providers"][name]}),
+    );
+    map.insert("routepilot-created".into(), json!(true));
+    std::borrow::Cow::Owned(view)
+}
+
+pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
+    if let Edit::RemoveProvider { name } = &mutation {
+        let name = name.clone();
+        edit(profile, mutation)?;
+        if let Some(scopes) = profile["routepilot-subscription-scopes"].as_object_mut() {
+            scopes.remove(&name);
+        }
+        return select_subscription(profile, None);
+    }
+    if matches!(
+        &mutation,
+        Edit::Mode { .. } | Edit::Ports { .. } | Edit::Provider { .. }
+    ) {
+        return edit(profile, mutation);
+    }
+    let Some(name) = active_subscription(profile).map(str::to_owned) else {
+        return edit(profile, mutation);
+    };
+    let mut view = scoped_profile(profile).into_owned();
+    edit(&mut view, mutation)?;
+    let fields: serde_json::Map<String, Value> = SCOPED_FIELDS
+        .iter()
+        .filter_map(|&key| view.get(key).map(|value| (key.to_owned(), value.clone())))
+        .collect();
+    profile["routepilot-subscription-scopes"][name] = Value::Object(fields);
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Edit {
+    Mode {
+        mode: String,
+    },
+    Ports {
+        http: u16,
+        socks: u16,
+        mixed: u16,
+    },
+    Rule {
+        index: Option<usize>,
+        expected: Option<String>,
+        category: String,
+        target: String,
+        exit: String,
+    },
+    ProgramRules {
+        targets: Vec<String>,
+        exit: String,
+    },
+    RemoveRule {
+        index: usize,
+        expected: String,
+    },
+    DetachRule {
+        index: usize,
+        expected: String,
+    },
+    ToggleRule {
+        index: usize,
+        expected: String,
+        enabled: bool,
+    },
+    ToggleGroup {
+        name: String,
+        enabled: bool,
+    },
+    Group {
+        name: String,
+        policy: String,
+        members: Vec<String>,
+        providers: Vec<String>,
+    },
+    RemoveGroup {
+        name: String,
+    },
+    Provider {
+        name: String,
+        url: String,
+        interval: u64,
+    },
+    RemoveProvider {
+        name: String,
+    },
+}
+
+fn entries<'a>(profile: &'a Value, field: &str) -> impl Iterator<Item = &'a Value> {
+    profile
+        .get(field)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+}
+
+fn names<'a>(profile: &'a Value, field: &str) -> impl Iterator<Item = &'a str> {
+    entries(profile, field).filter_map(|entry| entry.get("name")?.as_str())
+}
+
+fn array<'a>(profile: &'a mut Value, field: &str) -> Result<&'a mut Vec<Value>, String> {
+    let object = profile.as_object_mut().ok_or("Invalid configuration")?;
+    object
+        .entry(field)
+        .or_insert_with(|| json!([]))
+        .as_array_mut()
+        .ok_or_else(|| format!("{field} must be an array"))
+}
+
+fn clean(value: &str) -> bool {
+    !value.is_empty() && value.trim() == value && !value.chars().any(|c| c == ',' || c.is_control())
+}
+
+fn exits(profile: &Value) -> Vec<&str> {
+    let mut items: Vec<_> = BUILT_INS
+        .iter()
+        .copied()
+        .chain(names(profile, "proxies"))
+        .chain(names(profile, "proxy-groups"))
+        .collect();
+    if !items.contains(&"AUTO")
+        && (names(profile, "proxies").next().is_some()
+            || profile["proxy-providers"]
+                .as_object()
+                .is_some_and(|items| !items.is_empty()))
+    {
+        items.push("AUTO");
+    }
+    items
+}
+
+fn matches_rule(rules: &[Value], index: usize, expected: &str) -> Result<(), String> {
+    if rules.get(index).and_then(Value::as_str) != Some(expected) {
+        return Err("规则已被修改。请刷新后重试。".into());
+    }
+    Ok(())
+}
+
+fn contains_member(group: &Value, field: &str, name: &str) -> bool {
+    group
+        .get(field)
+        .and_then(Value::as_array)
+        .is_some_and(|members| members.iter().any(|member| member.as_str() == Some(name)))
+}
+
+fn creates_cycle(profile: &Value, group: &str, members: &[String]) -> bool {
+    let mut remaining: Vec<_> = members.iter().map(String::as_str).collect();
+    let mut seen = std::collections::HashSet::new();
+    while let Some(name) = remaining.pop() {
+        if name == group {
+            return true;
+        }
+        if seen.insert(name) {
+            if let Some(entry) =
+                entries(profile, "proxy-groups").find(|entry| entry["name"].as_str() == Some(name))
+            {
+                if let Some(children) = entry["proxies"].as_array() {
+                    remaining.extend(children.iter().filter_map(Value::as_str));
+                }
+            }
+        }
+    }
+    false
+}
+
+pub fn rule_exit(rule: &str) -> Option<&str> {
+    let (prefix, last) = rule.rsplit_once(',')?;
+    if ["no-resolve", "src"].contains(&last.trim()) {
+        return prefix.rsplit_once(',').map(|(_, exit)| exit.trim());
+    }
+    Some(last.trim())
+}
+
+fn disabled(profile: &Value, field: &str, name: &str) -> bool {
+    entries(profile, field).any(|item| item.as_str() == Some(name))
+}
+
+fn set_enabled(profile: &mut Value, field: &str, name: &str, enabled: bool) -> Result<(), String> {
+    let items = array(profile, field)?;
+    items.retain(|item| item.as_str() != Some(name));
+    if !enabled {
+        items.push(json!(name));
+    }
+    Ok(())
+}
+
+fn rule_priority(profile: &Value, line: &str) -> (u8, std::cmp::Reverse<usize>) {
+    let (kind, tail) = line.split_once(',').unwrap_or((line, ""));
+    let exit = rule_exit(line).unwrap_or("");
+    let effective = entries(profile, "proxy-groups")
+        .find(|group| {
+            group["name"] == exit
+                && group["type"] == "select"
+                && group["use"].as_array().is_none_or(Vec::is_empty)
+        })
+        .and_then(|group| group["proxies"].as_array())
+        .filter(|members| members.len() == 1)
+        .and_then(|members| members[0].as_str())
+        .unwrap_or(exit);
+    let order = match (kind, effective) {
+        ("MATCH", _) => 7,
+        (_, "REJECT" | "REJECT-DROP") => 0,
+        (_, "DIRECT") => 1,
+        ("PROCESS-PATH" | "PROCESS-NAME", _) => 2,
+        ("DOMAIN", _) => 3,
+        ("DOMAIN-SUFFIX", _) => 4,
+        _ => 5,
+    };
+    (
+        order,
+        std::cmp::Reverse(if kind == "DOMAIN-SUFFIX" {
+            tail.split(',').next().unwrap_or("").len()
+        } else {
+            0
+        }),
+    )
+}
+
+fn apply_rule_order(profile: &Value, rules: &mut Vec<Value>) {
+    rules.retain(|item| {
+        item.as_str().is_none_or(|rule| {
+            let enabled = !disabled(profile, "routepilot-disabled-rules", rule)
+                && !rule_exit(rule)
+                    .is_some_and(|exit| disabled(profile, "routepilot-disabled-groups", exit));
+            enabled || rule.starts_with("MATCH,")
+        })
+    });
+    for item in rules.iter_mut() {
+        if item.as_str().is_some_and(|rule| {
+            rule.starts_with("MATCH,")
+                && rule_exit(rule)
+                    .is_some_and(|exit| disabled(profile, "routepilot-disabled-groups", exit))
+        }) {
+            *item = json!("MATCH,DIRECT");
+        }
+    }
+    if profile["routepilot-created"] == true {
+        rules.sort_by_cached_key(|rule| rule_priority(profile, rule.as_str().unwrap_or("")));
+    }
+}
+
+pub fn runtime_profile(profile: &Value) -> Value {
+    let catalog = profile.get("proxy-providers");
+    let scoped = scoped_profile(profile);
+    let profile = scoped.as_ref();
+    let mut runtime = profile.clone();
+    if let Some(rules) = runtime.get_mut("rules").and_then(Value::as_array_mut) {
+        apply_rule_order(profile, rules);
+    }
+    if let Some(map) = runtime.as_object_mut() {
+        map.remove("routepilot-disabled-rules");
+        map.remove("routepilot-disabled-groups");
+        map.remove("routepilot-imported-providers");
+        map.remove("routepilot-independent-exits");
+        map.remove("routepilot-created");
+        map.remove("routepilot-active-subscription");
+        map.remove("routepilot-subscription-scopes");
+    }
+    let providers: Vec<_> = profile["proxy-providers"]
+        .as_object()
+        .into_iter()
+        .flat_map(|items| items.keys())
+        .cloned()
+        .collect();
+    let static_nodes: Vec<_> = names(profile, "proxies").collect();
+    let custom_auto = names(profile, "proxies")
+        .chain(names(profile, "proxy-groups"))
+        .any(|name| name == "AUTO");
+    let has_auto = custom_auto || !providers.is_empty() || !static_nodes.is_empty();
+    if has_auto && !custom_auto {
+        if let Ok(groups) = array(&mut runtime, "proxy-groups") {
+            groups.push(
+                json!({"name":"AUTO", "type":"url-test", "proxies":static_nodes,
+                "use":providers, "url":"https://www.gstatic.com/generate_204", "interval":300}),
+            );
+        }
+    }
+    if has_auto && !names(profile, "proxy-groups").any(|name| name == "GLOBAL") {
+        let members = std::iter::once("AUTO")
+            .chain(exits(profile).into_iter().filter(|name| *name != "AUTO"))
+            .filter(|name| !["PASS", "COMPATIBLE", "REJECT-DROP"].contains(name))
+            .collect::<Vec<_>>();
+        if let Ok(groups) = array(&mut runtime, "proxy-groups") {
+            groups.push(
+                json!({"name":"GLOBAL", "type":"select", "proxies":members, "use":providers}),
+            );
+        }
+    }
+    if let Some(catalog) = catalog {
+        runtime["proxy-providers"] = catalog.clone();
+    }
+    runtime
+}
+
+fn is_subscription_exit(profile: &Value, group: &Value) -> bool {
+    group["name"].as_str().is_some_and(|name| {
+        disabled(profile, "routepilot-imported-providers", name)
+            && profile["proxy-providers"].get(name).is_some()
+            && group["type"] == "url-test"
+            && group["use"] == json!([name])
+            && group["proxies"] == json!([])
+    })
+}
+
+pub fn node_metadata(nodes: &[Value]) -> Value {
+    json!(nodes
+        .iter()
+        .filter_map(|node| {
+            Some(json!({"name":node["name"].as_str()?,"type":node["type"].as_str()?}))
+        })
+        .collect::<Vec<_>>())
+}
+
+pub fn subscription_metadata(content: &str) -> Value {
+    use base64::{engine::general_purpose, Engine};
+    let decode = |input: &str| {
+        general_purpose::STANDARD
+            .decode(input)
+            .or_else(|_| general_purpose::STANDARD_NO_PAD.decode(input))
+            .or_else(|_| general_purpose::URL_SAFE_NO_PAD.decode(input))
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+    };
+    let content = content.trim_start_matches('\u{feff}').trim();
+    if let Ok(profile) = serde_yaml_ng::from_str::<Value>(content) {
+        if let Some(nodes) = profile["proxies"].as_array() {
+            return node_metadata(nodes);
+        }
+        if let Some(nodes) = profile.as_array() {
+            return node_metadata(nodes);
+        }
+    }
+    let decoded = if content.contains("://") {
+        None
+    } else {
+        decode(content)
+    };
+    let nodes = decoded
+        .as_deref()
+        .unwrap_or(content)
+        .lines()
+        .filter_map(|line| {
+            let (kind, data) = line.trim().split_once("://")?;
+            if !matches!(
+                kind,
+                "ss" | "ssr"
+                    | "vmess"
+                    | "vless"
+                    | "trojan"
+                    | "hysteria"
+                    | "hysteria2"
+                    | "hy2"
+                    | "tuic"
+                    | "wireguard"
+                    | "anytls"
+            ) {
+                return None;
+            }
+            let name = if kind == "vmess" && !data.contains('#') {
+                let node: Value = serde_json::from_str(&decode(data)?).ok()?;
+                node["ps"].as_str()?.to_owned()
+            } else {
+                let label = data.rsplit_once('#')?.1;
+                reqwest::Url::parse(&format!(
+                    "http://127.0.0.1/?name={}",
+                    label.replace('&', "%26").replace('+', "%2B")
+                ))
+                .ok()?
+                .query_pairs()
+                .next()?
+                .1
+                .into_owned()
+            };
+            if name.is_empty() {
+                return None;
+            }
+            Some(json!({"name":name,"type":kind}))
+        })
+        .collect::<Vec<_>>();
+    if nodes.is_empty() {
+        Value::Null
+    } else {
+        json!(nodes)
+    }
+}
+
+pub fn summary(profile: &Value) -> Value {
+    let catalog = profile;
+    let scoped = scoped_profile(profile);
+    let profile = scoped.as_ref();
+    let mut active_rules = profile["rules"].as_array().cloned().unwrap_or_default();
+    apply_rule_order(profile, &mut active_rules);
+    let process_rules = active_rules
+        .iter()
+        .filter_map(Value::as_str)
+        .take_while(|line| !line.starts_with("MATCH,"))
+        .filter_map(|line| {
+            let (kind, rest) = line.split_once(',')?;
+            if !matches!(kind, "PROCESS-PATH" | "PROCESS-NAME") {
+                return None;
+            }
+            let (target, _) = rest.split_once(',')?;
+            Some(json!({"kind":kind,"target":target.trim(),"exit":rule_exit(line)?}))
+        })
+        .collect::<Vec<_>>();
+    let groups = entries(profile, "proxy-groups")
+        .filter(|group| group["name"] != "GLOBAL" && !is_subscription_exit(profile, group))
+        .map(|group| {
+            json!({
+                "name":group.get("name"), "type":group.get("type"),
+                "proxies":group.get("proxies"), "use":group.get("use"),
+                "enabled":!group["name"].as_str().is_some_and(|name| disabled(profile,"routepilot-disabled-groups",name))
+            })
+        })
+        .collect::<Vec<_>>();
+    let providers = catalog.get("proxy-providers").and_then(Value::as_object).map(|providers| {
+        providers.iter().map(|(name,item)| {
+            let source = item["url"].as_str().and_then(|url| reqwest::Url::parse(url).ok())
+                .and_then(|url| url.host_str().map(str::to_owned));
+            let rule_exit_disabled = disabled(profile, "routepilot-disabled-groups", name)
+                && entries(profile, "proxy-groups")
+                    .any(|group| group["name"].as_str() == Some(name.as_str()) && is_subscription_exit(profile, group));
+            json!({"name":name,"type":item.get("type"),"interval":item.get("interval"),"source":source,"ruleExitDisabled":rule_exit_disabled})
+        }).collect::<Vec<_>>()
+    }).unwrap_or_default();
+    json!({
+        "subscriptionScope": active_subscription(catalog),
+        "subscriptionScopeInitialized": catalog.get("routepilot-active-subscription").is_some(),
+        "http":profile.get("port"), "socks":profile.get("socks-port"), "mixed":profile.get("mixed-port"), "mode":profile.get("mode"),
+        "rules":profile.get("rules"), "groups":groups, "providers":providers, "exits":exits(profile),
+        "disabledRules":profile.get("routepilot-disabled-rules"), "disabledGroups":profile.get("routepilot-disabled-groups"),
+        "processRules":process_rules,
+        "nodes":entries(profile,"proxies").map(|item|json!({"name":item.get("name"),"type":item.get("type")})).collect::<Vec<_>>(),
+        "ruleExits":entries(profile,"rules").map(|item|item.as_str().and_then(rule_exit)).collect::<Vec<_>>()
+    })
+}
+
+pub fn import_subscription(
+    profile: &mut Value,
+    url: &str,
+    first_profile: bool,
+) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url.trim()).map_err(|_| "订阅地址无效")?;
+    let host = parsed.host_str().ok_or("订阅地址无效")?;
+    if profile["proxy-providers"]
+        .as_object()
+        .is_some_and(|providers| {
+            providers
+                .values()
+                .any(|provider| provider["url"].as_str() == Some(parsed.as_str()))
+        })
+    {
+        return Ok(());
+    }
+    let name = subscription_name(profile, &format!("订阅 · {host}"));
+    edit(
+        profile,
+        Edit::Provider {
+            name: name.clone(),
+            url: parsed.into(),
+            interval: 3600,
+        },
+    )?;
+    bind_subscription(profile, &name, first_profile)
+}
+
+fn subscription_name(profile: &Value, base: &str) -> String {
+    let mut name = base.to_owned();
+    let mut suffix = 2;
+    while exits(profile).contains(&name.as_str()) || profile["proxy-providers"].get(&name).is_some()
+    {
+        name = format!("{base} ({suffix})");
+        suffix += 1;
+    }
+    name
+}
+
+pub fn import_subscription_file(
+    profile: &mut Value,
+    label: &str,
+    path: &str,
+    first_profile: bool,
+) -> Result<(), String> {
+    let name = subscription_name(profile, label);
+    let providers = profile
+        .as_object_mut()
+        .ok_or("Invalid profile")?
+        .entry("proxy-providers")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or("Invalid providers")?;
+    providers.insert(name.clone(), json!({"type":"file","path":path}));
+    bind_subscription(profile, &name, first_profile)
+}
+
+fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Result<(), String> {
+    edit(
+        profile,
+        Edit::Group {
+            name: name.into(),
+            policy: "url-test".into(),
+            members: vec![],
+            providers: vec![name.into()],
+        },
+    )?;
+    if first_profile
+        || (entries(profile, "proxies").next().is_none()
+            && entries(profile, "proxy-groups").count() == 1
+            && profile["rules"] == json!(["MATCH,DIRECT"]))
+    {
+        profile["rules"] = json!([format!("MATCH,{name}")]);
+    }
+    array(profile, "routepilot-imported-providers")?.push(json!(name));
+    Ok(())
+}
+
+pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
+    match mutation {
+        Edit::Mode { mode } => {
+            if !["rule", "global", "direct"].contains(&mode.as_str()) {
+                return Err("无效的代理模式。".into());
+            }
+            profile["mode"] = json!(mode);
+        }
+        Edit::Ports { http, socks, mixed } => {
+            profile["port"] = json!(http);
+            profile["socks-port"] = json!(socks);
+            profile["mixed-port"] = json!(mixed);
+        }
+        Edit::Rule {
+            index,
+            expected,
+            category,
+            target,
+            exit,
+        } => {
+            if exit != "GLOBAL" && !exits(profile).contains(&exit.as_str()) {
+                return Err("请选择可用的出口".into());
+            }
+            let valid = match category.as_str() {
+                "DOMAIN" | "DOMAIN-SUFFIX" => {
+                    clean(&target)
+                        && target.len() <= 253
+                        && target.contains('.')
+                        && target
+                            .bytes()
+                            .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-')
+                }
+                "PROCESS-PATH" => clean(&target) && std::path::Path::new(&target).is_absolute(),
+                "MATCH" => target.is_empty(),
+                _ => false,
+            };
+            if !valid {
+                return Err("规则目标无效".into());
+            }
+            let text = if category == "MATCH" {
+                format!("MATCH,{exit}")
+            } else {
+                format!("{category},{target},{exit}")
+            };
+            let was_disabled = expected
+                .as_deref()
+                .is_some_and(|rule| disabled(profile, "routepilot-disabled-rules", rule));
+            let saved_exit = expected
+                .as_deref()
+                .and_then(|rule| {
+                    let old_exit = rule_exit(rule)?;
+                    if names(profile, "proxy-groups").any(|group| group == old_exit) {
+                        profile["routepilot-independent-exits"]
+                            .get(rule)
+                            .and_then(Value::as_str)
+                    } else {
+                        Some(old_exit)
+                    }
+                })
+                .map(str::to_owned);
+            let joining_group =
+                category != "MATCH" && names(profile, "proxy-groups").any(|group| group == exit);
+            let rules = array(profile, "rules")?;
+            if category == "MATCH"
+                && rules.iter().enumerate().any(|(i, r)| {
+                    Some(i) != index && r.as_str().is_some_and(|r| r.starts_with("MATCH,"))
+                })
+            {
+                return Err("已有默认出口规则，请编辑现有 MATCH".into());
+            }
+            if rules
+                .iter()
+                .enumerate()
+                .any(|(i, r)| Some(i) != index && r.as_str() == Some(&text))
+            {
+                return Err("已有相同规则".into());
+            }
+            if let Some(index) = index {
+                matches_rule(rules, index, expected.as_deref().unwrap_or(""))?;
+                if category == "MATCH" && index + 1 != rules.len() {
+                    rules.remove(index);
+                    rules.push(json!(&text));
+                } else {
+                    rules[index] = json!(&text);
+                }
+            } else {
+                let position = if category == "MATCH" {
+                    rules.len()
+                } else {
+                    rules
+                        .iter()
+                        .position(|r| r.as_str().is_some_and(|r| r.starts_with("MATCH,")))
+                        .unwrap_or(rules.len())
+                };
+                rules.insert(position, json!(&text));
+            }
+            let previous = expected.as_deref().filter(|_| index.is_some());
+            if let Some(map) = profile
+                .get_mut("routepilot-independent-exits")
+                .and_then(Value::as_object_mut)
+            {
+                if let Some(previous) = previous {
+                    map.remove(previous);
+                }
+            }
+            if joining_group {
+                if let Some(saved_exit) = saved_exit {
+                    profile
+                        .as_object_mut()
+                        .ok_or("Invalid configuration")?
+                        .entry("routepilot-independent-exits")
+                        .or_insert_with(|| json!({}))
+                        .as_object_mut()
+                        .ok_or("Invalid independent exits")?
+                        .insert(text.clone(), json!(saved_exit));
+                }
+            }
+            if let Some(previous) = expected.filter(|_| index.is_some() && was_disabled) {
+                set_enabled(profile, "routepilot-disabled-rules", &previous, true)?;
+                set_enabled(
+                    profile,
+                    "routepilot-disabled-rules",
+                    &text,
+                    category == "MATCH",
+                )?;
+            }
+        }
+        Edit::ProgramRules { targets, exit } => {
+            if targets.is_empty() || targets.len() > 250 {
+                return Err("请选择 1 到 250 个软件。".into());
+            }
+            let mut next = profile.clone();
+            for target in targets {
+                let normalized = target.replace('\\', "/").to_lowercase();
+                let previous = entries(&next, "rules")
+                    .enumerate()
+                    .find_map(|(index, item)| {
+                        let rule = item.as_str()?;
+                        let path = rule.strip_prefix("PROCESS-PATH,")?.split_once(',')?.0;
+                        (path.replace('\\', "/").to_lowercase() == normalized)
+                            .then(|| (index, rule.to_owned()))
+                    });
+                edit(
+                    &mut next,
+                    Edit::Rule {
+                        index: previous.as_ref().map(|(index, _)| *index),
+                        expected: previous.map(|(_, rule)| rule),
+                        category: "PROCESS-PATH".into(),
+                        target,
+                        exit: exit.clone(),
+                    },
+                )?;
+            }
+            *profile = next;
+        }
+        Edit::RemoveRule { index, expected } => {
+            let rules = array(profile, "rules")?;
+            matches_rule(rules, index, &expected)?;
+            rules.remove(index);
+            set_enabled(profile, "routepilot-disabled-rules", &expected, true)?;
+            if let Some(map) = profile
+                .get_mut("routepilot-independent-exits")
+                .and_then(Value::as_object_mut)
+            {
+                map.remove(&expected);
+            }
+        }
+        Edit::DetachRule { index, expected } => {
+            let (category, tail) = expected.split_once(',').ok_or("无效的规则")?;
+            let (target, group) = tail.rsplit_once(',').ok_or("无效的规则")?;
+            if !["DOMAIN", "DOMAIN-SUFFIX", "PROCESS-PATH"].contains(&category)
+                || !names(profile, "proxy-groups").any(|name| name == group)
+            {
+                return Err("此规则请在分流规则中编辑。".into());
+            }
+            let exit = profile["routepilot-independent-exits"][&expected]
+                .as_str()
+                .filter(|exit| exits(profile).contains(exit))
+                .unwrap_or("PASS")
+                .to_owned();
+            edit(
+                profile,
+                Edit::Rule {
+                    index: Some(index),
+                    expected: Some(expected.clone()),
+                    category: category.into(),
+                    target: target.into(),
+                    exit,
+                },
+            )?;
+        }
+        Edit::ToggleRule {
+            index,
+            expected,
+            enabled,
+        } => {
+            matches_rule(&array(profile, "rules")?[..], index, &expected)?;
+            if expected.starts_with("MATCH,") {
+                return Err("默认出口必须保留，可将出口设为 DIRECT。".into());
+            }
+            set_enabled(profile, "routepilot-disabled-rules", &expected, enabled)?;
+        }
+        Edit::ToggleGroup { name, enabled } => {
+            if !names(profile, "proxy-groups").any(|item| item == name) {
+                return Err("找不到该分组。".into());
+            }
+            set_enabled(profile, "routepilot-disabled-groups", &name, enabled)?;
+        }
+        Edit::Group {
+            name,
+            policy,
+            members,
+            providers,
+        } => {
+            if entries(profile, "proxy-groups").any(|group| {
+                group["name"].as_str() == Some(&name) && is_subscription_exit(profile, group)
+            }) {
+                return Err("该名称已用于订阅出口，请使用其他分组名称。".into());
+            }
+            if !clean(&name)
+                || name == "GLOBAL"
+                || BUILT_INS.contains(&name.as_str())
+                || names(profile, "proxies").any(|n| n == name)
+            {
+                return Err("分组名称无效或与节点冲突".into());
+            }
+            let available = exits(profile);
+            if !["select", "url-test", "fallback"].contains(&policy.as_str())
+                || (members.is_empty() && providers.is_empty())
+                || providers.iter().any(|name| {
+                    !profile["proxy-providers"]
+                        .as_object()
+                        .is_some_and(|items| items.contains_key(name))
+                })
+                || members
+                    .iter()
+                    .any(|member| !available.contains(&member.as_str()))
+                || creates_cycle(profile, &name, &members)
+            {
+                return Err("分组类型、成员或引用无效".into());
+            }
+            let groups = array(profile, "proxy-groups")?;
+            let found = groups
+                .iter_mut()
+                .find(|group| group["name"].as_str() == Some(&name));
+            let mut group = found
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(|| json!({"name":name}));
+            group["type"] = json!(policy);
+            group["proxies"] = json!(members);
+            group["use"] = json!(providers);
+            if policy != "select" {
+                let map = group.as_object_mut().ok_or("Invalid group")?;
+                map.entry("url")
+                    .or_insert_with(|| json!("https://www.gstatic.com/generate_204"));
+                map.entry("interval").or_insert_with(|| json!(300));
+            }
+            match found {
+                Some(existing) => *existing = group,
+                None => groups.push(group),
+            }
+        }
+        Edit::RemoveGroup { name } => {
+            let in_rules = entries(profile, "rules")
+                .filter_map(Value::as_str)
+                .any(|r| rule_exit(r) == Some(&name));
+            if in_rules
+                || entries(profile, "proxy-groups")
+                    .any(|group| contains_member(group, "proxies", &name))
+            {
+                return Err("分组仍被规则或其他分组引用".into());
+            }
+            array(profile, "proxy-groups")?.retain(|group| group["name"].as_str() != Some(&name));
+            set_enabled(profile, "routepilot-disabled-groups", &name, true)?;
+        }
+        Edit::Provider {
+            name,
+            url,
+            interval,
+        } => {
+            if !clean(&name) || !(60..=86400).contains(&interval) {
+                return Err("订阅名称或刷新间隔无效".into());
+            }
+            let parsed = reqwest::Url::parse(&url).map_err(|_| "订阅地址无效")?;
+            if parsed.scheme() != "https"
+                || parsed.host_str().is_none()
+                || !parsed.username().is_empty()
+                || parsed.password().is_some()
+            {
+                return Err("订阅需要 HTTPS 地址".into());
+            }
+            let providers = profile
+                .as_object_mut()
+                .ok_or("Invalid profile")?
+                .entry("proxy-providers")
+                .or_insert_with(|| json!({}))
+                .as_object_mut()
+                .ok_or("Invalid providers")?;
+            let provider = providers
+                .entry(name)
+                .or_insert_with(|| json!({"type":"http"}));
+            if provider["type"] != "http" {
+                return Err("该名称已用于不同类型的订阅".into());
+            }
+            provider["url"] = json!(parsed.as_str());
+            provider["interval"] = json!(interval);
+        }
+        Edit::RemoveProvider { name } => {
+            if entries(profile, "proxy-groups").any(|group| {
+                group["name"].as_str() == Some(&name) && is_subscription_exit(profile, group)
+            }) {
+                if entries(profile, "rules")
+                    .filter_map(Value::as_str)
+                    .any(|rule| !rule.starts_with("MATCH,") && rule_exit(rule) == Some(&name))
+                {
+                    return Err("订阅出口仍被分流规则引用，请先修改相关规则。".into());
+                }
+                for rule in array(profile, "rules")? {
+                    if rule.as_str().is_some_and(|line| {
+                        line.starts_with("MATCH,") && rule_exit(line) == Some(&name)
+                    }) {
+                        *rule = json!("MATCH,DIRECT");
+                    }
+                }
+                edit(profile, Edit::RemoveGroup { name: name.clone() })?;
+            }
+            if entries(profile, "proxy-groups").any(|group| contains_member(group, "use", &name)) {
+                return Err("订阅仍被策略组引用".into());
+            }
+            if let Some(providers) = profile["proxy-providers"].as_object_mut() {
+                providers.remove(&name);
+            }
+            set_enabled(profile, "routepilot-imported-providers", &name, true)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subscription_scopes_keep_distinct_rules_groups_and_automatic_exits() {
+        let mut config = json!({
+            "rules":["MATCH,DIRECT"],
+            "mode":"rule",
+            "proxy-providers":{"First":{"type":"file"},"Second":{"type":"file"}}
+        });
+        let configure = |config: &mut Value, host: &str, member: &str| {
+            edit_active(
+                config,
+                Edit::Group {
+                    name: "开发工具".into(),
+                    policy: "select".into(),
+                    members: vec![member.into()],
+                    providers: vec![],
+                },
+            )
+            .unwrap();
+            edit_active(
+                config,
+                Edit::Rule {
+                    index: None,
+                    expected: None,
+                    category: "DOMAIN".into(),
+                    target: host.into(),
+                    exit: "开发工具".into(),
+                },
+            )
+            .unwrap();
+        };
+        select_subscription(&mut config, Some("First".into())).unwrap();
+        configure(&mut config, "first.example", "DIRECT");
+        select_subscription(&mut config, Some("Second".into())).unwrap();
+        assert_eq!(summary(&config)["groups"], json!([]));
+        configure(&mut config, "second.example", "REJECT");
+        let second_runtime = runtime_profile(&config);
+        assert_eq!(
+            second_runtime["rules"],
+            json!(["DOMAIN,second.example,开发工具", "MATCH,AUTO"])
+        );
+        for name in ["AUTO", "GLOBAL"] {
+            let group = entries(&second_runtime, "proxy-groups")
+                .find(|group| group["name"] == name)
+                .unwrap();
+            assert_eq!(group["use"], json!(["Second"]));
+        }
+        select_subscription(&mut config, Some("First".into())).unwrap();
+        assert_eq!(summary(&config)["groups"][0]["proxies"], json!(["DIRECT"]));
+        assert_eq!(
+            runtime_profile(&config)["rules"],
+            json!(["DOMAIN,first.example,开发工具", "MATCH,AUTO"])
+        );
+        assert_eq!(summary(&config)["providers"].as_array().unwrap().len(), 2);
+        select_subscription(&mut config, None).unwrap();
+        assert_eq!(active_subscription(&config), Some("First"));
+        edit_active(
+            &mut config,
+            Edit::RemoveProvider {
+                name: "First".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(active_subscription(&config), Some("Second"));
+        edit_active(
+            &mut config,
+            Edit::RemoveProvider {
+                name: "Second".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(active_subscription(&config), None);
+        assert_eq!(runtime_profile(&config)["rules"], json!(["MATCH,DIRECT"]));
+        assert_eq!(summary(&config)["groups"], json!([]));
+    }
+
+    #[test]
+    fn subscription_metadata_exposes_names_and_types_only() {
+        let yaml = "proxies:\n  - {name: 东京, type: vless, server: example.org, uuid: hidden}";
+        assert_eq!(
+            subscription_metadata(yaml),
+            json!([{"name":"东京","type":"vless"}])
+        );
+        let link = "ss://placeholder@example.org:443#Tokyo%20One";
+        let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, link);
+        assert_eq!(
+            subscription_metadata(&encoded),
+            json!([{"name":"Tokyo One","type":"ss"}])
+        );
+        assert_eq!(
+            subscription_metadata("<html>Unavailable</html>"),
+            Value::Null
+        );
+    }
+
+    #[test]
+    fn process_summary_respects_runtime_order_and_disabled_groups() {
+        let config = json!({
+            "routepilot-created":true,
+            "routepilot-disabled-groups":["Off"],
+            "rules":[
+                "PROCESS-PATH,C:\\Tools\\tool.exe,Off",
+                "PROCESS-PATH,C:\\Tools\\tool.exe,Proxy",
+                "PROCESS-NAME,tool.exe,DIRECT",
+                "MATCH,DIRECT"
+            ]
+        });
+        assert_eq!(
+            summary(&config)["processRules"],
+            json!([
+                {"kind":"PROCESS-NAME","target":"tool.exe","exit":"DIRECT"},
+                {"kind":"PROCESS-PATH","target":"C:\\Tools\\tool.exe","exit":"Proxy"}
+            ])
+        );
+    }
+
+    #[test]
+    fn runtime_applies_rule_and_group_toggles_and_keeps_rule_priority() {
+        let mut config = json!({
+            "routepilot-created":true,
+            "proxy-groups":[{"name":"Work","type":"select","proxies":["DIRECT"]}],
+            "rules":["DOMAIN,paused.example,DIRECT","DOMAIN-SUFFIX,example,DIRECT",
+                "DOMAIN,blocked.example,REJECT","DOMAIN,work.example,Work","MATCH,Work"]
+        });
+        edit(
+            &mut config,
+            Edit::ToggleRule {
+                index: 0,
+                expected: "DOMAIN,paused.example,DIRECT".into(),
+                enabled: false,
+            },
+        )
+        .unwrap();
+        edit(
+            &mut config,
+            Edit::ToggleGroup {
+                name: "Work".into(),
+                enabled: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            runtime_profile(&config)["rules"],
+            json!([
+                "DOMAIN,blocked.example,REJECT",
+                "DOMAIN-SUFFIX,example,DIRECT",
+                "MATCH,DIRECT"
+            ])
+        );
+        assert_eq!(summary(&config)["groups"][0]["enabled"], false);
+        assert_eq!(config["rules"].as_array().unwrap().len(), 5);
+    }
+
+    #[test]
+    fn detaching_a_target_restores_its_independent_exit() {
+        let mut config = json!({
+            "proxy-groups":[{"name":"Work","type":"select","proxies":["DIRECT"]}],
+            "rules":["DOMAIN,work.example,REJECT","MATCH,DIRECT"]
+        });
+        edit(
+            &mut config,
+            Edit::Rule {
+                index: Some(0),
+                expected: Some("DOMAIN,work.example,REJECT".into()),
+                category: "DOMAIN".into(),
+                target: "work.example".into(),
+                exit: "Work".into(),
+            },
+        )
+        .unwrap();
+        edit(
+            &mut config,
+            Edit::DetachRule {
+                index: 0,
+                expected: "DOMAIN,work.example,Work".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(config["rules"][0], "DOMAIN,work.example,REJECT");
+    }
+
+    #[test]
+    fn built_in_import_connects_first_subscription_and_keeps_existing_routes() {
+        let mut config = json!({"rules":["MATCH,DIRECT"]});
+        let url = "https://example.org/sub?token=private";
+        import_subscription(&mut config, url, true).unwrap();
+        assert_eq!(config["rules"], json!(["MATCH,订阅 · example.org"]));
+        assert_eq!(
+            config["proxy-groups"][0]["use"],
+            json!(["订阅 · example.org"])
+        );
+        import_subscription(&mut config, url, false).unwrap();
+        assert_eq!(config["proxy-providers"].as_object().unwrap().len(), 1);
+        import_subscription(&mut config, "https://example.org/second", false).unwrap();
+        assert_eq!(config["rules"], json!(["MATCH,订阅 · example.org"]));
+        assert_eq!(config["proxy-providers"].as_object().unwrap().len(), 2);
+        assert!(!summary(&config).to_string().contains("private"));
+    }
+
+    #[test]
+    fn subscription_exit_is_not_a_user_group() {
+        let mut config = json!({"rules":["MATCH,DIRECT"]});
+        import_subscription_file(&mut config, "local.yaml", "./providers/local.yaml", true)
+            .unwrap();
+        let groups = array(&mut config, "proxy-groups").unwrap();
+        groups.push(json!({"name":"Work","type":"select","use":["local.yaml"]}));
+        groups.push(json!({"name":"GLOBAL","type":"select","proxies":["Work"]}));
+        edit(
+            &mut config,
+            Edit::ToggleGroup {
+                name: "local.yaml".into(),
+                enabled: false,
+            },
+        )
+        .unwrap();
+
+        let visible = summary(&config);
+        assert_eq!(visible["groups"].as_array().unwrap().len(), 1);
+        assert_eq!(visible["groups"][0]["name"], "Work");
+        assert_eq!(visible["providers"][0]["ruleExitDisabled"], true);
+        assert_eq!(visible["disabledGroups"], json!(["local.yaml"]));
+        assert!(visible["exits"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("local.yaml")));
+        assert_eq!(runtime_profile(&config)["rules"], json!(["MATCH,DIRECT"]));
+        assert!(edit(
+            &mut config,
+            Edit::Group {
+                name: "local.yaml".into(),
+                policy: "select".into(),
+                members: vec!["DIRECT".into()],
+                providers: vec![],
+            }
+        )
+        .is_err());
+
+        edit(
+            &mut config,
+            Edit::ToggleGroup {
+                name: "local.yaml".into(),
+                enabled: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(summary(&config)["providers"][0]["ruleExitDisabled"], false);
+        assert_eq!(
+            runtime_profile(&config)["rules"],
+            json!(["MATCH,local.yaml"])
+        );
+    }
+
+    #[test]
+    fn inserts_rules_before_the_default_and_rejects_stale_edits() {
+        let mut config = json!({"rules":["MATCH,DIRECT"]});
+        edit(
+            &mut config,
+            Edit::Rule {
+                index: None,
+                expected: None,
+                category: "DOMAIN".into(),
+                target: "example.org".into(),
+                exit: "REJECT".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            config["rules"],
+            json!(["DOMAIN,example.org,REJECT", "MATCH,DIRECT"])
+        );
+        assert!(edit(
+            &mut config,
+            Edit::RemoveRule {
+                index: 0,
+                expected: "MATCH,DIRECT".into()
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn protects_group_references_and_rejects_cycles() {
+        let mut config = json!({"proxy-groups":[{"name":"A","type":"select","proxies":["DIRECT"]},{"name":"B","type":"select","proxies":["A"]}]});
+        assert!(edit(
+            &mut config,
+            Edit::Group {
+                name: "A".into(),
+                policy: "select".into(),
+                members: vec!["B".into()],
+                providers: vec![]
+            }
+        )
+        .is_err());
+        assert!(edit(&mut config, Edit::RemoveGroup { name: "A".into() }).is_err());
+    }
+
+    #[test]
+    fn provider_can_supply_a_group_and_cannot_be_removed_while_used() {
+        let mut config = json!({"proxy-providers":{"Example":{"type":"http"}}});
+        edit(
+            &mut config,
+            Edit::Group {
+                name: "Auto".into(),
+                policy: "url-test".into(),
+                members: vec![],
+                providers: vec!["Example".into()],
+            },
+        )
+        .unwrap();
+        assert_eq!(config["proxy-groups"][0]["use"], json!(["Example"]));
+        assert!(edit(
+            &mut config,
+            Edit::RemoveProvider {
+                name: "Example".into()
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn subscription_credentials_are_not_in_the_summary() {
+        let mut config = json!({});
+        edit(
+            &mut config,
+            Edit::Provider {
+                name: "Example".into(),
+                url: "https://example.org/sub?token=private".into(),
+                interval: 300,
+            },
+        )
+        .unwrap();
+        assert!(!summary(&config).to_string().contains("private"));
+    }
+}

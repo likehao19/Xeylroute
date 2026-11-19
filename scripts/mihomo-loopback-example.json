@@ -1,0 +1,8 @@
+{
+  "port": 9870,
+  "socks-port": 17891,
+  "allow-lan": false,
+  "bind-address": "127.0.0.1",
+  "mode": "rule",
+  "rules": ["MATCH,DIRECT"]
+}

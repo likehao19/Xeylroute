@@ -1,0 +1,9 @@
+node_modules/
+index.html
+src/prototype.js
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+output/
+__pycache__/
+public/site-icons/claude.ai.bin
