@@ -119,7 +119,6 @@ export function mountDesktopApp(shell: ShellController): void {
     dragRegions.forEach(el => el.toggleAttribute('data-tauri-drag-region', platform !== 'windows'));
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
-    root.classList.toggle('vibrant', platform === 'macos');
     const actionHost = $(platform === 'macos' ? 'toolbarActions' : 'nodeActionRow');
     actionHost.append($('nodeTestActions'));
   }

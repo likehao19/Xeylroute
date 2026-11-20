@@ -13,13 +13,6 @@
         "trafficLightPosition": {
           "x": 24,
           "y": 33
-        },
-        "transparent": true,
-        "windowEffects": {
-          "effects": [
-            "liquidGlassClear",
-            "sidebar"
-          ]
         }
       }
     ]

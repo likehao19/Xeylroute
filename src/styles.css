@@ -317,13 +317,6 @@
       overflow: hidden;
     }
 
-    /* macOS: the window itself is the glass. The operating system blurs the desktop behind it,
-       so the page only lays tints on top and runs no blur of its own for the sidebar. */
-    :root.vibrant,
-    :root.vibrant body { background: transparent; }
-    :root.vibrant .mac-window { background: var(--stage-vibrant); }
-    :root.vibrant .sidebar { background: var(--sidebar-vibrant); }
-
     .sidebar {
       position: relative;
       z-index: 5;
@@ -1673,49 +1666,8 @@
       box-shadow: var(--seg-thumb-shadow);
     }
 
-    /* macOS System Settings -> Appearance Mini-Window Preview Swatches */
-    .appearance-picker {
-      display: flex;
-      gap: 10px;
-    }
-    .appearance-opt {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
-      border: 0;
-      background: transparent;
-      padding: 0;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 550;
-    }
-    .appearance-thumb {
-      position: relative; display: block; width: 68px; height: 44px; border-radius: 6px;
-      overflow: hidden; box-shadow: 0 0 0 1px var(--card-hairline), 0 2px 4px rgb(0 0 0 / 12%);
-    }
-    .appearance-thumb i {
-      position: absolute; inset: 0; --pane: #f5f6f8; --bar: #157ae4;
-      background: linear-gradient(145deg,#c2e4f6 12%,#65b7ed 26%,#89d8f3 27%,#3885d2 49%,#bfd8f1 70%,#276393);
-    }
-    .appearance-thumb .dark-t {
-      --pane: #252633; --bar: #3e47bc;
-      background: linear-gradient(145deg,#6772be 12%,#272f80 26%,#596bbc 27%,#161d59 49%,#4e5ca8 70%,#141731);
-    }
-    .appearance-thumb i + i { clip-path: inset(0 0 0 50%); }
-    .appearance-thumb i::before {
-      content: ""; position: absolute; left: -4px; top: 7px; width: 55%; height: 10px;
-      border: 2px solid var(--pane); border-radius: 4px; background: var(--bar); box-shadow: 0 1px 3px #0003;
-    }
-    .appearance-thumb i::after {
-      content: ""; position: absolute; right: -3px; bottom: -4px; width: 76%; height: 55%; border-radius: 6px;
-      background: radial-gradient(circle at 9px 8px,#ff625b 2px,transparent 2.5px),
-        radial-gradient(circle at 16px 8px,#ffbf32 2px,transparent 2.5px),
-        radial-gradient(circle at 23px 8px,#30c645 2px,transparent 2.5px), var(--pane);
-      box-shadow: 0 0 0 1px #0002, 0 -1px 4px #0002;
-    }
-    .appearance-opt.active { color: var(--ink); }
-    .appearance-opt.active .appearance-thumb { outline: 3px solid var(--accent); outline-offset: 2px; }
+    .theme-options button { display: inline-flex; align-items: center; gap: 5px; }
+    .theme-options svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; }
 
     /* Port Labeled Chip Inputs */
     .port-group {
@@ -2211,7 +2163,7 @@
       padding: 9px 11px;
       border-radius: 10px;
       border: 0;
-      resize: vertical;
+      resize: none; overflow-y: auto;
       box-shadow: inset 0 0 0 0.5px var(--popup-border), inset 0 1px 2px rgba(0, 0, 0, 0.06);
       background: var(--well-bg);
       color: var(--ink);
@@ -2416,7 +2368,6 @@
       }
     }
     @media (prefers-reduced-transparency: reduce) {
-      :root.vibrant .mac-window { background: var(--window-bg); }
       .mac-menu-popover, .modal-sheet { backdrop-filter: none; background: var(--window-bg); }
     }
 
@@ -2524,33 +2475,24 @@
     .detail-stage:has(#view-nodes.active) #toolbarActions > #nodeTestActions:has(button:not([hidden])),
     :root:not(.tauri-native) #glassSettingsRow, .platform-macos #glassSettingsRow { display: flex; }
     .appearance-card { margin-bottom: 18px; }
-    .appearance-card .mac-row { align-items: flex-start; padding: 14px 16px; }
+    .appearance-card .mac-row { align-items: center; padding: 12px 16px; }
     .appearance-card .mac-row:hover { background: transparent; }
     .appearance-card .mac-row + .mac-row::before { left: 16px; right: 16px; }
-    .glass-adjustment { width: clamp(244px, 40cqw, 360px); max-width: 100%; }
-    /* Yosemite photo by Ted Wakabayashi, public domain. */
+    .glass-adjustment { flex: 1 1 200px; min-width: 0; max-width: 320px; }
+    .glass-adjustment-track { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    /* Yosemite photo by Ted Wakabayashi, public domain. Only the controls sample this image. */
     .glass-sample {
-      position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 12px;
-      background: #718b9f url('/appearance/valley.webp') center / cover;
-      box-shadow: inset 0 0 0 1px rgb(0 0 0 / 8%);
+      display: grid; place-items: center; flex: 1 1 235px; max-width: 400px; height: 112px;
+      border-radius: 13px; overflow: hidden; background: #718b9f url('/appearance/valley.webp') center 53% / cover;
+      box-shadow: inset 0 0 0 1px #0001;
     }
-    .glass-sample::before {
-      content: ""; position: absolute; inset: 12px 12px -1px; border-radius: 13px 13px 0 0;
-      background: var(--stage-vibrant); box-shadow: var(--lg-shadow);
-    }
-    .sample-tools { position: relative; display: flex; gap: 6px; padding: 21px; pointer-events: none; }
-    .sample-tools span {
-      height: 32px; padding-inline: 10px; display: flex; align-items: center; gap: 5px;
-      border-radius: 20px; color: var(--ink); font-size: 12px; font-weight: 550;
-      background: var(--lg-bg); box-shadow: var(--lg-shadow);
-    }
-    .sample-tools span:last-child { flex: 1; min-width: 0; }
-    .sample-tools svg, .glass-adjustment-track svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linejoin: round; stroke-linecap: round; }
-    .sample-tools span:first-child svg { width: 30px; }
-    @media (prefers-reduced-transparency: no-preference) {
-      #view-settings.active .glass-sample::before { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
-    }
-    .glass-adjustment-track { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--muted); }
+    .sample-tools { display: flex; align-items: center; gap: 8px; width: min(82%, 255px); }
+    .sample-tools span { height: 35px; color: var(--ink); }
+    .sample-tools .glass-capsule { padding-inline: 11px; }
+    .sample-tools .glass-search { flex: 1; margin: 0; font-size: 12px; font-weight: 550; }
+    .sample-tools svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .sample-tools .glass-capsule svg { width: 30px; }
+
     #glassTint { min-width: 0; flex: 1; margin: 0; accent-color: var(--accent); }
     @media (forced-colors: none) {
       #glassTint { appearance: none; height: 22px; background: transparent; }
@@ -2566,20 +2508,20 @@
     }
     #glassTint:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 4px; }
     :root.platform-macos {
-      --stage-rgb: 25 27 33;
       --panel-rgb: 34 36 42;
-      --button-rgb: 76 78 85;
+      --button-rgb: 52 57 67;
+      --glass-alpha-range: .31;
       --edge-light: rgb(255 255 255 / 32%);
-      --stage-vibrant: rgb(var(--stage-rgb) / calc(1 - .68 * var(--glass-clarity)));
-      --sidebar-vibrant: rgb(var(--panel-rgb) / calc(1 - .56 * var(--glass-clarity)));
-      --stage-fade: var(--stage-vibrant);
-      --card-surface: rgb(var(--panel-rgb) / calc(1 - .52 * var(--glass-clarity)));
-      --lg-bg: rgb(var(--button-rgb) / calc(1 - .62 * var(--glass-clarity)));
-      --lg-bg-hover: color-mix(in srgb, var(--lg-bg) 84%, var(--ink) 16%);
-      --lg-shadow: inset 0 1px 0 var(--edge-light), inset 0 -1px 1px #0001,
-        0 0 0 .5px var(--lg-outer), 0 2px 5px #0001;
-      --lg-accent-bg: linear-gradient(165deg, #3189ed, #0764c9 76%, #2679da);
-      --lg-accent-bg-hover: linear-gradient(165deg, #408ff0, #116ed1 76%, #3387e5);
+      --card-surface: rgb(var(--panel-rgb));
+      --glass-fill: rgb(var(--button-rgb) / calc(.96 - var(--glass-alpha-range) * var(--glass-clarity)));
+      --glass-sheen: radial-gradient(ellipse 78% 52% at 24% -8%, var(--edge-light), transparent 80%),
+        radial-gradient(ellipse 60% 35% at 90% 108%, rgb(255 255 255 / 28%), transparent);
+      --lg-bg: var(--glass-sheen), linear-gradient(var(--glass-fill), var(--glass-fill));
+      --lg-bg-hover: var(--glass-sheen), linear-gradient(var(--glass-fill), var(--glass-fill)), var(--well-bg);
+      --lg-shadow: inset 0 1px 1px var(--edge-light), inset 1px 0 1.5px #fff4, inset -1px -1px 2px #18253e29,
+        0 0 0 .5px var(--lg-outer), 0 2px 5px #10294219;
+      --lg-accent-bg: radial-gradient(ellipse 85% 55% at 25% 0%, #ffffff4a, transparent 76%), linear-gradient(180deg, rgb(14 105 204 / calc(1 - .13 * var(--glass-clarity))), #075ab9);
+      --lg-accent-bg-hover: radial-gradient(ellipse 85% 55% at 25% 0%, #ffffff59, transparent 76%), linear-gradient(180deg, #267ad6, #0965c9);
       --lg-accent-shadow: inset 0 1px 1px #fffa, inset 0 -1px 1px #00459766,
         0 0 0 .5px #00489155, 0 2px 5px #00366a21;
       --seg-thumb-bg: var(--lg-bg);
@@ -2587,22 +2529,31 @@
       --popup-bg: var(--lg-bg);
       --popup-bg-hover: var(--lg-bg-hover);
       --card-shadow: inset 0 1px 0 var(--node-rim), 0 0 0 .5px var(--lg-outer), 0 2px 5px #0001;
-      --sheet-fill: rgb(var(--panel-rgb) / calc(1 - .18 * var(--glass-clarity)));
+      --sheet-fill: rgb(var(--panel-rgb) / .96);
       --muted: #b8bdc7;
     }
     :root.platform-macos[data-theme="light"] {
-      --stage-rgb: 235 237 241;
       --panel-rgb: 252 252 254;
-      --button-rgb: 255 255 255;
+      --button-rgb: 224 233 243;
+      --glass-alpha-range: .66;
       --edge-light: rgb(255 255 255 / 90%);
       --muted: #4c515a;
       --nav-active-bg: #0969ce;
       --nav-active-ink: white;
-      --node-bg: rgb(225 228 235 / calc(.74 - .48 * var(--glass-clarity)));
+      --node-bg: #eef0f4;
     }
-    :root.platform-macos:not(.tauri-native) body { background: var(--window-depth), var(--window-bg); }
-    :root.platform-macos:not(.tauri-native) .mac-window { background: var(--stage-vibrant); }
-    :root.platform-macos:not(.tauri-native) .sidebar { background: var(--sidebar-vibrant); }
+    @media (prefers-reduced-transparency: reduce) {
+      :root.platform-macos {
+        --glass-fill: rgb(var(--button-rgb));
+        --sheet-fill: rgb(var(--panel-rgb));
+      }
+    }
+    .platform-macos .mac-switch:not(:active) i::after,
+    .platform-macos #glassTint::-webkit-slider-thumb {
+      background: radial-gradient(ellipse at 30% 0%, #fff 20%, transparent 75%),
+        linear-gradient(165deg, #fff, rgb(243 248 255 / calc(1 - .23 * var(--glass-clarity))));
+      box-shadow: inset 0 1px 1px white, inset 0 -1px 1px #8590a54d, 0 1px 3px #121d3042;
+    }
     .platform-macos .glass-toolbar { height: 56px; }
     .platform-macos .glass-toolbar::before { inset-block-end: -5px; }
     .platform-macos .view { padding-top: 64px; }
@@ -2626,8 +2577,8 @@
     }
     /* These small floating controls can overlap scrolling content. Lists share the window material. */
     @media (prefers-reduced-transparency: no-preference) {
-      .platform-macos .glass-toolbar :is(.glass-capsule, .glass-circle, .online-pill, #nodeTestActions) {
-        -webkit-backdrop-filter: blur(12px) saturate(1.25); backdrop-filter: blur(12px) saturate(1.25);
+      .platform-macos :is(.glass-toolbar .glass-capsule, .glass-toolbar .glass-circle, .online-pill, #toolbarActions > #nodeTestActions, .glass-sample .glass-capsule, .glass-search) {
+        -webkit-backdrop-filter: blur(calc(3px + 8px * (1 - var(--glass-clarity)))) saturate(1.35); backdrop-filter: blur(calc(3px + 8px * (1 - var(--glass-clarity)))) saturate(1.35);
       }
     }
     .platform-macos #toolbarActions > #nodeTestActions {
@@ -2661,7 +2612,22 @@
     .platform-macos .sheet-actions #sheetImportFileBtn { background: transparent; box-shadow: none; color: var(--accent); }
     .platform-macos .sheet-actions #sheetImportFileBtn:hover { background: var(--node-hover); }
     .platform-macos .sheet-actions button { min-height: 28px; }
-    .platform-macos .sheet-textarea { background: var(--card-surface); border-radius: 6px; font-family: var(--font-ui); }
+    .platform-macos :is(.glass-search, .port-chip, .sheet-input, .sheet-textarea, .settings-select) {
+      background: var(--lg-bg); box-shadow: var(--lg-shadow);
+    }
+    .platform-macos :is(.sheet-input, .sheet-textarea, .settings-select, .glass-search input, .port-chip input) {
+      -webkit-appearance: none; appearance: none; font-family: var(--font-ui); color: var(--ink);
+    }
+    .platform-macos .sheet-textarea {
+      min-height: 112px; border-radius: 13px; padding: 11px 13px; line-height: 1.55;
+    }
+    .platform-macos .sheet-input { border-radius: 11px; }
+    .platform-macos :is(.glass-search, .port-chip):focus-within,
+    .platform-macos :is(.sheet-input, .sheet-textarea):focus {
+      outline: 2px solid var(--focus-ring); outline-offset: 2px;
+    }
+    .platform-macos :is(.sheet-input,.sheet-textarea)::placeholder { color: var(--muted); }
+    .platform-macos .port-chip input { font-family: var(--font-mono); }
 
     .mac-window:has(#view-connect.active) .sidebar-live-top,
     .mac-window:has(#view-connect.active) .sidebar-wave-bg { display: none; }
@@ -2680,5 +2646,11 @@
       flex: none; min-height: 28px; padding: 2px 9px; border: 1px solid var(--popup-border);
       border-radius: 8px; background-color: var(--window-bg); color: var(--ink);
     }
-    .platform-macos .settings-select { border-radius: 99px; }
+    .platform-macos .settings-select {
+      padding-inline: 12px 29px; border: 0; border-radius: 99px;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23777e88' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 5 3-3 3 3m-6 4 3 3 3-3'/%3E%3C/svg%3E") right 9px center / 12px no-repeat, var(--lg-bg);
+    }
+    @media (forced-colors: active) {
+      .platform-macos .settings-select { appearance: auto; border: 1px solid ButtonText; }
+    }
     .settings-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

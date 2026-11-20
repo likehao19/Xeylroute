@@ -442,35 +442,26 @@
           <div class="mac-card flush appearance-card">
             <div class="mac-row">
               <span class="mac-row-title" id="appearanceLabel">外观模式</span>
-              <div class="appearance-picker" id="settingsThemeSeg" role="group" aria-labelledby="appearanceLabel">
-                <button type="button" class="appearance-opt" data-set-theme="light">
-                  <span class="appearance-thumb" aria-hidden="true"><i class="light-t"></i></span><span>浅色</span>
-                </button>
-                <button type="button" class="appearance-opt" data-set-theme="dark">
-                  <span class="appearance-thumb" aria-hidden="true"><i class="dark-t"></i></span><span>深色</span>
-                </button>
-                <button type="button" class="appearance-opt" data-set-theme="auto">
-                  <span class="appearance-thumb" aria-hidden="true"><i class="light-t"></i><i class="dark-t"></i></span><span>自动</span>
-                </button>
+              <div class="sub-seg theme-options" id="settingsThemeSeg" role="group" aria-labelledby="appearanceLabel">
+                <button type="button" data-set-theme="light"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.5"/><path d="M10 1.5v2m0 13v2m8.5-8.5h-2m-13 0h-2m14.5-6-1.4 1.4M5.4 14.6 4 16M16 16l-1.4-1.4M5.4 5.4 4 4"/></svg>浅色</button>
+                <button type="button" data-set-theme="dark"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M16.7 12.4a7 7 0 0 1-9.1-9.1 7 7 0 1 0 9.1 9.1Z"/></svg>深色</button>
+                <button type="button" data-set-theme="auto"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor" stroke="none"/></svg>自动</button>
               </div>
             </div>
             <div class="mac-row" id="glassSettingsRow">
-              <div>
-                <label for="glassTint" class="mac-row-title">Liquid Glass</label>
-                <span class="mac-row-sub" id="glassHint">窗口透明度</span>
-              </div>
               <div class="glass-adjustment">
-                <div class="glass-sample" role="img" aria-label="山谷风景上的玻璃工具栏，随下方滑块实时变化">
-                  <div class="sample-tools" aria-hidden="true">
-                    <span><svg viewBox="0 0 32 16"><path d="m7 3-5 5 5 5m17-10 5 5-5 5"/></svg></span>
-                    <span><svg viewBox="0 0 18 18"><rect x="2" y="2" width="10" height="10" rx="2"/><rect x="6" y="6" width="10" height="10" rx="2"/></svg></span>
-                    <span><svg viewBox="0 0 18 18"><circle cx="7.5" cy="7.5" r="4.5"/><path d="m11 11 4 4"/></svg>搜索节点</span>
-                  </div>
-                </div>
+                <label for="glassTint" class="mac-row-title">Liquid Glass</label>
+                <span class="mac-row-sub" id="glassHint">控件着色 50%</span>
                 <div class="glass-adjustment-track">
-                  <svg aria-hidden="true" viewBox="0 0 22 18"><rect x="2" y="2" width="13" height="10" rx="3"/><rect x="6" y="6" width="14" height="10" rx="3"/></svg>
+                  <span>清透</span>
                   <input type="range" id="glassTint" min="0" max="100" step="1" value="50" aria-describedby="glassHint">
-                  <svg aria-hidden="true" viewBox="0 0 22 18"><rect x="2" y="2" width="13" height="10" rx="3"/><rect x="6" y="6" width="14" height="10" rx="3" fill="currentColor"/></svg>
+                  <span>浓郁</span>
+                </div>
+              </div>
+              <div class="glass-sample" role="img" aria-label="山谷上方的导航和搜索控件材质预览">
+                <div class="sample-tools" aria-hidden="true">
+                  <span class="glass-capsule"><svg viewBox="0 0 32 16"><path d="m8 3-5 5 5 5m15-10 5 5-5 5"/></svg></span>
+                  <span class="glass-search"><svg viewBox="0 0 18 18"><circle cx="7.5" cy="7.5" r="4.5"/><path d="m11 11 4 4"/></svg>搜索节点</span>
                 </div>
               </div>
             </div>
