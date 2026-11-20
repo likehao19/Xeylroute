@@ -890,7 +890,7 @@
     .mac-window.sidebar-collapsed .toolbar-sidebar-btn { display: inline-grid; }
 
     .stage-title {
-      margin: 0 2px;
+      margin: 0;
       font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.02em;
@@ -916,6 +916,7 @@
       max-width: 210px;
       overflow: hidden;
     }
+    .mac-window:not(.sidebar-collapsed) .online-pill.off { display: none; }
     .online-pill span:last-child {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -2471,6 +2472,7 @@
     #nodeTestActions { display: flex; align-items: center; gap: 8px; }
     #toolbarActions > #nodeTestActions { display: none; }
     .detail-stage:has(#view-nodes.active) #toolbarActions > #nodeTestActions:has(button:not([hidden])) { display: flex; }
+    .scope-value { font-size: 12px; color: var(--muted); }
     .appearance-card { margin-bottom: 18px; }
     .appearance-card .mac-row { align-items: center; padding: 12px 16px; }
     .appearance-card .mac-row:hover { background: transparent; }
@@ -2517,7 +2519,6 @@
     .platform-macos .glass-toolbar::before { inset-block-end: -5px; }
     .platform-macos .views-host { margin-top: 56px; }
     .platform-macos .view { padding-top: 8px; }
-    .platform-macos .glass-toolbar .glass-capsule button { min-width: 34px; }
     .platform-macos .online-pill { padding-inline: 4px; background: transparent; box-shadow: none; color: var(--muted); font-weight: 500; }
     .platform-macos .stage-title { font-size: 19px; font-weight: 650; }
     .platform-macos :is(.mac-card,.telemetry-capsule,.group-drawer) { border-radius: 12px; }

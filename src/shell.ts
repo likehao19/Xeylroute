@@ -21,7 +21,7 @@ export type ShellController = {
   getSearch(): string;
   getTheme(): ThemeChoice;
   setTheme(theme: ThemeChoice): void;
-  switchView(view: ViewId, pushHistory?: boolean): void;
+  switchView(view: ViewId): void;
   onViewChange(cb: (view: ViewId) => void): void;
   onSearchChange(cb: (query: string) => void): void;
 };
@@ -32,8 +32,6 @@ export function initShell(): ShellController {
   const savedTheme = localStorage.getItem(THEME_KEY);
   let theme: ThemeChoice = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'auto';
   const systemDark = matchMedia('(prefers-color-scheme: dark)');
-  const navHistory: ViewId[] = ['connect'];
-  let navIndex = 0;
 
   const viewListeners: ((view: ViewId) => void)[] = [];
   const searchListeners: ((query: string) => void)[] = [];
@@ -54,14 +52,9 @@ export function initShell(): ShellController {
   }
   systemDark.addEventListener('change', () => { if (theme === 'auto') renderTheme(); });
 
-  function switchView(viewId: ViewId, pushHistory = true): void {
+  function switchView(viewId: ViewId): void {
     closeMacMenu();
     currentView = viewId;
-    if (pushHistory && navHistory[navIndex] !== viewId) {
-      navHistory.splice(navIndex + 1);
-      navHistory.push(viewId);
-      navIndex = navHistory.length - 1;
-    }
     document.querySelectorAll<HTMLElement>('#sidebarNav .nav-item').forEach(b =>
       b.classList.toggle('active', b.dataset.view === viewId)
     );
@@ -69,8 +62,6 @@ export function initShell(): ShellController {
       v.classList.toggle('active', v.id === `view-${viewId}`)
     );
     $('stageTitle').textContent = VIEW_TITLES[viewId] || '连接';
-    $<HTMLButtonElement>('navBackBtn').disabled = navIndex <= 0;
-    $<HTMLButtonElement>('navForwardBtn').disabled = navIndex >= navHistory.length - 1;
     for (const cb of viewListeners) cb(viewId);
   }
 
@@ -101,18 +92,6 @@ export function initShell(): ShellController {
   $('sidebarNav').addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-view]');
     if (b?.dataset.view) switchView(b.dataset.view as ViewId);
-  });
-  $('navBackBtn').addEventListener('click', () => {
-    if (navIndex > 0) {
-      navIndex--;
-      switchView(navHistory[navIndex], false);
-    }
-  });
-  $('navForwardBtn').addEventListener('click', () => {
-    if (navIndex < navHistory.length - 1) {
-      navIndex++;
-      switchView(navHistory[navIndex], false);
-    }
   });
   $('goAllNodesBtn').addEventListener('click', () => switchView('nodes'));
   $('goSplitBtn').addEventListener('click', () => switchView('split'));

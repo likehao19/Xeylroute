@@ -976,7 +976,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const activeExit = activeGlobalExit();
     const activeCapture = Boolean(liveStatus?.systemProxy || liveStatus?.tun);
     const pill = $('topOnlinePill');
-    pill.className = 'online-pill lg-track' + (!liveStatus?.running ? ' off' : !activeCapture ? ' warn' : '');
+    pill.className = 'online-pill lg-track' + (networkUpdating ? ' warn' : !liveStatus?.running ? ' off' : !activeCapture ? ' warn' : '');
     $('topStatusText').textContent = networkUpdating
       ? '正在更新代理…'
       : !liveStatus?.running
@@ -1738,7 +1738,7 @@ export function mountDesktopApp(shell: ShellController): void {
       scopeHost.dataset.scope = scope;
       scopeHost.innerHTML = scope === 'selected'
         ? '<button type="button" class="glass-btn-soft" data-popup-kind="tun-scope">改用全局范围</button>'
-        : '<span class="pill">全部受支持流量</span>';
+        : '<span class="scope-value">全部受支持流量</span>';
     }
 
     const isRunning = Boolean(liveStatus?.running);
