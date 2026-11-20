@@ -46,6 +46,7 @@ def verify():
             (root / "libcronet.dll").write_bytes(zipped.read(release + "/libcronet.dll"))
         config = {"log": {"level": "debug"}, "inbounds": [{
             "type": "tun", "tag": "test", "interface_name": device, "address": ["198.18.0.1/30"],
+            "stack": "gvisor", "dns_mode": "disabled",
             "auto_route": True, "route_address": [address + "/32"], "include_package": ["curl.exe"]}],
             "outbounds": [{"type": "http", "server": "127.0.0.1", "tag": tag, "server_port": sock.getsockname()[1]}
                           for tag, sock in sinks.items()],
@@ -68,12 +69,14 @@ def verify():
                 for _ in range(120):
                     if proc.poll() is not None:
                         raise RuntimeError((root / "core.log").read_text(errors="replace"))
-                    if uses_adapter(address, device):
+                    if (uses_adapter(address, device)
+                            and "sing-box started" in (root / "core.log").read_text(errors="replace")):
                         break
                     time.sleep(.25)
                 else:
                     raise AssertionError("Missing test route")
-                curl = resources.enter_context(subprocess.Popen(["curl.exe", "--noproxy", "*", "--max-time", "5",
+                curl = resources.enter_context(subprocess.Popen(["curl.exe", "--noproxy", "*", "--max-time", "3",
+                    "--retry", "3", "--retry-all-errors", "--retry-delay", "1",
                     f"http://{address}:18081/"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
                 resources.callback(curl.kill)
                 decisions = []
@@ -103,7 +106,7 @@ def verify():
                       f"Python PID {second.pid} (other instance): {decisions}.")
             except Exception:
                 relevant = [line for line in (root / "core.log").read_text(errors="replace").splitlines()
-                            if address in line or "outbound/http" in line or "ERROR" in line or "WARN" in line]
+                            if "dns:" not in line]
                 print("\n".join(relevant[-50:]), file=sys.stderr)
                 raise
             finally:

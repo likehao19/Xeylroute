@@ -59,6 +59,13 @@ jobs:
             if ((Start-Process $installer -ArgumentList '/silent','/install' -Wait -PassThru).ExitCode) { throw 'WebView2 setup failed' }
           }
           node scripts/smoke-windows-desktop.mjs src-tauri/target/debug/routepilot-desktop.exe
+  alternative-core:
+    if: ${{ inputs.runner == 'windows-11-arm' }}
+    runs-on: windows-11-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Compare per-program capture and instance matching in sing-box
-        if: ${{ !cancelled() && inputs.runner == 'windows-11-arm' }}
         run: python scripts/smoke-windows-singbox.py

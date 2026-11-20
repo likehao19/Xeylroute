@@ -50,7 +50,8 @@ def verify(app):
                 for _ in range(120):
                     if worker.poll() is not None:
                         raise RuntimeError("The TUN worker exited during startup")
-                    if uses_adapter(address, device):
+                    if (uses_adapter(address, device) and log.exists()
+                            and "Tun adapter listening" in log.read_text(encoding="utf-8", errors="replace")):
                         break
                     time.sleep(.25)
                 else:
