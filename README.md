@@ -47,4 +47,6 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 已使用官方 Mihomo v1.19.34 验证回环 HTTP 转发、认证管理接口、配置热重载、本地订阅刷新、分享链接与 Base64 解析，以及独立节点测速入口。复查可运行 `python scripts/smoke-mihomo.py <ZIP 路径>`。测试使用随机回环端口。前端验证构建复用了本机已有的 Vite 7.3.6。
 
-本地开发交付的验收缺口包括 Windows 系统代理和全局 TUN 的实机切换、真实外部订阅和代理线路的测速。严格的指定程序 TUN 和仅当前 PID 实例规则仍待实现。
+Windows Server 2022 x64 已通过 47 项后端测试和单独执行的 WinINet 接管恢复测试。重复开启后仍可恢复原值；其他程序改写系统代理后，关闭接管会保留新值。桌面 TUN 后台也通过了单地址路由的安装、实际命中和退出清理测试。[Windows 验收日志](https://github.com/likehao19/Xeylroute/actions/runs/44757513856)
+
+仍待验收的场景包括 Windows 交互式桌面的授权与取消、全局默认路由接管、多网卡切换，以及外部订阅和代理线路测速。严格按软件限定 TUN 入站和仅对当前 PID 实例生效的规则仍待实现。
