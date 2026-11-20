@@ -42,6 +42,12 @@ jobs:
         if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
         shell: pwsh
         run: |
-          cargo build --locked --manifest-path src-tauri/Cargo.toml
+          cargo build --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/smoke-windows-tun.py src-tauri/target/debug/routepilot-desktop.exe
+      - name: Drive the desktop WebView2 and verify network recovery
+        shell: pwsh
+        run: |
+          npm install --prefix "$env:RUNNER_TEMP/webview-test" --no-audit --no-fund playwright-core@1.56.1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/smoke-windows-desktop.mjs src-tauri/target/debug/routepilot-desktop.exe
