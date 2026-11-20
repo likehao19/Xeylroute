@@ -39,7 +39,7 @@ async function until(description, read, timeout = 30000) {
 }
 
 const proxy = () => ps("$s=Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Internet Settings'; Write-Output ([string][int]$s.ProxyEnable + '|' + [string]$s.ProxyServer)");
-const route = () => ps("(Find-NetRoute -RemoteIPAddress '192.0.2.123' | Where-Object DestinationPrefix | Select-Object -First 1 -ExpandProperty InterfaceIndex)");
+const route = async () => (await promisify(execFile)('python', ['scripts/windows_routes.py', '192.0.2.123'])).stdout.trim();
 const initialProxy = await proxy();
 const initialRoute = await route();
 assert.ok(Number(initialRoute) > 0);

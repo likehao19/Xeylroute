@@ -11,15 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
-
-
-def test_route_exists(device, prefix):
-    query = (f"$route = Get-NetRoute -InterfaceAlias '{device}' "
-             f"-DestinationPrefix '{prefix}' -ErrorAction SilentlyContinue; "
-             "if ($route) { 'present' } else { 'absent' }")
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-Command", query],
-                            check=True, capture_output=True, text=True, timeout=20)
-    return result.stdout.strip() == "present"
+from windows_routes import best_interface, uses_adapter
 
 
 def verify(app):
@@ -28,6 +20,7 @@ def verify(app):
     address = "192.0.2.123"
     prefix = address + "/32"
     device = "XeylTest" + secrets.token_hex(3)
+    original = best_interface(address)
     token = secrets.token_hex(32)
     with tempfile.TemporaryDirectory() as folder, socket.create_server(("127.0.0.1", 0)) as listener:
         directory = Path(folder, "core")
@@ -54,11 +47,12 @@ def verify(app):
                     if not hmac.compare_digest(reader.read(64), token.encode()):
                         raise RuntimeError("Unexpected worker handshake")
                 lease.sendall(struct.pack("<I", len(payload)) + payload)
-                for _ in range(10):
+                for _ in range(120):
                     if worker.poll() is not None:
                         raise RuntimeError("The TUN worker exited during startup")
-                    if test_route_exists(device, prefix):
+                    if uses_adapter(address, device):
                         break
+                    time.sleep(.25)
                 else:
                     raise AssertionError("Windows did not install the test route")
                 # Use an ordinary socket. A matching core log ties this flow to the TUN route.
@@ -83,9 +77,10 @@ def verify(app):
                     raise AssertionError("Missing TUN decisions for curl or Python")
             if worker.wait(timeout=12) != 0:
                 raise AssertionError("The TUN worker failed to stop")
-            for _ in range(5):
-                if not test_route_exists(device, prefix):
+            for _ in range(40):
+                if best_interface(address) == original:
                     break
+                time.sleep(.25)
             else:
                 raise AssertionError("The test route survived worker shutdown")
         except Exception:
