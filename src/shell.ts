@@ -54,26 +54,6 @@ export function initShell(): ShellController {
   }
   systemDark.addEventListener('change', () => { if (theme === 'auto') renderTheme(); });
 
-  const glassSlider = $<HTMLInputElement>('glassTint');
-  const glassKey = 'xeylroute-glass-tint';
-  const storedTint = localStorage.getItem(glassKey);
-  if (storedTint?.trim() && Number.isFinite(Number(storedTint))) glassSlider.value = storedTint;
-  let preferredTint = glassSlider.valueAsNumber;
-  const reduceTransparency = matchMedia('(prefers-reduced-transparency: reduce)');
-  function renderGlass(): void {
-    const reduced = reduceTransparency.matches;
-    const tint = reduced ? 100 : preferredTint;
-    glassSlider.value = String(tint);
-    glassSlider.disabled = reduced;
-    glassSlider.setAttribute('aria-valuetext', tint === 0 ? '清透' : tint === 100 ? '浓郁' : `着色 ${tint}%`);
-    document.documentElement.style.setProperty('--glass-clarity', String(1 - tint / 100));
-    $('glassHint').textContent = reduced ? '系统已开启「降低透明度」' : `控件着色 ${tint}%`;
-  }
-  glassSlider.addEventListener('input', () => { preferredTint = glassSlider.valueAsNumber; renderGlass(); });
-  glassSlider.addEventListener('change', () => localStorage.setItem(glassKey, String(preferredTint)));
-  reduceTransparency.addEventListener('change', renderGlass);
-  renderGlass();
-
   function switchView(viewId: ViewId, pushHistory = true): void {
     closeMacMenu();
     currentView = viewId;

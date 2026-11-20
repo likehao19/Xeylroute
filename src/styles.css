@@ -10,8 +10,6 @@
       --stage-fade: rgba(24, 24, 27, 0.76);
       /* Quiet tonal falloff behind the stage, so translucent surfaces have something to pick up */
       --window-depth: radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.055) 0%, transparent 58%), radial-gradient(90% 80% at 100% 100%, rgba(0, 0, 0, 0.26) 0%, transparent 62%);
-      /* Tints laid over the operating system's own window material (macOS) */
-      --glass-clarity: .55;
       --focus-ring: rgba(64, 156, 255, 0.92);
 
       /* Component-Level Frosted Glass Micro-Grain */
@@ -2471,49 +2469,16 @@
     .modal-backdrop[inert] { visibility: hidden; }
 
     #nodeTestActions { display: flex; align-items: center; gap: 8px; }
-    #toolbarActions > #nodeTestActions, #glassSettingsRow { display: none; }
-    .detail-stage:has(#view-nodes.active) #toolbarActions > #nodeTestActions:has(button:not([hidden])),
-    :root:not(.tauri-native) #glassSettingsRow, .platform-macos #glassSettingsRow { display: flex; }
+    #toolbarActions > #nodeTestActions { display: none; }
+    .detail-stage:has(#view-nodes.active) #toolbarActions > #nodeTestActions:has(button:not([hidden])) { display: flex; }
     .appearance-card { margin-bottom: 18px; }
     .appearance-card .mac-row { align-items: center; padding: 12px 16px; }
     .appearance-card .mac-row:hover { background: transparent; }
-    .appearance-card .mac-row + .mac-row::before { left: 16px; right: 16px; }
-    .glass-adjustment { flex: 1 1 200px; min-width: 0; max-width: 320px; }
-    .glass-adjustment-track { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 11px; }
-    /* Yosemite photo by Ted Wakabayashi, public domain. Only the controls sample this image. */
-    .glass-sample {
-      display: grid; place-items: center; flex: 1 1 235px; max-width: 400px; height: 112px;
-      border-radius: 13px; overflow: hidden; background: #718b9f url('/appearance/valley.webp') center 53% / cover;
-      box-shadow: inset 0 0 0 1px #0001;
-    }
-    .sample-tools { display: flex; align-items: center; gap: 8px; width: min(82%, 255px); }
-    .sample-tools > span { height: 35px; color: var(--ink); }
-    .sample-tools .glass-capsule { padding-inline: 11px; }
-    .sample-tools .glass-search { flex: 1; margin: 0; font-size: 12px; font-weight: 550; }
-    .sample-tools svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-    .sample-tools .glass-capsule svg { width: 30px; }
-
-    #glassTint { min-width: 0; flex: 1; margin: 0; accent-color: var(--accent); }
-    @media (forced-colors: none) {
-      #glassTint { appearance: none; height: 22px; background: transparent; }
-      #glassTint::-webkit-slider-runnable-track {
-        height: 5px; border-radius: 5px;
-        background: linear-gradient(to right, var(--accent) calc((1 - var(--glass-clarity)) * 100%), var(--card-hairline) 0);
-      }
-      #glassTint::-webkit-slider-thumb {
-        appearance: none; width: 21px; height: 16px; margin-top: -5.5px;
-        border-radius: 10px; background: #fff; box-shadow: 0 1px 4px #0003, 0 0 0 .5px #0001;
-      }
-      #glassTint:disabled { opacity: .55; }
-    }
-    #glassTint:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 4px; }
     :root.platform-macos {
       --panel-rgb: 34 36 42;
-      --button-rgb: 52 57 67;
-      --glass-alpha-range: .31;
       --edge-light: rgb(255 255 255 / 32%);
       --card-surface: rgb(var(--panel-rgb));
-      --glass-fill: rgb(var(--button-rgb) / calc(.96 - var(--glass-alpha-range) * var(--glass-clarity)));
+      --glass-fill: rgb(52 57 67 / 80.5%);
       --lg-bg: var(--well-bg);
       --lg-bg-hover: var(--node-hover);
       --lg-shadow: inset 0 0 0 .5px var(--well-stroke);
@@ -2530,8 +2495,7 @@
     }
     :root.platform-macos[data-theme="light"] {
       --panel-rgb: 252 252 254;
-      --button-rgb: 251 252 253;
-      --glass-alpha-range: .66;
+      --glass-fill: rgb(251 252 253 / 63%);
       --edge-light: rgb(255 255 255 / 90%);
       --muted: #4c515a;
       --nav-active-bg: #0969ce;
@@ -2539,15 +2503,14 @@
       --node-bg: #f6f7f9;
     }
     @media (prefers-reduced-transparency: reduce) {
-      :root.platform-macos {
-        --glass-fill: rgb(var(--button-rgb));
+      :root.platform-macos[data-theme] {
+        --glass-fill: var(--card-surface);
         --sheet-fill: rgb(var(--panel-rgb));
       }
     }
-    .platform-macos .mac-switch:not(:active) i::after,
-    .platform-macos #glassTint::-webkit-slider-thumb {
+    .platform-macos .mac-switch:not(:active) i::after {
       background: radial-gradient(ellipse at 30% 0%, #fff 20%, transparent 75%),
-        linear-gradient(165deg, #fff, rgb(243 248 255 / calc(1 - .23 * var(--glass-clarity))));
+        linear-gradient(165deg, #fff, rgb(243 248 255 / 89%));
       box-shadow: inset 0 1px 1px white, inset 0 -1px 1px #8590a54d, 0 1px 3px #121d3042;
     }
     .platform-macos .glass-toolbar { height: 56px; }
