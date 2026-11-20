@@ -1372,6 +1372,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   function renderSplit(): void {
     $('splitRulesPane').hidden = splitSub !== 'rules';
+    $('ruleOrderBtn').hidden = splitSub !== 'rules' || !liveProfile;
     $('bulkRulesBtn').hidden = splitSub !== 'rules';
     $('splitGroupsPane').hidden = splitSub !== 'groups';
     $('splitProcsPane').hidden = splitSub !== 'procs';
@@ -1403,6 +1404,54 @@ export function mountDesktopApp(shell: ShellController): void {
     if (splitSub === 'groups') renderGroups(q);
     else if (splitSub === 'procs') renderProcesses(q);
     else renderRules(q);
+  }
+
+  function showRuleOrder(): void {
+    const profile = liveProfile;
+    if (!profile) return;
+    const expected = profile.effectiveRules || [];
+    const rows = expected.slice();
+    let manual = Boolean(profile.manualOrder);
+    openSheet({ title: '规则生效顺序', size: 'wide',
+      bodyHtml: `<div class="sheet-field"><label for="ruleOrderMode">匹配顺序</label>
+        <select class="sheet-input" id="ruleOrderMode" ${profile.managedOrder ? '' : 'disabled'}>
+        ${profile.managedOrder ? '<option value="auto">自动优先级</option><option value="manual">手动 · 由上至下</option>' : '<option>完整配置 · 文件顺序</option>'}</select>
+        <small id="orderHint"></small></div><div class="sheet-picker" id="orderRows"></div><p class="sheet-error" id="orderError"></p>`,
+      actionsHtml: `<button class="glass-btn-soft" id="orderCancel">关闭</button>${profile.managedOrder ? '<button class="glass-btn-primary" id="orderSave">保存</button>' : ''}`,
+    });
+    const list = $('orderRows');
+    const mode = $<HTMLSelectElement>('ruleOrderMode');
+    if (profile.managedOrder) mode.value = manual ? 'manual' : 'auto';
+    const userLines = new Set(profile.rules);
+    const render = () => {
+      $('orderHint').textContent = manual ? '首条匹配生效，默认出口位于末尾。' : profile.managedOrder ? '阻断和直连优先，系统会补充局域网直连。' : '按导入文件中的顺序匹配。';
+      list.innerHTML = rows.map((line,i) => {
+        const fallback = line.startsWith('MATCH,');
+        const source = fallback ? '默认出口' : userLines.has(line) ? (profile.subscriptionScope ? '当前订阅' : '当前配置') : '系统补充';
+        return `<div class="sheet-picker-row"><small>${i+1}</small><span class="picker-meta"><strong>${esc(line)}</strong><small>${source}</small></span>
+          ${manual && !fallback ? `<button class="glass-btn-soft" data-move="-1" data-row="${i}" aria-label="上移" ${i === 0 ? 'disabled' : ''}>↑</button><button class="glass-btn-soft" data-move="1" data-row="${i}" aria-label="下移" ${!rows[i+1] || rows[i+1].startsWith('MATCH,') ? 'disabled' : ''}>↓</button>` : ''}</div>`;
+      }).join('');
+    };
+    mode.onchange = () => { manual = mode.value === 'manual'; render(); };
+    list.onclick = event => {
+      const b = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-move]');
+      if (!b || b.disabled) return;
+      const i = Number(b.dataset.row), j = i + Number(b.dataset.move);
+      [rows[i], rows[j]] = [rows[j], rows[i]]; render();
+    };
+    $('orderCancel').onclick = closeSheet;
+    if (profile.managedOrder) {
+      const save = $<HTMLButtonElement>('orderSave');
+      save.onclick = async () => {
+        save.disabled = true;
+        try {
+          const result = await tauriApi.editProfile({kind:'ruleOrder',expected,order:manual ? rows : null},profile.subscriptionScope ?? '');
+          applyProfile(result); if (save.isConnected) closeSheet(); renderAllSafe();
+        } catch(e) { if (save.isConnected) $('orderError').textContent = cleanError(e); }
+        finally { save.disabled = false; }
+      };
+    }
+    render();
   }
 
   function renderRules(q: string): void {
@@ -2431,6 +2480,7 @@ export function mountDesktopApp(shell: ShellController): void {
     procScanType = b.dataset.scanType as 'app' | 'process';
     renderSplit();
   });
+  $('ruleOrderBtn').onclick = showRuleOrder;
   $('refreshProcsBtn').addEventListener('click', () => void refreshProcesses(true));
 
   $('splitPrimaryAddBtn').addEventListener('click', () => {

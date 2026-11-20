@@ -506,8 +506,7 @@ fn global_tun_config(configured: &Value) -> Result<Value, String> {
 /// plus runtime defaults. Starting, hot-reloading and offline validation all go through here so
 /// an edit made while the core runs cannot drop a setting that start-up added.
 fn runtime_config(configured: &Value, tun: bool) -> Value {
-    let mut runtime = profile::runtime_profile(configured);
-    runtime_tuning::apply(&mut runtime, profile::is_managed(configured));
+    let mut runtime = profile::effective_config(configured);
     if tun {
         if let Some(map) = runtime.as_object_mut() {
             map.entry("dns").or_insert_with(|| {

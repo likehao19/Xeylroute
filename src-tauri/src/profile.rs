@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 const BUILT_INS: &[&str] = &["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"];
 const SCOPED_FIELDS: &[&str] = &[
     "rules",
+    "routepilot-rule-order",
     "proxy-groups",
     "routepilot-disabled-rules",
     "routepilot-disabled-groups",
@@ -125,6 +126,7 @@ pub struct RuleSelection {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Edit {
     MatchRule { index: Option<usize>, expected: Option<String>, conditions: crate::rule_conditions::Conditions, exit: String },
+    RuleOrder { expected: Vec<String>, order: Option<Vec<String>> },
     BatchRules { action: BatchAction, rules: Vec<RuleSelection> },
     Mode {
         mode: String,
@@ -325,10 +327,11 @@ fn rule_priority(profile: &Value, line: &str) -> (u8, std::cmp::Reverse<usize>) 
         ("MATCH", _) => 7,
         (_, "REJECT" | "REJECT-DROP") => 0,
         (_, "DIRECT") => 1,
-        ("PROCESS-PATH" | "PROCESS-NAME", _) => 2,
-        ("DOMAIN", _) => 3,
-        ("DOMAIN-SUFFIX", _) => 4,
-        _ => 5,
+        ("AND", _) => 2,
+        ("PROCESS-PATH" | "PROCESS-NAME", _) => 3,
+        ("DOMAIN", _) => 4,
+        ("DOMAIN-SUFFIX", _) => 5,
+        _ => 6,
     };
     (
         order,
@@ -377,6 +380,7 @@ pub fn runtime_profile(profile: &Value) -> Value {
         map.remove("routepilot-imported-providers");
         map.remove("routepilot-independent-exits");
         map.remove("routepilot-created");
+        map.remove("routepilot-rule-order");
         map.remove("routepilot-active-subscription");
         map.remove("routepilot-subscription-scopes");
         map.remove("routepilot-tun-scope");
@@ -417,6 +421,51 @@ pub fn runtime_profile(profile: &Value) -> Value {
         runtime["proxy-providers"] = catalog.clone();
     }
     runtime
+}
+
+/// Startup, hot reload and the order inspector all use this projection.
+pub fn effective_config(catalog: &Value) -> Value {
+    let mut runtime = runtime_profile(catalog);
+    crate::runtime_tuning::apply(&mut runtime, is_managed(catalog));
+    let view = scoped_profile(catalog);
+    if let (Some(order), Some(rules)) = (view["routepilot-rule-order"].as_array(), runtime["rules"].as_array_mut()) {
+        let ranks: std::collections::HashMap<_, _> = order.iter().filter_map(Value::as_str)
+            .enumerate().map(|(i,line)| (line,i)).collect();
+        rules.sort_by_key(|r| {
+            let line = r.as_str().unwrap_or("");
+            (line.starts_with("MATCH,"), ranks.get(line).copied().unwrap_or(usize::MAX))
+        });
+    }
+    runtime
+}
+
+fn save_order(profile: &mut Value, expected: Vec<String>, order: Option<Vec<String>>) -> Result<(), String> {
+    if !is_managed(profile) {return Err("完整配置使用 YAML 文件中的规则顺序".into());}
+    let mut standalone = profile.clone();
+    standalone.as_object_mut().unwrap().remove("routepilot-active-subscription");
+    let actual = effective_config(&standalone);
+    if actual["rules"] != json!(expected) {return Err("生效规则已变化，请重新打开顺序面板".into());}
+    if let Some(mut lines) = order {
+        let mut a = expected.clone();
+        let mut b = lines.clone();
+        a.sort(); b.sort();
+        if a != b || lines.iter().rev().skip(1).any(|s| s.starts_with("MATCH,")) {
+            return Err("规则顺序无效，默认出口必须位于末尾".into());
+        }
+        // Keep disabled rules anchored to their nearest surviving neighbour.
+        let visible: std::collections::HashSet<_> = expected.iter().collect();
+        let previous: Vec<String> = entries(profile,"routepilot-rule-order").filter_map(Value::as_str).map(str::to_owned).collect();
+        let mut anchor = lines.len();
+        for line in previous.into_iter().rev() {
+            if visible.contains(&line) {
+                anchor = lines.iter().position(|item| item == &line).unwrap_or(lines.len());
+            } else if entries(profile,"rules").any(|item| item.as_str() == Some(&line)) {
+                lines.insert(anchor,line);
+            }
+        }
+        profile["routepilot-rule-order"] = json!(lines);
+    } else if let Some(map) = profile.as_object_mut() {map.remove("routepilot-rule-order");}
+    Ok(())
 }
 
 fn is_subscription_exit(profile: &Value, group: &Value) -> bool {
@@ -515,8 +564,8 @@ pub fn summary(profile: &Value) -> Value {
     let catalog = profile;
     let scoped = scoped_profile(profile);
     let profile = scoped.as_ref();
-    let mut active_rules = profile["rules"].as_array().cloned().unwrap_or_default();
-    apply_rule_order(profile, &mut active_rules);
+    let runtime = effective_config(catalog);
+    let active_rules = runtime["rules"].as_array().cloned().unwrap_or_default();
     let process_rules = active_rules
         .iter()
         .filter_map(Value::as_str)
@@ -560,6 +609,7 @@ pub fn summary(profile: &Value) -> Value {
             "unified-delay": catalog["unified-delay"].as_bool().unwrap_or(true),
             "log-level": catalog["log-level"].as_str().unwrap_or("info")
         },
+        "effectiveRules":active_rules, "managedOrder":is_managed(catalog), "manualOrder":profile["routepilot-rule-order"].is_array(),
         "ruleConditions":entries(profile, "rules").map(|r| {
             let (prefix, _) = r.as_str()?.rsplit_once(',')?;
             let (kind,target) = prefix.split_once(',')?;
@@ -698,6 +748,7 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
 
 pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     match mutation {
+        Edit::RuleOrder { expected, order } => return save_order(profile, expected, order),
         Edit::MatchRule { index, expected, conditions, exit } => {
             let (category, target) = conditions.compile()?;
             return edit(profile, Edit::Rule { index, expected, category, target, exit });
@@ -844,6 +895,9 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 rules.insert(position, json!(&text));
             }
             let previous = expected.as_deref().filter(|_| index.is_some());
+            if let (Some(previous),Some(order)) = (previous,profile["routepilot-rule-order"].as_array_mut()) {
+                if let Some(item) = order.iter_mut().find(|item| item.as_str() == Some(previous)) { *item = json!(text); }
+            }
             if let Some(map) = profile
                 .get_mut("routepilot-independent-exits")
                 .and_then(Value::as_object_mut)
@@ -1184,6 +1238,21 @@ mod tests {
             assert!(edit_active(&mut profile, Edit::ProviderInterval { name: name.into(), seconds }).is_err());
         }
         assert_eq!(profile, restored);
+    }
+
+    #[test]
+    fn manual_order_preserves_initial_order_and_can_override_lan() {
+        let exception = "IP-CIDR,10.0.0.7/32,Work";
+        let mut profile = json!({"routepilot-created":true, "rules":[exception,"MATCH,DIRECT"]});
+        let initial: Vec<String> = serde_json::from_value(effective_config(&profile)["rules"].clone()).unwrap();
+        save_order(&mut profile, initial.clone(),Some(initial.clone())).unwrap();
+        assert_eq!(effective_config(&profile)["rules"], json!(initial));
+        let mut changed = initial.clone();
+        changed.retain(|s| s != exception);
+        changed.insert(0,exception.into());
+        save_order(&mut profile,initial,Some(changed.clone())).unwrap();
+        assert_eq!(effective_config(&profile)["rules"],json!(changed));
+        assert!(save_order(&mut profile,vec![],None).is_err());
     }
 
     #[test]

@@ -52,6 +52,9 @@ export type CoreSettings = {
 export type RuleConditions = { program: string; target: string; suffix: boolean; port: string };
 
 export type ProfileSummary = {
+  managedOrder?: boolean;
+  manualOrder?: boolean;
+  effectiveRules?: string[];
   ruleConditions?: (RuleConditions | null)[];
   coreSettings: CoreSettings;
   subscriptionScope?: string | null;
@@ -200,6 +203,7 @@ export type ProfileEdit =
   | { kind: 'providerInterval'; name: string; seconds: number }
   | { kind: 'ports'; http: number; socks: number; mixed: number }
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
+  | { kind: 'ruleOrder'; expected: string[]; order: string[] | null }
   | { kind: 'matchRule'; index?: number; expected?: string; conditions: RuleConditions; exit: string }
   | { kind: 'programRules'; targets: string[]; exit: string }
   | { kind: 'clearProgramRules'; targets: string[] }
