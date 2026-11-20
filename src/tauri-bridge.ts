@@ -51,7 +51,11 @@ export type CoreSettings = {
 
 export type RuleConditions = { program: string; target: string; suffix: boolean; port: string };
 
+export type SharedRule = { source: string; line: string; exit: string; conditions: RuleConditions };
+export type ScopeMapping = { missing: string[]; available: string[] };
+
 export type ProfileSummary = {
+  sharedRules?: SharedRule[];
   managedOrder?: boolean;
   manualOrder?: boolean;
   effectiveRules?: string[];
@@ -209,6 +213,7 @@ export type ProfileEdit =
   | { kind: 'ports'; http: number; socks: number; mixed: number }
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
   | { kind: 'ruleOrder'; expected: string[]; order: string[] | null }
+  | { kind: 'sharedRule'; expected?: string; conditions?: RuleConditions; exit?: string }
   | { kind: 'matchRule'; index?: number; expected?: string; conditions: RuleConditions; exit: string }
   | { kind: 'programRules'; targets: string[]; exit: string }
   | { kind: 'clearProgramRules'; targets: string[] }
@@ -269,8 +274,9 @@ export const tauriApi = {
   profileSummary: () => invoke<ProfileSummaryResponse>('configured_profile_summary'),
   editProfile: (edit: ProfileEdit, expectedScope?: string) =>
     invoke<ProfileSummary>('edit_core_profile', { edit, expectedScope: expectedScope ?? '' }),
-  setSubscriptionScope: (name: string | null) =>
-    invoke<ProfileSummary>('set_subscription_scope', { name }),
+  subscriptionMapping: (name: string) => invoke<ScopeMapping>('subscription_mapping', { name }),
+  setSubscriptionScope: (name: string | null, mapping?: Record<string,string>) =>
+    invoke<ProfileSummary>('set_subscription_scope', { name, mapping }),
   subscriptionNodes: (name: string) => invoke<ProfileNode[]>('subscription_nodes', { name }),
   subscriptionCardMetadata: (name: string) =>
     invoke<SubscriptionCardMetadata>('subscription_card_metadata', { name }),

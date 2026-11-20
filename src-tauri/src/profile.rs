@@ -1,3 +1,6 @@
+mod shared;
+use shared::{mapping_requirements, shared_projection};
+pub use shared::{subscription_preview, switch_with_mapping};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -5,6 +8,7 @@ const BUILT_INS: &[&str] = &["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATI
 const SCOPED_FIELDS: &[&str] = &[
     "rules",
     "routepilot-rule-order",
+    "routepilot-shared-mapping",
     "proxy-groups",
     "routepilot-disabled-rules",
     "routepilot-disabled-groups",
@@ -49,6 +53,14 @@ pub fn select_subscription(profile: &mut Value, name: Option<String>) -> Result<
                 .cloned()
         })
     });
+    if let Some(next) = &name {
+        if entries(profile,"routepilot-shared-rules").next().is_some() {
+            let preview = subscription_preview(profile,next)?;
+            if !preview["missing"].as_array().is_none_or(Vec::is_empty) {
+                return Err(format!("共享规则需要为这些出口选择映射：{}",preview["missing"]));
+            }
+        }
+    }
     profile["routepilot-active-subscription"] = json!(name);
     Ok(())
 }
@@ -79,6 +91,7 @@ fn scoped_profile(profile: &Value) -> std::borrow::Cow<'_, Value> {
 }
 
 pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
+    if let Edit::SharedRule { .. } = &mutation { return edit(profile, mutation); }
     if let Edit::RemoveProvider { name } = &mutation {
         let name = name.clone();
         edit(profile, mutation)?;
@@ -104,6 +117,9 @@ pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     };
     let mut view = scoped_profile(profile).into_owned();
     edit(&mut view, mutation)?;
+    if !mapping_requirements(&view)["missing"].as_array().is_none_or(Vec::is_empty) {
+        return Err("共享规则正在使用该出口，请先更改共享规则".into());
+    }
     let fields: serde_json::Map<String, Value> = SCOPED_FIELDS
         .iter()
         .filter_map(|&key| view.get(key).map(|value| (key.to_owned(), value.clone())))
@@ -125,6 +141,7 @@ pub struct RuleSelection {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Edit {
+    SharedRule { expected: Option<String>, conditions: Option<crate::rule_conditions::Conditions>, exit: Option<String> },
     MatchRule { index: Option<usize>, expected: Option<String>, conditions: crate::rule_conditions::Conditions, exit: String },
     RuleOrder { expected: Vec<String>, order: Option<Vec<String>> },
     BatchRules { action: BatchAction, rules: Vec<RuleSelection> },
@@ -372,6 +389,11 @@ pub fn runtime_profile(profile: &Value) -> Value {
     let profile = scoped.as_ref();
     let mut runtime = profile.clone();
     if let Some(rules) = runtime.get_mut("rules").and_then(Value::as_array_mut) {
+        if is_managed(profile) {
+            for (_,line) in shared_projection(profile) {
+                if !rules.iter().any(|r| r.as_str() == Some(&line)) { rules.push(json!(line)); }
+            }
+        }
         apply_rule_order(profile, rules);
     }
     if let Some(map) = runtime.as_object_mut() {
@@ -381,6 +403,8 @@ pub fn runtime_profile(profile: &Value) -> Value {
         map.remove("routepilot-independent-exits");
         map.remove("routepilot-created");
         map.remove("routepilot-rule-order");
+        map.remove("routepilot-shared-rules");
+        map.remove("routepilot-shared-mapping");
         map.remove("routepilot-active-subscription");
         map.remove("routepilot-subscription-scopes");
         map.remove("routepilot-tun-scope");
@@ -427,6 +451,7 @@ pub fn runtime_profile(profile: &Value) -> Value {
 pub fn effective_config(catalog: &Value) -> Value {
     let mut runtime = runtime_profile(catalog);
     crate::runtime_tuning::apply(&mut runtime, is_managed(catalog));
+    if !is_managed(catalog) { return runtime; }
     let view = scoped_profile(catalog);
     if let (Some(order), Some(rules)) = (view["routepilot-rule-order"].as_array(), runtime["rules"].as_array_mut()) {
         let ranks: std::collections::HashMap<_, _> = order.iter().filter_map(Value::as_str)
@@ -441,9 +466,7 @@ pub fn effective_config(catalog: &Value) -> Value {
 
 fn save_order(profile: &mut Value, expected: Vec<String>, order: Option<Vec<String>>) -> Result<(), String> {
     if !is_managed(profile) {return Err("完整配置使用 YAML 文件中的规则顺序".into());}
-    let mut standalone = profile.clone();
-    standalone.as_object_mut().unwrap().remove("routepilot-active-subscription");
-    let actual = effective_config(&standalone);
+    let actual = effective_config(profile);
     if actual["rules"] != json!(expected) {return Err("生效规则已变化，请重新打开顺序面板".into());}
     if let Some(mut lines) = order {
         let mut a = expected.clone();
@@ -609,6 +632,11 @@ pub fn summary(profile: &Value) -> Value {
             "unified-delay": catalog["unified-delay"].as_bool().unwrap_or(true),
             "log-level": catalog["log-level"].as_str().unwrap_or("info")
         },
+        "sharedRules":shared_projection(profile).iter().filter_map(|(source,line)| {
+            let (conditions,exit) = source.rsplit_once(',')?;
+            let (kind,target) = conditions.split_once(',')?;
+            Some(json!({"source":source,"line":line,"exit":exit,"conditions":crate::rule_conditions::decode(kind,target)}))
+        }).collect::<Vec<_>>(),
         "effectiveRules":active_rules, "managedOrder":is_managed(catalog), "manualOrder":profile["routepilot-rule-order"].is_array(),
         "ruleConditions":entries(profile, "rules").map(|r| {
             let (prefix, _) = r.as_str()?.rsplit_once(',')?;
@@ -748,6 +776,9 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
 
 pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     match mutation {
+        Edit::SharedRule { expected, conditions, exit } => {
+            return shared::edit_shared(profile, expected, conditions, exit);
+        }
         Edit::RuleOrder { expected, order } => return save_order(profile, expected, order),
         Edit::MatchRule { index, expected, conditions, exit } => {
             let (category, target) = conditions.compile()?;
@@ -990,7 +1021,7 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
         Edit::DetachRule { index, expected } => {
             let (category, tail) = expected.split_once(',').ok_or("无效的规则")?;
             let (target, group) = tail.rsplit_once(',').ok_or("无效的规则")?;
-            if !["DOMAIN", "DOMAIN-SUFFIX", "PROCESS-PATH"].contains(&category)
+            if crate::rule_conditions::decode(category,target).is_none()
                 || !names(profile, "proxy-groups").any(|name| name == group)
             {
                 return Err("此规则请在分流规则中编辑。".into());
@@ -1238,6 +1269,22 @@ mod tests {
             assert!(edit_active(&mut profile, Edit::ProviderInterval { name: name.into(), seconds }).is_err());
         }
         assert_eq!(profile, restored);
+    }
+
+    #[test]
+    fn shared_rules_require_mapping_before_switch_and_keep_local_rules_separate() {
+        let mut catalog=json!({"proxy-providers":{"A":{},"B":{}},"routepilot-active-subscription":"A",
+            "routepilot-subscription-scopes":{"A":{"rules":["MATCH,DIRECT"],"proxy-groups":[{"name":"Office","type":"select","proxies":["DIRECT"]}]},
+            "B":{"rules":["DOMAIN,local.test,DIRECT","MATCH,DIRECT"]}}});
+        edit_active(&mut catalog,Edit::SharedRule{expected:None,conditions:Some(crate::rule_conditions::Conditions{
+            target:"work.test".into(),..Default::default()}),exit:Some("Office".into())}).unwrap();
+        assert_eq!(subscription_preview(&catalog,"B").unwrap()["missing"],json!(["Office"]));
+        let before=catalog.clone();
+        assert!(switch_with_mapping(&mut catalog,Some("B".into()),Default::default()).is_err());
+        assert_eq!(before,catalog);
+        switch_with_mapping(&mut catalog,Some("B".into()),[("Office".into(),"REJECT".into())].into()).unwrap();
+        assert!(entries(&effective_config(&catalog),"rules").any(|v|v=="DOMAIN,work.test,REJECT"));
+        assert_eq!(catalog["routepilot-subscription-scopes"]["B"]["rules"],json!(["DOMAIN,local.test,DIRECT","MATCH,DIRECT"]));
     }
 
     #[test]

@@ -34,6 +34,8 @@ import {
   platformLabel,
   type ProfileEdit,
   type RuleConditions,
+  type SharedRule,
+  type ScopeMapping,
   type ProfileGroup,
   type ProfileNode,
   type ProfileSummary,
@@ -457,7 +459,24 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
-  async function switchSubscription(name: string): Promise<boolean> {
+  function showScopeMapping(name: string, plan: ScopeMapping): void {
+    openSheet({title:'为共享规则选择出口',subtitle:name,
+      bodyHtml:plan.missing.map((exit,i) => `<div class="sheet-field"><label for="mappedExit${i}">${esc(exit)} 在此订阅中不可用</label>
+        <select class="sheet-input" id="mappedExit${i}"><option value="">请选择替代出口</option>${plan.available.map(v => `<option value="${esc(v)}">${esc(exitDisplayLabel(v))}</option>`).join('')}</select></div>`).join(''),
+      actionsHtml:'<button class="glass-btn-soft" id="mappingCancel">取消</button><button class="glass-btn-primary" id="mappingApply" disabled>应用并切换</button>'});
+    const apply = $<HTMLButtonElement>('mappingApply');
+    const fields = plan.missing.map((_,i) => $<HTMLSelectElement>(`mappedExit${i}`));
+    fields.forEach(field => field.onchange = () => {apply.disabled = fields.some(f => !f.value);});
+    $('mappingCancel').onclick = closeSheet;
+    apply.onclick = async () => {
+      apply.disabled = true;
+      const mapping = Object.fromEntries(plan.missing.map((exit,i) => [exit, fields[i].value]));
+      if (await switchSubscription(name,mapping) && apply.isConnected) closeSheet();
+      apply.disabled = false;
+    };
+  }
+
+  async function switchSubscription(name: string, mapping?: Record<string,string>): Promise<boolean> {
     if (changingSubscription || networkUpdating || selectingNode || changingMode) return false;
     probeGeneration++;
     changingSubscription = true;
@@ -472,7 +491,11 @@ export function mountDesktopApp(shell: ShellController): void {
           saveMap(KEY_GROUP_EXITS, groupSelections);
         }
       }
-      const profile = await tauriApi.setSubscriptionScope(name || null);
+      if (name && !mapping) {
+        const plan = await tauriApi.subscriptionMapping(name);
+        if (plan.missing.length) {showScopeMapping(name,plan); return false;}
+      }
+      const profile = await tauriApi.setSubscriptionScope(name || null,mapping);
       applyProfile(profile);
       const remembered = subscriptionSelections.get(name);
       if (remembered) localStorage.setItem(KEY_PENDING_NODE, JSON.stringify([name, remembered]));
@@ -1428,7 +1451,7 @@ export function mountDesktopApp(shell: ShellController): void {
       $('orderHint').textContent = manual ? '首条匹配生效，默认出口位于末尾。' : profile.managedOrder ? '阻断和直连优先，系统会补充局域网直连。' : '按导入文件中的顺序匹配。';
       list.innerHTML = rows.map((line,i) => {
         const fallback = line.startsWith('MATCH,');
-        const source = fallback ? '默认出口' : userLines.has(line) ? (profile.subscriptionScope ? '当前订阅' : '当前配置') : '系统补充';
+        const source = fallback ? '默认出口' : profile.sharedRules?.some(r => r.line === line) ? '个人共享' : userLines.has(line) ? (profile.subscriptionScope ? '当前订阅' : '当前配置') : '系统补充';
         return `<div class="sheet-picker-row"><small>${i+1}</small><span class="picker-meta"><strong>${esc(line)}</strong><small>${source}</small></span>
           ${manual && !fallback ? `<button class="glass-btn-soft" data-move="-1" data-row="${i}" aria-label="上移" ${i === 0 ? 'disabled' : ''}>↑</button><button class="glass-btn-soft" data-move="1" data-row="${i}" aria-label="下移" ${!rows[i+1] || rows[i+1].startsWith('MATCH,') ? 'disabled' : ''}>↓</button>` : ''}</div>`;
       }).join('');
@@ -1485,6 +1508,13 @@ export function mountDesktopApp(shell: ShellController): void {
     for (const p of liveProcesses) iconByPath.set(normalizedProgramPath(p.path), p.icon);
 
     $('splitRulesPane').innerHTML = `
+      ${(liveProfile?.sharedRules || []).filter(r => !q || r.line.toLowerCase().includes(q)).map(r => `
+        <div class="mac-card flush"><div class="mac-row"><div class="mac-row-left"><div>
+        <span class="mac-row-title">${esc(r.conditions?.program || r.conditions?.target || r.conditions?.port || r.source)}</span>
+        <span class="mac-row-sub">个人共享 · ${esc(r.line)}</span></div></div>
+        <div class="rule-right-cols live-cols"><button class="sf-icon-btn" data-shared-inspect="${esc(r.line)}" aria-label="查看命中连接">${SF_DETAIL}</button>
+        <button class="sf-icon-btn" data-shared-edit="${esc(r.source)}" aria-label="编辑共享规则">${SF_EDIT}</button>
+        <button class="sf-icon-btn danger" data-shared-delete="${esc(r.source)}" aria-label="删除共享规则">${SF_TRASH}</button></div></div></div>`).join('')}
       <div class="mac-card flush">
         ${rules.map(r => {
           const isProc = r.type.startsWith('PROCESS');
@@ -2126,17 +2156,17 @@ export function mountDesktopApp(shell: ShellController): void {
     input.focus();
   }
 
-  function openRuleEditor(index?: number, seed?: Partial<RuleConditions>): void {
+  function openRuleEditor(index?: number, seed?: Partial<RuleConditions>, shared?: SharedRule): void {
     const profile = liveProfile;
     if (!profile) return;
     const original = index === undefined ? undefined : profile.rules?.[index];
-    const existing = index === undefined ? seed : profile.ruleConditions?.[index];
+    const existing = index === undefined ? shared?.conditions || seed : profile.ruleConditions?.[index];
     if (original && !existing) { editDocument('config'); return; }
     const scope = profile.subscriptionScope ?? '';
     const initial = { program: '', target: '', port: '', suffix: false, ...existing };
-    let exit = index === undefined ? 'DIRECT' : profile.ruleExits?.[index] || 'DIRECT';
+    let exit = index === undefined ? shared?.exit || 'DIRECT' : profile.ruleExits?.[index] || 'DIRECT';
     openSheet({
-      title: original ? '编辑分流规则' : '添加分流规则',
+      title: original || shared ? '编辑分流规则' : '添加分流规则',
       size: 'wide',
       bodyHtml: `
         <div class="sheet-field"><label for="ruleProgram">软件</label>
@@ -2151,6 +2181,7 @@ export function mountDesktopApp(shell: ShellController): void {
           <small id="ruleHostPreview"></small></div>
         <div class="sheet-field"><label for="rulePort">目标端口</label>
           <input class="sheet-input" id="rulePort" placeholder="任意端口，例如 443 或 8000-8080" value="${esc(initial.port)}"></div>
+        ${scope && !original && !shared ? '<div class="sheet-field"><label for="ruleCoverage">应用范围</label><select class="sheet-input" id="ruleCoverage"><option value="local">仅当前订阅</option><option value="shared">所有订阅</option></select></div>' : ''}
         <div class="sheet-field"><span class="sheet-field-label">匹配时使用</span><div class="sheet-popup-full" id="ruleExit"></div></div>
         <p class="sheet-error" id="ruleError" role="alert"></p>`,
       actionsHtml: '<button class="glass-btn-soft" id="ruleCancel">取消</button><button class="glass-btn-primary" id="ruleSave">保存规则</button>',
@@ -2199,7 +2230,10 @@ export function mountDesktopApp(shell: ShellController): void {
       save.disabled = true;
       try {
         const conditions = { program: program.value.trim(), target: target.value.trim(), suffix: !suffix.disabled && suffix.checked, port: $<HTMLInputElement>('rulePort').value.trim() };
-        const updated = await tauriApi.editProfile({ kind: 'matchRule', conditions, exit, index, expected: original }, scope);
+        const global = shared || (document.getElementById('ruleCoverage') as HTMLSelectElement | null)?.value === 'shared';
+        const mutation: ProfileEdit = global ? {kind:'sharedRule',expected:shared?.source,conditions,exit} :
+          {kind:'matchRule', conditions,exit,index,expected:original};
+        const updated = await tauriApi.editProfile(mutation, scope);
         if (save.isConnected) closeSheet();
         applyProfile(updated); renderAllSafe(); void refreshLiveState(true);
       } catch (e) { error.textContent = cleanError(e); }
@@ -2555,6 +2589,7 @@ export function mountDesktopApp(shell: ShellController): void {
       notify(cleanError(err), true);
     }
   });
+  $('activeRoutesBtn').hidden = false;
   $('activeRoutesBtn').onclick = () => inspectRoutes();
   $('clearLogsBtn').addEventListener('click', () => void refreshConnectionLogs(true));
 
@@ -2763,6 +2798,23 @@ export function mountDesktopApp(shell: ShellController): void {
       return;
     }
 
+    const sharedInspect = target.closest<HTMLElement>('[data-shared-inspect]');
+    if (sharedInspect) {inspectRoutes(sharedInspect.dataset.sharedInspect); return;}
+    const sharedEdit = target.closest<HTMLElement>('[data-shared-edit]');
+    if (sharedEdit) {
+      const rule = liveProfile?.sharedRules?.find(r => r.source === sharedEdit.dataset.sharedEdit);
+      if (rule) openRuleEditor(undefined,undefined,rule);
+      return;
+    }
+    const sharedDelete = target.closest<HTMLElement>('[data-shared-delete]');
+    if (sharedDelete) {
+      const scope = liveProfile?.subscriptionScope ?? '';
+      const expected = sharedDelete.dataset.sharedDelete;
+      if (await confirmSheet({title:'删除共享规则',message:'所有订阅都会移除这条个人规则。',confirmLabel:'删除',danger:true})) {
+        await commitProfileEdit({kind:'sharedRule',expected},'共享规则已移除',scope);
+      }
+      return;
+    }
     const inspect = target.closest<HTMLElement>('[data-inspect-rule]');
     if (inspect) { inspectRoutes(liveProfile?.rules?.[Number(inspect.dataset.inspectRule)]); return; }
     const fromLog = target.closest<HTMLElement>('[data-log-rule]');

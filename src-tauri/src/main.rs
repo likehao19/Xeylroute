@@ -1223,10 +1223,16 @@ fn core_profile_backup(
 }
 
 #[tauri::command]
-async fn set_subscription_scope(app: AppHandle, name: Option<String>) -> Result<Value, String> {
+async fn subscription_mapping(app: AppHandle, name: String) -> Result<Value,String> {
+    require_core_access(&app)?;
+    profile::subscription_preview(&configured_profile(&core_dir(&app)?)?, &name)
+}
+
+#[tauri::command]
+async fn set_subscription_scope(app: AppHandle, name: Option<String>, mapping: Option<std::collections::HashMap<String,String>>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         update_profile(&app, false, |config, _, _| {
-            profile::select_subscription(config, name)
+            profile::switch_with_mapping(config, name, mapping.unwrap_or_default())
         })
     })
     .await
@@ -1585,6 +1591,7 @@ fn main() {
             subscription_card_metadata,
             edit_core_profile,
             set_subscription_scope,
+            subscription_mapping,
             core_profile_backup,
             import_subscription_link,
             import_node_links,
