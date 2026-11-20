@@ -67,7 +67,7 @@ export function initShell(): ShellController {
     glassSlider.disabled = reduced;
     glassSlider.setAttribute('aria-valuetext', tint === 0 ? '清透' : tint === 100 ? '浓郁' : `着色 ${tint}%`);
     document.documentElement.style.setProperty('--glass-clarity', String(1 - tint / 100));
-    $('glassHint').textContent = reduced ? '系统已开启「降低透明度」' : '窗口透明度';
+    $('glassHint').textContent = reduced ? '系统已开启「降低透明度」' : `清透 → 浓郁 · 着色 ${tint}%`;
   }
   glassSlider.addEventListener('input', () => { preferredTint = glassSlider.valueAsNumber; renderGlass(); });
   glassSlider.addEventListener('change', () => localStorage.setItem(glassKey, String(preferredTint)));

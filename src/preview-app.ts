@@ -23,6 +23,8 @@ import {
 } from './ui-kit';
 
 export function mountPreviewApp(shell: ShellController): void {
+  document.documentElement.classList.add('platform-macos');
+  $('toolbarActions').append($('nodeTestActions'));
   const sites = createSiteCatalog(false);
   const telemetry = new TelemetryVisualizer(true);
   telemetry.bindInteractions();
