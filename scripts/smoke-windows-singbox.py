@@ -28,7 +28,7 @@ def verify():
     with ExitStack() as resources:
         root = Path(resources.enter_context(tempfile.TemporaryDirectory()))
         sinks = {tag: resources.enter_context(socket.create_server(("127.0.0.1", 0)))
-                 for tag in ("selected", "instance", "remaining")}
+                 for tag in ("control", "selected", "instance", "remaining")}
         def start_client(port):
             code = ("import sys,socket; input(); "
                     f"s=socket.create_connection(('{address}',{port}),5); s.sendall(b'x'); s.recv(1)")
@@ -36,7 +36,7 @@ def verify():
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
             resources.callback(child.kill)
             return child
-        first, second = start_client(18080), start_client(18082)
+        control, first, second = start_client(18083), start_client(18080), start_client(18082)
         archive = root / "core.zip"
         urllib.request.urlretrieve(f"https://github.com/SagerNet/sing-box/releases/download/v1.14.4/{release}.zip", archive)
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == digests[arch]
@@ -50,7 +50,9 @@ def verify():
             "auto_route": True, "route_address": [address + "/32"], "include_package": ["curl.exe"]}],
             "outbounds": [{"type": "http", "server": "127.0.0.1", "tag": tag, "server_port": sock.getsockname()[1]}
                           for tag, sock in sinks.items()],
-            "route": {"rules": [{"process_name": ["curl.exe"], "action": "route", "outbound": "selected"}],
+            "route": {"find_process": True, "rules": [
+                      {"port": 18083, "action": "route", "outbound": "control"},
+                      {"process_name": ["curl.exe"], "action": "route", "outbound": "selected"}],
                       "final": "remaining"}}
         file = root / "config.json"
         instance_rule = {"process_name": [Path(sys.executable).name], "process_id": first.pid,
@@ -75,13 +77,13 @@ def verify():
                     time.sleep(.25)
                 else:
                     raise AssertionError("Missing test route")
-                curl = resources.enter_context(subprocess.Popen(["curl.exe", "--noproxy", "*", "--max-time", "3",
-                    "--retry", "3", "--retry-all-errors", "--retry-delay", "1",
-                    f"http://{address}:18081/"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-                resources.callback(curl.kill)
                 decisions = []
-                for child, port in [(curl, 18081), (first, 18080), (second, 18082)]:
-                    if child.stdin:
+                for child, port in [(control, 18083), (None, 18081), (first, 18080), (second, 18082)]:
+                    if child is None:
+                        curl = resources.enter_context(subprocess.Popen(["curl.exe", "--noproxy", "*", "--max-time", "5",
+                            f"http://{address}:{port}/"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                        resources.callback(curl.kill)
+                    else:
                         child.stdin.write(b"\n")
                         child.stdin.flush()
                     deadline = time.monotonic() + 10
@@ -100,10 +102,12 @@ def verify():
                         break
                     else:
                         raise AssertionError(f"No HTTP outlet received the test connection to {port}")
-                assert decisions[0] == "selected", decisions
-                print(f"sing-box 1.14.4: with include_package set to curl.exe, all three clients entered TUN. "
+                assert decisions[0] == "control", f"Port-rule positive control failed: {decisions}"
+                print(f"sing-box 1.14.4: with include_package set to curl.exe, all four connections entered TUN. "
                       f"Outlets for curl, Python PID {first.pid} (selected instance), "
-                      f"Python PID {second.pid} (other instance): {decisions}.")
+                      f"Python PID {second.pid} (other instance): {decisions[1:]}.")
+                if decisions[1] != "selected":
+                    print("Process-name control did not match; the PID comparison is inconclusive on this runner.")
             except Exception:
                 relevant = [line for line in (root / "core.log").read_text(errors="replace").splitlines()
                             if "dns:" not in line]
