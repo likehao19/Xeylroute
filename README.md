@@ -29,7 +29,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 运行 `npm run desktop -- build` 制作当前平台安装包。独立执行 Cargo 测试前先运行 `npm run core` 准备打包资源。内核版本与校验值在 `scripts/core-lock.json`，许可证随包附带。 [Mihomo 对应版本源码](https://github.com/MetaCubeX/mihomo/tree/v1.19.34)
 
-工具栏「测延迟」通过 Mihomo 发出 HTTP 探测。节点页的完整测速还会下载 1 MB 样本，速度包含建连与首字节等待。全局 TUN 支持按程序规则选择出口。当前内核缺少桌面按进程路径限定 TUN 入站的能力，选择旧配置「仅指定分组和程序」时，应用会阻止启动全局 TUN。
+工具栏「测延迟」和节点页「全部测延迟」通过 Mihomo 并发探测，最多同时测 8 个目标。网站连通性测试使用同一并发上限。节点页「测全部带宽」逐个下载 1 MB 样本，速度包含建连与首字节等待。全局 TUN 支持按程序规则选择出口。当前内核缺少桌面按进程路径限定 TUN 入站的能力，选择旧配置「仅指定分组和程序」时，应用会阻止启动全局 TUN。
 
 可以通过 `python3 scripts/smoke-mihomo.py --binary <随包内核路径>` 验证本地转发、控制接口、订阅和测速。脚本只使用临时配置和回环端口。
 

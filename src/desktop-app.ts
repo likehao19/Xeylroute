@@ -10,6 +10,7 @@ import {
   SF_TRASH,
 } from './icons';
 import { groupRunningApps, normalizedProgramPath } from './running-apps.mjs';
+import { runProbeQueue } from './probe-queue.mjs';
 import type { ShellController } from './shell';
 import {
   buildProxyEnvText,
@@ -174,6 +175,8 @@ export function mountDesktopApp(shell: ShellController): void {
   let changingSubscription = false;
   let pendingSubscription = '';
   let batchTesting = false;
+  let probeGeneration = 0;
+  let probeRenderTimer = 0;
   let localCoreStart: Promise<boolean> | null = null;
   let refreshPromise: Promise<void> | null = null;
   let refreshQueued = false;
@@ -445,6 +448,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   async function switchSubscription(name: string): Promise<boolean> {
     if (changingSubscription || networkUpdating || selectingNode || changingMode) return false;
+    probeGeneration++;
     changingSubscription = true;
     pendingSubscription = name;
     renderAllSafe();
@@ -706,6 +710,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   async function performNetworkControl(action: NetworkControlAction): Promise<void> {
     if (networkUpdating || changingSubscription) return;
+    probeGeneration++;
     networkUpdating = true;
     renderHeaderState();
     syncTray();
@@ -856,50 +861,64 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
+  function scheduleProbeRender(): void {
+    if (probeRenderTimer || document.hidden) return;
+    probeRenderTimer = window.setTimeout(() => {
+      probeRenderTimer = 0;
+      if (!document.hidden && !isSheetOpen() && !$('macMenuPopover').classList.contains('open')) renderView();
+    }, 100);
+  }
+
   async function testSingleNode(node: NodeCardItem, download = true): Promise<void> {
     if (networkUpdating || changingSubscription) return;
     if (!(node.name === 'AUTO' || isTestableNode(node))) return;
     const key = delayKey(node.provider, node.name);
     if (liveTesting.has(key)) return;
+    const generation = probeGeneration;
     liveTesting.add(key);
-    renderView();
+    scheduleProbeRender();
     try {
       const ready = await ensureLocalCore();
       if (!ready) throw new Error('请先导入订阅或节点链接。');
+      if (generation !== probeGeneration) return;
       const result = await tauriApi.mihomoDelay(node.name, node.policy ? null : node.provider, download);
+      if (generation !== probeGeneration) return;
       const previous = liveDelays.get(key);
       if (!download && previous && typeof previous !== 'string') result.mbps = previous.mbps;
       liveDelays.set(key, result);
     } catch (err) {
-      liveDelays.set(key, cleanError(err));
+      if (generation === probeGeneration) liveDelays.set(key, cleanError(err));
     } finally {
       liveTesting.delete(key);
-      renderView();
+      scheduleProbeRender();
     }
   }
 
-  async function batchTestNodes(download = true): Promise<void> {
+  async function runBatch(kind: 'delay' | 'download' | 'sites'): Promise<void> {
     if (batchTesting || networkUpdating || changingSubscription) return;
-    const nodes = allSelectableNodes();
-    if (!nodes.length) {
-      notify('暂无可测速节点', true);
-      return;
-    }
+    const generation = probeGeneration;
     batchTesting = true;
+    const toolbar = $<HTMLButtonElement>('topSpeedBtn');
+    toolbar.disabled = true;
     renderView();
     try {
       if (!await ensureLocalCore()) throw new Error('请先添加订阅或节点链接。');
-      notify(`正在顺序测速 ${nodes.length} 个节点…`);
-      for (const node of nodes) {
-        if (!liveStatus?.running || changingSubscription) { notify('测速已中止'); return; }
-        await testSingleNode(node, download);
-      }
-      notify('全部节点测速完成');
+      const active = () => generation === probeGeneration && Boolean(liveStatus?.running);
+      const jobs = kind === 'sites'
+        ? sites.flatMap(([, items], ci) => items.map((_, si) => () => probeSite(ci, si)))
+        : allSelectableNodes().map(node => () => testSingleNode(node, kind === 'download'));
+      if (!jobs.length) { notify('暂无可测速目标'); return; }
+      const concurrency = kind === 'download' ? 1 : 8;
+      const label = { delay: '节点延迟', download: '节点带宽', sites: '网站连通性' }[kind];
+      notify(`正在测量 ${jobs.length} 个目标的${label}`);
+      await runProbeQueue(jobs, concurrency, job => job(), active);
+      notify(active() ? `${label}测试完成` : '测速已中止');
     } catch (err) {
       notify(cleanError(err), true);
     } finally {
       batchTesting = false;
-      renderView();
+      toolbar.disabled = false;
+      scheduleProbeRender();
     }
   }
 
@@ -908,20 +927,24 @@ export function mountDesktopApp(shell: ShellController): void {
     if (!item) return;
     const key = `${ci}-${si}`;
     if (siteProbing.has(key)) return;
+    const generation = probeGeneration;
     siteProbing.add(key);
-    renderNodes();
+    scheduleProbeRender();
     try {
       if (!await ensureLocalCore()) throw new Error('请先添加订阅或导入配置。');
+      if (generation !== probeGeneration) return;
       const res = await tauriApi.mihomoWebsiteProbe(item.h);
+      if (generation !== probeGeneration) return;
       item.ms = res.ms;
       item.status = res.status;
     } catch (err) {
+      if (generation !== probeGeneration) return;
       item.ms = -1;
       item.status = 0;
-      notify(`${item.n} 测速失败：${cleanError(err)}`, true);
+      if (!batchTesting) notify(`${item.n} 测速失败：${cleanError(err)}`, true);
     } finally {
       siteProbing.delete(key);
-      renderNodes();
+      scheduleProbeRender();
     }
   }
 
@@ -1175,10 +1198,11 @@ export function mountDesktopApp(shell: ShellController): void {
     $('nodesGroupsPane').hidden = nodesSub !== 'groups';
     $('nodesSitesPane').hidden = nodesSub !== 'sites';
     const actBtn = $<HTMLButtonElement>('nodesActionBtn');
-    actBtn.textContent = nodesSub === 'groups'
-      ? (batchTesting ? '测速中…' : '全部节点测速')
-      : '全部站点测速';
+    actBtn.textContent = batchTesting ? '测速中…' : nodesSub === 'groups' ? '全部测延迟' : '全部站点测速';
     actBtn.disabled = batchTesting || networkUpdating || changingSubscription;
+    const bandwidth = $<HTMLButtonElement>('nodesBandwidthBtn');
+    bandwidth.hidden = nodesSub !== 'groups';
+    bandwidth.disabled = actBtn.disabled;
 
     const scopePill = $('nodesScopePill');
     if (selectedSubscription) {
@@ -2350,7 +2374,7 @@ export function mountDesktopApp(shell: ShellController): void {
     void performNetworkControl({ control: 'power', enabled: !isOn });
   });
 
-  $('topSpeedBtn').addEventListener('click', () => void batchTestNodes(false));
+  $('topSpeedBtn').addEventListener('click', () => void runBatch('delay'));
   $('topImportBtn').addEventListener('click', openImportSheet);
   $('heroProbeBtn').addEventListener('click', () => {
     const active = activeGlobalExit();
@@ -2370,20 +2394,8 @@ export function mountDesktopApp(shell: ShellController): void {
     $('nodesSubSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
     renderNodes();
   });
-  $('nodesActionBtn').addEventListener('click', () => {
-    if (nodesSub === 'groups') {
-      void batchTestNodes();
-    } else {
-      void (async () => {
-        for (let ci = 0; ci < sites.length; ci++) {
-          for (let si = 0; si < sites[ci][1].length; si++) {
-            await probeSite(ci, si);
-          }
-        }
-        notify('网站连通性实测已完成');
-      })();
-    }
-  });
+  $('nodesActionBtn').addEventListener('click', () => void runBatch(nodesSub === 'groups' ? 'delay' : 'sites'));
+  $('nodesBandwidthBtn').addEventListener('click', () => void runBatch('download'));
 
   $('splitSubSeg').addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-split-sub]');
