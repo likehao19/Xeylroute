@@ -32,6 +32,7 @@ def verify():
         exe = root / "sing-box.exe"
         with zipfile.ZipFile(archive) as zipped:
             exe.write_bytes(zipped.read(release + "/sing-box.exe"))
+            (root / "libcronet.dll").write_bytes(zipped.read(release + "/libcronet.dll"))
         config = {"log": {"level": "debug"}, "inbounds": [{
             "type": "tun", "tag": "test", "interface_name": device, "address": ["198.18.0.1/30"],
             "auto_route": True, "route_address": [address + "/32"], "include_package": ["curl.exe"]}],
@@ -44,7 +45,7 @@ def verify():
         pid_config["route"]["rules"][0] = {"process_id": os.getpid(), "action": "reject"}
         file.write_text(json.dumps(pid_config))
         check = subprocess.run([exe, "check", "-c", file], capture_output=True, text=True, timeout=15)
-        assert check.returncode and "process_id" in (check.stdout + check.stderr), check.stderr
+        assert check.returncode and "process_id" in (check.stdout + check.stderr), (check.returncode, check.stdout, check.stderr)
         file.write_text(json.dumps(config))
         with (root / "core.log").open("w") as log:
             proc = subprocess.Popen([exe, "run", "-c", file], stdout=log, stderr=log)

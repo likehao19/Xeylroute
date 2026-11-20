@@ -39,7 +39,7 @@ async function until(description, read, timeout = 30000) {
 }
 
 const proxy = () => ps("$s=Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Internet Settings'; Write-Output ([string][int]$s.ProxyEnable + '|' + [string]$s.ProxyServer)");
-const route = async () => (await promisify(execFile)('python', ['scripts/windows_routes.py', '192.0.2.123'])).stdout.trim();
+const route = async (address = '192.0.2.123') => (await promisify(execFile)('python', ['scripts/windows_routes.py', address])).stdout.trim();
 const initialProxy = await proxy();
 const initialRoute = await route();
 assert.ok(Number(initialRoute) > 0);
@@ -56,12 +56,16 @@ let app, page;
 async function launch() {
   const debug = await unusedPort();
   app = spawn(exe, [], { stdio: 'inherit', env: { ...process.env,
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=' + debug,
+    WEBVIEW2_USER_DATA_FOLDER: path.join(process.env.RUNNER_TEMP, 'xeyl-webview'),
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--disable-gpu --remote-debugging-port=' + debug,
   } });
-  const browser = await until('WebView2', async () => {
+  const websocket = await until('WebView2 debugging endpoint', async () => {
     assert.equal(app.exitCode, null, 'Desktop process exited');
-    return chromium.connectOverCDP('http://127.0.0.1:' + debug, { timeout: 1000 }).catch(() => null);
-  });
+    const version = await fetch('http://127.0.0.1:' + debug + '/json/version')
+      .then(response => response.json()).catch(() => null);
+    return version?.webSocketDebuggerUrl;
+  }, 60000);
+  const browser = await chromium.connectOverCDP(websocket);
   page = await until('desktop page', () => browser.contexts().flatMap(c => c.pages())
     .find(p => p.url().includes('tauri.localhost')));
   await page.locator('#sideSysProxy').waitFor();
@@ -107,6 +111,17 @@ try {
   await waitToggle('#sideTunToggle', true);
   const activeRoute = await route();
   assert.ok(Number(activeRoute) > 0 && activeRoute !== initialRoute);
+  // Move only the documentation address to loopback and back, leaving the CI uplink alone.
+  const loopback = await route('127.0.0.1');
+  const routeArgs = ['192.0.2.123', 'MASK', '255.255.255.255', '127.0.0.1', 'IF', loopback];
+  await promisify(execFile)('route.exe', ['ADD', ...routeArgs]);
+  try {
+    assert.equal(await route(), loopback);
+    assert.notEqual(activeRoute, loopback);
+  } finally {
+    await promisify(execFile)('route.exe', ['DELETE', ...routeArgs]);
+  }
+  assert.equal(await route(), activeRoute);
   await promisify(execFile)('curl.exe', ['--noproxy', '*', '--max-time', '3', 'http://192.0.2.123:18080/']).catch(() => {});
   await until('actual TUN decision', () => fs.readFileSync(path.join(data, 'mihomo.log'), 'utf8')
     .split('\n').some(line => line.includes('192.0.2.123:18080') && line.includes('REJECT')));
@@ -116,14 +131,19 @@ try {
   console.log('App confirmation cancel/accept, global TUN traffic and normal route restoration passed.');
 
   await toggle('#sideSysProxy', true);
+  await page.locator('#sideTunToggle').click();
+  await page.locator('#sheetConfirmOk').click();
+  await waitToggle('#sideTunToggle', true);
   assert.ok(fs.existsSync(journal));
   await terminate();
+  await until('TUN lease release after abrupt exit', async () => (await route()) === initialRoute);
   await launch();
   await until('automatic recovery after abrupt exit', () => !fs.existsSync(journal));
   assert.equal(await proxy(), initialProxy);
   assert.equal(await route(), initialRoute);
   console.log('Desktop restart after abrupt exit restored the original settings.');
 } catch (error) {
+  console.error('Desktop processes:', await ps('Get-Process routepilot-desktop,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Name,SessionId,MainWindowTitle | Out-String').catch(() => 'unavailable'));
   console.error('App status:', await page?.locator('#toast').textContent({ timeout: 1500 }).catch(() => 'unavailable'));
   throw error;
 } finally {

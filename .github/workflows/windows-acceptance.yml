@@ -49,6 +49,15 @@ jobs:
         if: ${{ !cancelled() && steps.desktop.outcome == 'success' }}
         shell: pwsh
         run: |
+          $client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $installed = Get-ItemPropertyValue -Path "HKLM:\SOFTWARE\WOW6432Node\$client","HKCU:\SOFTWARE\$client" -Name pv -ErrorAction SilentlyContinue
+          if (!($installed | Where-Object { $_ -and [version]$_ -gt [version]'0.0.0.0' })) {
+            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            $signature = Get-AuthenticodeSignature $installer
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation,') { throw 'Unexpected WebView2 installer signature' }
+            if ((Start-Process $installer -ArgumentList '/silent','/install' -Wait -PassThru).ExitCode) { throw 'WebView2 setup failed' }
+          }
           npm install --prefix "$env:RUNNER_TEMP/webview-test" --no-audit --no-fund playwright-core@1.56.1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/smoke-windows-desktop.mjs src-tauri/target/debug/routepilot-desktop.exe
