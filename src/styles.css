@@ -521,41 +521,54 @@
     .mode-pill button:hover:not(.active) { color: var(--ink-2); }
     .mode-pill button.active { color: var(--ink); }
 
-    /* Quiet Neutral Quick Takeover Tiles (No Stacked Neon Blue Clutter) */
     .quick-tiles {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
     }
     .qtile {
-      padding: 8px 9px;
+      position: relative;
+      color: var(--ink);
+      border: 1px solid color-mix(in srgb, var(--ink) 23%, transparent);
       border-radius: 12px;
-      background: var(--node-bg);
-      box-shadow: inset 0 0 0 0.5px var(--card-hairline);
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      cursor: pointer;
-      transition: background 0.16s ease, box-shadow 0.16s ease;
+      background: var(--card-surface);
     }
-    .qtile:hover { background: var(--node-hover); }
-    .qtile:has(input:checked) {
+    .qtile:has(.qtile-open:hover) {
+      border-color: color-mix(in srgb, var(--ink) 42%, transparent);
       background: var(--card-surface-hover);
-      box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.11);
     }
-    :root[data-theme="light"] .qtile:has(input:checked) {
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    .qtile:has(.qtile-open[aria-current="page"]) {
+      color: white;
+      border-color: #0964c3;
+      background: #0969ce;
     }
-    .qtile-top {
+    .qtile-open {
       display: flex;
-      align-items: center;
+      width: 100%;
+      flex-direction: column;
+      align-items: flex-start;
       justify-content: space-between;
+      gap: 10px;
+      padding: 9px 10px 8px;
+      border: 0;
+      border-radius: inherit;
+      background: transparent;
+      color: inherit;
+      font-size: 12px;
+      font-weight: 600;
     }
-    .qtile-top svg { width: 14px; height: 14px; color: var(--muted); transition: color 0.16s ease; }
-    .qtile:has(input:checked) .qtile-top svg { color: var(--green); }
-    .qtile span.qlabel { font-size: 11.5px; font-weight: 600; color: var(--muted); transition: color 0.16s ease; }
-    .qtile:has(input:checked) span.qlabel { color: var(--ink); }
+    .qtile-open svg { width: 17px; height: 17px; }
+    .qtile .mac-switch { position: absolute; top: 8px; right: 8px; }
+    .qtile:has([aria-current="page"]) .mac-switch input:not(:focus-visible) + i {
+      outline: 1px solid rgb(255 255 255 / .65);
+    }
+
+    #view-settings[data-detail="system"] > :not([data-detail-for~="system"]),
+    #view-settings[data-detail="tun"] > :not([data-detail-for~="tun"]),
+    #view-settings[data-detail="system"] > .mac-card > .mac-row:not([data-detail-for~="system"]),
+    #view-settings[data-detail="tun"] > .mac-card:not(.tun-detail) > .mac-row:not([data-detail-for~="tun"]),
+    #view-settings:not([data-detail="tun"]) .tun-detail,
+    :root:not(.tauri-native) .desktop-tun-defaults { display: none; }
 
     /* =========================================================================
        macOS 26/27 Tahoe Liquid Glass Elongated Pill Switch
@@ -2469,9 +2482,7 @@
     #subsGridPane > :only-child { grid-column: 1 / -1; }
     .modal-backdrop[inert] { visibility: hidden; }
 
-    #nodeTestActions { display: flex; align-items: center; gap: 8px; }
-    #toolbarActions > #nodeTestActions { display: none; }
-    .detail-stage:has(#view-nodes.active) #toolbarActions > #nodeTestActions:has(button:not([hidden])) { display: flex; }
+    .page-actions { display: flex; align-items: center; gap: 8px; }
     .scope-value { font-size: 12px; color: var(--muted); }
     .appearance-card { margin-bottom: 18px; }
     .appearance-card .mac-row { align-items: center; padding: 12px 16px; }
@@ -2619,12 +2630,10 @@
     }
     .settings-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-    .probe-field { display: flex; align-items: center; width: min(100%, 245px); position: relative; }
+    .probe-field { display: flex; align-items: center; width: clamp(110px, 22cqw, 220px); position: relative; }
     .probe-field svg { position: absolute; left: 10px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
     #simHostInput { padding-inline-start: 34px; }
-    .probe-action { margin-inline-start: auto; }
-    .tauri-native.platform-macos #simForm { padding: 2px 0 6px; background: transparent; box-shadow: none; }
-    .tauri-native.platform-macos .probe-action { margin-inline-start: 0; }
+    :root.tauri-native #simForm { display: none !important; }
     .platform-macos #simHostInput { background: var(--card-surface); }
 
     /* Only floating control groups use the library's optical surface. */

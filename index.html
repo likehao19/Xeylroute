@@ -57,23 +57,21 @@
         <button type="button" data-mode="direct">直连</button>
       </div>
 
-      <!-- Quiet Neutral Takeover Tiles -->
       <div class="quick-tiles">
-        <label class="qtile">
-          <div class="qtile-top">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
-            <span class="mac-switch"><input type="checkbox" id="sideSysProxy"><i></i></span>
-          </div>
-          <span class="qlabel">系统代理</span>
-        </label>
-
-        <label class="qtile">
-          <div class="qtile-top">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M12 3 4 7v5c0 5 3.5 8.5 8 9.8 4.5-1.3 8-4.8 8-9.8V7l-8-4Z"/></svg>
-            <span class="mac-switch"><input type="checkbox" id="sideTunToggle"><i></i></span>
-          </div>
-          <span class="qlabel">虚拟网卡</span>
-        </label>
+        <div class="qtile">
+          <button type="button" class="qtile-open" id="systemDetailBtn" aria-label="系统代理设置">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>
+            <span>系统代理</span>
+          </button>
+          <label class="mac-switch"><input type="checkbox" id="sideSysProxy" aria-label="系统代理开关"><i></i></label>
+        </div>
+        <div class="qtile">
+          <button type="button" class="qtile-open" id="tunDetailBtn" aria-label="虚拟网卡设置">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="3"/><path d="M12 17v4m-4 0h8M6 13h4"/></svg>
+            <span>虚拟网卡</span>
+          </button>
+          <label class="mac-switch"><input type="checkbox" id="sideTunToggle" aria-label="虚拟网卡开关"><i></i></label>
+        </div>
       </div>
 
       <!-- Grouped Navigation -->
@@ -161,6 +159,36 @@
         <div class="toolbar-drag-spacer" id="toolbarDragSpacer" data-tauri-drag-region></div>
 
         <div class="toolbar-right" id="toolbarActions">
+          <div class="page-actions" data-page-actions="connect">
+            <button type="button" class="glass-btn-soft" id="coreControlBtn">启动内核</button>
+          </div>
+          <div class="page-actions" data-page-actions="nodes" id="nodeTestActions" data-glass-control hidden>
+            <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
+            <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
+            <button type="button" class="glass-btn-primary compact" id="nodesImportBtn" hidden>导入节点或订阅</button>
+          </div>
+          <div class="page-actions" data-page-actions="split" hidden>
+            <button type="button" class="glass-btn-primary compact lg-track" id="splitPrimaryAddBtn">+ 添加规则</button>
+            <button type="button" class="glass-btn-soft lg-track" id="refreshProcsBtn" hidden>刷新程序</button>
+          </div>
+          <div class="page-actions" data-page-actions="logs" hidden>
+            <label class="probe-field">
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.35"><circle cx="10" cy="10" r="7"/><ellipse cx="10" cy="10" rx="3" ry="7"/><path d="M3 10h14"/></svg>
+              <input type="text" class="sheet-input" id="simHostInput" form="simForm" aria-label="测试域名" value="github.com" placeholder="输入测试域名…" required>
+            </label>
+            <button type="submit" form="simForm" class="glass-btn-primary compact lg-track" id="simSubmitBtn">测试走向</button>
+          </div>
+          <div class="page-actions" data-page-actions="subs" hidden>
+            <button type="button" class="glass-btn-primary compact" id="subImportBtn">导入订阅或节点…</button>
+          </div>
+          <div class="page-actions" data-page-actions="settings" hidden>
+            <button type="button" class="glass-btn-soft lg-track" id="exportBackupBtn">保存备份</button>
+            <button type="button" class="glass-btn-soft lg-track" id="resetStateBtn">恢复备份</button>
+            <button type="button" class="glass-circle lg-track" style="width:28px;height:28px;font-size:12px;font-weight:700" id="helpInfoBtn" aria-label="路由优先级与快捷键说明" data-tip="路由优先级与快捷键说明">?</button>
+          </div>
+          <div class="page-actions" data-page-actions="network-detail" hidden>
+            <button type="button" class="glass-btn-soft" id="allNetworkSettings">全部设置</button>
+          </div>
           <div class="glass-capsule lg-track win-controls" id="winControls" aria-label="窗口控制">
             <button type="button" id="winMinBtn" data-tip="最小化" aria-label="最小化">
               <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 7h8"/></svg>
@@ -331,19 +359,14 @@
               <button type="button" class="active" data-nodes-sub="groups">节点列表</button>
               <button type="button" data-nodes-sub="sites">常用网站测速</button>
             </div>
-            <div class="node-actions" id="nodeActionRow">
+            <div class="node-actions">
               <span class="pill" id="nodesScopePill" hidden></span>
-              <div id="nodeTestActions" data-glass-control>
-                <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
-                <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
-              </div>
             </div>
           </div>
 
           <div class="nodes-empty mac-card" id="nodesEmpty" hidden>
             <strong>还没有代理节点</strong>
-            <p>导入订阅链接、节点分享链接或本地配置文件。</p>
-            <button type="button" class="glass-btn-primary compact" id="nodesImportBtn">导入节点或订阅</button>
+            <p>用右上角的导入按钮添加订阅链接、分享链接或配置文件。</p>
           </div>
           <div id="nodesGroupsPane"></div>
           <div id="nodesSitesPane" hidden></div>
@@ -372,9 +395,7 @@
                   <button type="button" class="active" data-scan-type="app">按应用</button>
                   <button type="button" data-scan-type="process">按进程</button>
                 </div>
-                <button type="button" class="glass-btn-soft lg-track" id="refreshProcsBtn">刷新</button>
               </div>
-              <button type="button" class="glass-btn-primary compact lg-track" id="splitPrimaryAddBtn">+ 添加规则</button>
             </div>
           </div>
 
@@ -388,10 +409,6 @@
              =============================================================== -->
         <section class="view" id="view-logs">
           <form class="mac-card" id="simForm" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-            <label class="probe-field">
-              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.35"><circle cx="10" cy="10" r="7"/><ellipse cx="10" cy="10" rx="3" ry="7"/><path d="M3 10h14"/></svg>
-              <input type="text" class="sheet-input" id="simHostInput" aria-label="测试域名" value="github.com" placeholder="输入测试域名…" required>
-            </label>
             <div id="simAppSelectHost"></div>
             <label class="mac-check" id="simSysProxyWrap">
               <input type="checkbox" id="simSysProxyCheck" checked> 遵循系统代理
@@ -399,9 +416,6 @@
             <label class="mac-check" id="simFailWrap">
               <input type="checkbox" id="simFailCheck"> 模拟出口故障
             </label>
-            <div class="probe-action">
-              <button type="submit" class="glass-btn-primary compact lg-track" id="simSubmitBtn">测试走向</button>
-            </div>
           </form>
 
           <div class="section-head"><span class="section-label">最近记录</span><button type="button" class="section-link" id="clearLogsBtn">清空记录</button></div>
@@ -414,7 +428,6 @@
         <section class="view" id="view-subs">
           <div class="section-head">
             <span class="section-label">订阅来源</span>
-            <button type="button" class="glass-btn-primary compact" id="subImportBtn">导入订阅或节点…</button>
           </div>
           <input type="file" id="subFileInput" accept=".yaml,.yml,.txt,.conf,.b64,.base64,.json" hidden>
           <div class="grid-2col" id="subsGridPane"></div>
@@ -442,9 +455,9 @@
             </div>
           </div>
 
-          <p class="section-label">网络接管</p>
-          <div class="mac-card flush" style="margin-bottom:18px">
-            <div class="mac-row">
+          <p class="section-label" data-detail-for="system tun">网络接管</p>
+          <div class="mac-card flush" data-detail-for="system tun" style="margin-bottom:18px">
+            <div class="mac-row" data-detail-for="tun">
               <div class="mac-row-left">
                 <span class="sq md indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span>
                 <div>
@@ -455,7 +468,7 @@
               <div id="setTunScopeHost"></div>
             </div>
 
-            <div class="mac-row">
+            <div class="mac-row" data-detail-for="system">
               <div class="mac-row-left">
                 <span class="sq md green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M15 15h2"/></svg></span>
                 <div>
@@ -480,6 +493,17 @@
                 </div>
               </div>
               <label class="mac-switch lg"><input type="checkbox" id="setFallbackToggle" checked><i></i></label>
+            </div>
+          </div>
+
+          <div class="mac-card flush tun-detail" data-detail-for="tun">
+            <div class="mac-row desktop-tun-defaults">
+              <div><span class="mac-row-title">网卡工作方式</span><span class="mac-row-sub">开启后自动设置路由、选择出口接口，并接管进入网卡的 53 端口 DNS 请求。</span></div>
+              <span class="scope-value">Mixed 协议栈</span>
+            </div>
+            <div class="mac-row">
+              <div><span class="mac-row-title">应用出口</span><span class="mac-row-sub">在规则模式下，为指定程序选择代理或直连。</span></div>
+              <button type="button" class="glass-btn-soft" id="tunRoutingBtn">管理分流规则</button>
             </div>
           </div>
 
@@ -527,9 +551,9 @@
             </fieldset>
           </div>
 
-          <p class="section-label">网络详情</p>
-          <div class="mac-card flush" style="margin-bottom:18px">
-            <div class="mac-row">
+          <p class="section-label" data-detail-for="system">网络详情</p>
+          <div class="mac-card flush" data-detail-for="system" style="margin-bottom:18px">
+            <div class="mac-row" data-detail-for="system">
               <div class="mac-row-left">
                 <span class="sq md purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"/><path d="M2 12h20"/></svg></span>
                 <div>
@@ -551,15 +575,9 @@
                   <span class="mac-row-sub" id="setCoreSub">—</span>
                 </div>
               </div>
-              <button type="button" class="glass-btn-soft" id="coreControlBtn">启动内核</button>
             </div>
           </div>
 
-          <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:16px">
-            <button type="button" class="glass-btn-soft lg-track" id="exportBackupBtn">保存备份</button>
-            <button type="button" class="glass-btn-soft lg-track" id="resetStateBtn">恢复备份</button>
-            <button type="button" class="glass-circle lg-track" style="width:28px;height:28px;font-size:12px;font-weight:700" id="helpInfoBtn" data-tip="路由优先级与快捷键说明">?</button>
-          </div>
         </section>
       </div>
     </div>

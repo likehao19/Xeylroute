@@ -52,16 +52,30 @@ export function initShell(): ShellController {
   }
   systemDark.addEventListener('change', () => { if (theme === 'auto') renderTheme(); });
 
-  function switchView(viewId: ViewId): void {
+  function switchView(viewId: ViewId, detail?: 'system' | 'tun'): void {
     closeMacMenu();
+    const settings = $('view-settings');
+    if (viewId !== currentView || detail !== settings.dataset.detail) {
+      settings.parentElement!.scrollTop = 0;
+    }
+    if (detail) settings.dataset.detail = detail;
+    else delete settings.dataset.detail;
     currentView = viewId;
     document.querySelectorAll<HTMLElement>('#sidebarNav .nav-item').forEach(b =>
-      b.classList.toggle('active', b.dataset.view === viewId)
+      b.classList.toggle('active', !detail && b.dataset.view === viewId)
     );
+    for (const kind of ['system', 'tun'] as const) {
+      const tile = $(`${kind}DetailBtn`);
+      if (kind === detail) tile.setAttribute('aria-current', 'page');
+      else tile.removeAttribute('aria-current');
+    }
     document.querySelectorAll<HTMLElement>('.view').forEach(v =>
       v.classList.toggle('active', v.id === `view-${viewId}`)
     );
-    $('stageTitle').textContent = VIEW_TITLES[viewId] || '连接';
+    for (const group of document.querySelectorAll<HTMLElement>('[data-page-actions]')) {
+      group.hidden = group.dataset.pageActions !== (detail ? 'network-detail' : viewId);
+    }
+    $('stageTitle').textContent = detail === 'system' ? '系统代理' : detail === 'tun' ? '虚拟网卡' : VIEW_TITLES[viewId];
     for (const cb of viewListeners) cb(viewId);
   }
 
@@ -95,6 +109,13 @@ export function initShell(): ShellController {
   });
   $('goAllNodesBtn').addEventListener('click', () => switchView('nodes'));
   $('goSplitBtn').addEventListener('click', () => switchView('split'));
+  $('systemDetailBtn').addEventListener('click', () => switchView('settings', 'system'));
+  $('tunDetailBtn').addEventListener('click', () => switchView('settings', 'tun'));
+  $('allNetworkSettings').addEventListener('click', () => switchView('settings'));
+  $('tunRoutingBtn').addEventListener('click', () => {
+    switchView('split');
+    document.querySelector<HTMLButtonElement>('[data-split-sub="rules"]')?.click();
+  });
 
   $('globalSearchInput').addEventListener('input', e => {
     globalSearch = (e.target as HTMLInputElement).value;

@@ -119,8 +119,6 @@ export function mountDesktopApp(shell: ShellController): void {
     dragRegions.forEach(el => el.toggleAttribute('data-tauri-drag-region', platform !== 'windows'));
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
-    const actionHost = $(platform === 'macos' ? 'toolbarActions' : 'nodeActionRow');
-    actionHost.append($('nodeTestActions'));
   }
   const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
   applyPlatformClass(ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : 'linux');
@@ -1191,6 +1189,7 @@ export function mountDesktopApp(shell: ShellController): void {
   function renderNodes(): void {
     const needsImport = liveStatus?.configured === false;
     $('nodesEmpty').hidden = nodesSub !== 'groups' || !needsImport;
+    $('nodesImportBtn').hidden = $('nodesEmpty').hidden;
     $('nodesGroupsPane').hidden = nodesSub !== 'groups' || needsImport;
     $('nodesSitesPane').hidden = nodesSub !== 'sites';
     const actBtn = $<HTMLButtonElement>('nodesActionBtn');
@@ -1363,6 +1362,8 @@ export function mountDesktopApp(shell: ShellController): void {
     $('splitGroupsPane').hidden = splitSub !== 'groups';
     $('splitProcsPane').hidden = splitSub !== 'procs';
     $('splitPrimaryAddBtn').hidden = splitSub === 'procs';
+    $<HTMLButtonElement>('splitPrimaryAddBtn').disabled = !liveProfile;
+    $('refreshProcsBtn').hidden = splitSub !== 'procs';
     $('splitDefaultWrap').style.display = splitSub === 'procs' ? 'none' : 'flex';
     $('procToolsWrap').style.display = splitSub === 'procs' ? 'flex' : 'none';
     $('splitPrimaryAddBtn').textContent = splitSub === 'groups' ? '+ 创建分组' : '+ 添加规则';
