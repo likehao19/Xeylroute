@@ -120,8 +120,8 @@
         <div class="sidebar-live-top">
           <span style="font-size:11.5px;font-weight:600;color:var(--muted)">实时流量</span>
           <div class="sidebar-speeds">
-            <div class="up" id="sideUpRate">0.0 MB/s ↑</div>
-            <div class="down" id="sideDownRate">0.0 MB/s ↓</div>
+            <div class="up" id="sideUpRate">—</div>
+            <div class="down" id="sideDownRate">—</div>
           </div>
         </div>
         <svg class="sidebar-wave-bg" viewBox="0 0 200 32" preserveAspectRatio="none">
@@ -171,27 +171,6 @@
         <div class="toolbar-drag-spacer" id="toolbarDragSpacer" data-tauri-drag-region></div>
 
         <div class="toolbar-right">
-          <div class="glass-capsule lg-track">
-            <button type="button" id="topSpeedBtn" aria-label="全部节点测速" data-tip="全部节点延迟与速度测速">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 13 3.5-3.5"/></svg>
-              <span>测速</span>
-            </button>
-            <span class="cap-sep"></span>
-            <button type="button" id="topImportBtn" aria-label="导入订阅或节点" data-tip="导入订阅或分享链接">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              <span>导入</span>
-            </button>
-          </div>
-
-          <button type="button" class="glass-circle lg-track" id="topThemeBtn" aria-label="切换明暗主题" data-tip="切换深色 / 浅色外观">
-            <svg id="themeSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-          </button>
-
-          <button type="button" class="glass-btn-primary lg-track" id="topPowerBtn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
-            <span id="topPowerLabel">连接</span>
-          </button>
-
           <div class="glass-capsule lg-track win-controls" id="winControls" aria-label="窗口控制">
             <button type="button" id="winMinBtn" data-tip="最小化" aria-label="最小化">
               <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 7h8"/></svg>
@@ -217,11 +196,11 @@
 
           <div class="telemetry-capsule">
             <div class="t-cell">
-              <strong id="kpiDown">0.0 MB/s</strong>
+              <strong id="kpiDown">—</strong>
               <span><i class="mini-dot" style="background:var(--accent)"></i> 实时下载</span>
             </div>
             <div class="t-cell">
-              <strong id="kpiUp">0.0 MB/s</strong>
+              <strong id="kpiUp">—</strong>
               <span><i class="mini-dot" style="background:var(--mint)"></i> 实时上传</span>
             </div>
             <div class="t-cell">
@@ -229,7 +208,7 @@
               <span>会话时长</span>
             </div>
             <div class="t-cell">
-              <strong id="kpiTotal">0.0 MB</strong>
+              <strong id="kpiTotal">—</strong>
               <span>已接管流量</span>
             </div>
             <div class="t-cell">
@@ -340,10 +319,10 @@
             <div class="mac-card">
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                  <strong style="font-size:13px;font-weight:650">路由活动热力</strong>
-                  <span style="font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums" id="heatmapReadout">近 96 次连接采样</span>
+                  <strong style="font-size:13px;font-weight:650">活跃连接数</strong>
+                  <span style="font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums" id="heatmapReadout">最近 96 次采样</span>
                 </div>
-                <div class="heatmap-grid" id="activityHeatmap"></div>
+                <div class="heatmap-grid" id="activityHeatmap" role="group" tabindex="0" aria-label="活跃连接数，可用左右方向键查看采样"></div>
               </div>
               <div class="telemetry-foot">
                 <span id="homePortFoot">127.0.0.1:7890</span>
@@ -359,7 +338,7 @@
         <section class="view" id="view-nodes">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap">
             <div class="sub-seg" id="nodesSubSeg">
-              <button type="button" class="active" data-nodes-sub="groups">代理组与节点</button>
+              <button type="button" class="active" data-nodes-sub="groups">节点列表</button>
               <button type="button" data-nodes-sub="sites">常用网站测速</button>
             </div>
             <div class="node-actions">
@@ -427,10 +406,10 @@
             </label>
             <div style="margin-left:auto;display:flex;gap:8px">
               <button type="submit" class="glass-btn-primary compact lg-track" id="simSubmitBtn">测试走向</button>
-              <button type="button" class="glass-btn-soft lg-track" id="clearLogsBtn">清空</button>
             </div>
           </form>
 
+          <div class="section-head"><span class="section-label">最近记录</span><button type="button" class="section-link" id="clearLogsBtn">清空记录</button></div>
           <div class="mac-card flush" id="logsListCard"></div>
         </section>
 
@@ -438,12 +417,11 @@
              VIEW 5: 订阅管理与节点导入
              =============================================================== -->
         <section class="view" id="view-subs">
-          <form class="mac-card" id="subBarForm" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <input type="text" class="sheet-input" id="subBarInput" style="flex:1" placeholder="粘贴 HTTPS 订阅地址、vless:// / trojan:// / ss:// / hy2:// / tuic:// 链接或 Base64…">
-            <button type="submit" class="glass-btn-primary compact lg-track" id="subImportSubmitBtn">导入链接</button>
-            <button type="button" class="glass-btn-soft lg-track" id="subFileBtn">本地导入</button>
-            <input type="file" id="subFileInput" accept=".yaml,.yml,.txt,.conf,.b64,.base64,.json" hidden>
-          </form>
+          <div class="section-head">
+            <span class="section-label">订阅来源</span>
+            <button type="button" class="glass-btn-primary compact" id="subImportBtn">导入订阅或节点…</button>
+          </div>
+          <input type="file" id="subFileInput" accept=".yaml,.yml,.txt,.conf,.b64,.base64,.json" hidden>
           <div class="grid-2col" id="subsGridPane"></div>
           <div id="standaloneNodesSection" hidden style="margin-top:18px">
             <div class="section-head">
@@ -460,28 +438,6 @@
         <section class="view" id="view-settings">
           <p class="section-label">网络与流量接管</p>
           <div class="mac-card flush" style="margin-bottom:18px">
-            <div class="mac-row">
-              <div class="mac-row-left">
-                <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18"/></svg></span>
-                <div>
-                  <span class="mac-row-title">系统代理</span>
-                  <span class="mac-row-sub" id="setSysProxySub"><i class="mini-dot off"></i> 停用</span>
-                </div>
-              </div>
-              <label class="mac-switch lg"><input type="checkbox" id="setSysProxyToggle"><i></i></label>
-            </div>
-
-            <div class="mac-row">
-              <div class="mac-row-left">
-                <span class="sq md cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 7v5c0 5 3.5 8.5 8 9.8 4.5-1.3 8-4.8 8-9.8V7l-8-4Z"/></svg></span>
-                <div>
-                  <span class="mac-row-title">虚拟网卡模式 (TUN)</span>
-                  <span class="mac-row-sub" id="setTunSub"><i class="mini-dot off"></i> 停用</span>
-                </div>
-              </div>
-              <label class="mac-switch lg"><input type="checkbox" id="setTunToggle"><i></i></label>
-            </div>
-
             <div class="mac-row">
               <div class="mac-row-left">
                 <span class="sq md indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span>
@@ -537,7 +493,7 @@
               </div>
             </div>
 
-            <div class="mac-row" id="setCoreRow" hidden>
+            <div class="mac-row" id="setCoreRow">
               <div class="mac-row-left">
                 <span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg></span>
                 <div style="min-width:0">
@@ -545,6 +501,7 @@
                   <span class="mac-row-sub" id="setCoreSub">—</span>
                 </div>
               </div>
+              <button type="button" class="glass-btn-soft" id="coreControlBtn">启动内核</button>
             </div>
           </div>
 
@@ -554,7 +511,7 @@
               <div class="mac-row-left">
                 <span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg></span>
                 <div>
-                  <span class="mac-row-title">外观材质</span>
+                  <span class="mac-row-title">外观模式</span>
                   <span class="mac-row-sub">选择浅色或深色外观</span>
                 </div>
               </div>
@@ -588,8 +545,8 @@
   <div class="mac-tooltip" id="macTooltip" role="tooltip"></div>
 
   <!-- Sheet Modal -->
-  <div class="modal-backdrop" id="sheetBackdrop">
-    <div class="modal-sheet" id="sheetContent" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
+  <div class="modal-backdrop" id="sheetBackdrop" inert>
+    <div class="modal-sheet" id="sheetContent" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
   </div>
 
   <div class="toast" id="toast" role="status"></div>

@@ -1,3 +1,4 @@
+import { formatRate } from './traffic.mjs';
 import { SF_CHECK, SF_CHEVRON_UD } from './icons';
 
 export const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
@@ -177,7 +178,6 @@ export function initMacMenuListener(): void {
 /* =========================================================================
    macOS 27 Structured Frosted Glass Spring Sheet Modal & Confirm Alert
    ========================================================================= */
-const SF_CLOSE = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4.2 4.2 11.8 11.8M11.8 4.2 4.2 11.8"/></svg>`;
 
 export type SheetOptions = {
   title: string;
@@ -199,6 +199,7 @@ export function isSheetOpen(): boolean {
 function showSheet(): void {
   if (!isSheetOpen()) sheetOpener = document.activeElement as HTMLElement | null;
   $('macWindow').inert = true;
+  $('sheetBackdrop').inert = false;
   $('sheetBackdrop').classList.add('open');
 }
 
@@ -216,24 +217,24 @@ export function openSheet(opts: SheetOptions): void {
           ${opts.subtitle ? `<p>${esc(opts.subtitle)}</p>` : ''}
         </div>
       </div>
-      <button type="button" class="sheet-close-btn" id="sheetHeadCloseBtn" aria-label="关闭">${SF_CLOSE}</button>
+
     </div>
     <div class="sheet-body" id="sheetScrollBody">
       ${opts.bodyHtml}
     </div>
     ${opts.actionsHtml ? `<div class="sheet-actions${opts.actionsSplit ? ' sheet-actions-split' : ''}">${opts.actionsHtml}</div>` : ''}
   `;
-  $('sheetHeadCloseBtn').onclick = closeSheet;
   $('sheetScrollBody').addEventListener('scroll', () => {
     if (activePopupCtx) closeMacMenu();
   }, { passive: true });
   showSheet();
-  $('sheetHeadCloseBtn').focus();
+  content.focus({ preventScroll: true });
 }
 
 export function closeSheet(): void {
   closeMacMenu();
   $('sheetBackdrop').classList.remove('open');
+  $('sheetBackdrop').inert = true;
   $('macWindow').inert = false;
   sheetOpener?.focus({ preventScroll: true });
   sheetOpener = null;
@@ -304,11 +305,15 @@ export function confirmSheet(opts: {
 export class TelemetryVisualizer {
   readonly down: number[];
   readonly up: number[];
-  readonly heat: { idx: number; cls: string; mb: number; conns: number }[];
+  readonly heat: { cls: string; down: number; up: number; conns: number }[];
+  private hoverCell = -1;
+  private selectedCell = -1;
+  private samples: number;
   private chartMax = 10;
   private hoverIndex = -1;
 
   constructor(seedDemo: boolean) {
+    this.samples = seedDemo ? 96 : 0;
     if (seedDemo) {
       this.down = Array.from({ length: 32 }, (_, i) =>
         Number((7.2 + Math.sin(i * 0.42) * 3.6 + Math.cos(i * 0.23) * 1.8).toFixed(1))
@@ -321,15 +326,14 @@ export class TelemetryVisualizer {
         const lvl = weight < 1.8 ? ((i * 3) % 7 === 0 ? 1 : 0) : weight < 3.1 ? ((i * 5) % 3) : 1 + ((i * 7 + row) % 4);
         const mb = lvl === 0 ? 0.4 : Number((lvl * 4.1 + (i % 5) * 0.6).toFixed(1));
         const conns = lvl === 0 ? 2 : lvl * 8 + (i % 6);
-        return { idx: i + 1, cls: lvl ? `l${lvl}` : '', mb, conns };
+        return { cls: lvl ? `l${lvl}` : '', down: mb * 0.8, up: mb * 0.2, conns };
       });
     } else {
       this.down = Array.from({ length: 32 }, () => 0);
       this.up = Array.from({ length: 32 }, () => 0);
-      this.heat = Array.from({ length: 96 }, (_, i) => ({
-        idx: i + 1,
+      this.heat = Array.from({ length: 96 }, () => ({
         cls: '',
-        mb: 0,
+        down: 0, up: 0,
         conns: 0,
       }));
     }
@@ -352,42 +356,68 @@ export class TelemetryVisualizer {
       $('chartTooltip').classList.remove('show');
     });
 
-    $('activityHeatmap').addEventListener('mouseover', e => {
-      const cell = (e.target as HTMLElement).closest<HTMLElement>('[data-hm]');
-      if (!cell) return;
-      const s = this.heat[Number(cell.dataset.hm)];
-      if (s) {
-        $('heatmapReadout').textContent = `采样 #${s.idx} · ${s.mb.toFixed(1)} MB/s · ${s.conns} 连接`;
-      }
+    const grid = $('activityHeatmap');
+    const cellIndex = (event: Event) => {
+      const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-hm]');
+      return cell ? Number(cell.dataset.hm) : -1;
+    };
+    grid.addEventListener('pointerover', e => {
+      this.hoverCell = cellIndex(e);
+      this.showHeatReading();
     });
-    $('activityHeatmap').addEventListener('mouseleave', () => {
-      $('heatmapReadout').textContent = '近 96 次连接采样';
+    grid.addEventListener('pointerleave', () => {
+      this.hoverCell = -1;
+      this.showHeatReading();
+    });
+    grid.addEventListener('click', e => {
+      const i = cellIndex(e);
+      this.selectCell(this.selectedCell === i ? -1 : i);
+    });
+    grid.addEventListener('keydown', e => {
+      if (e.key === 'Escape') this.selectCell(-1);
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      this.hoverCell = -1;
+      const i = this.selectedCell < 0 ? 95 : this.selectedCell + (e.key === 'ArrowLeft' ? -1 : 1);
+      this.selectCell(Math.max(0, Math.min(95, i)));
     });
   }
 
+  private selectCell(index: number): void {
+    const cells = $('activityHeatmap').children;
+    cells[this.selectedCell]?.removeAttribute('data-selected');
+    this.selectedCell = index;
+    cells[index]?.setAttribute('data-selected', '');
+    this.showHeatReading();
+  }
+
+  private showHeatReading(): void {
+    const i = this.selectedCell >= 0 ? this.selectedCell : this.hoverCell;
+    const sample = this.heat[i];
+    $('heatmapReadout').textContent = !sample ? '最近 96 次采样'
+      : i < this.heat.length - this.samples ? '尚未采样'
+      : `${sample.conns} 个连接 · ↓ ${formatRate(sample.down)} · ↑ ${formatRate(sample.up)}`;
+  }
+
   pushSample(downMBs: number, upMBs: number, activeConns?: number): void {
-    const d = Number(Math.max(0, downMBs).toFixed(2));
-    const u = Number(Math.max(0, upMBs).toFixed(2));
+    const d = Math.max(0, downMBs);
+    const u = Math.max(0, upMBs);
+    this.samples = Math.min(96, this.samples + 1);
     this.down.push(d);
     this.down.shift();
     this.up.push(u);
     this.up.shift();
     if (typeof activeConns === 'number') {
-      const rate = d + u;
-      const lvl = rate >= 12 || activeConns >= 36 ? 4
-        : rate >= 4 || activeConns >= 18 ? 3
-        : rate >= 0.8 || activeConns >= 8 ? 2
-        : rate > 0.02 || activeConns > 0 ? 1
-        : 0;
+      const lvl = activeConns >= 36 ? 4 : activeConns >= 18 ? 3 : activeConns >= 8 ? 2 : activeConns > 0 ? 1 : 0;
       this.heat.shift();
       this.heat.push({
-        idx: 96,
         cls: lvl ? `l${lvl}` : '',
-        mb: Number(rate.toFixed(1)),
+        down: d, up: u,
         conns: activeConns,
       });
-      for (let i = 0; i < this.heat.length; i++) this.heat[i].idx = i + 1;
       this.renderHeatmap();
+      if (this.selectedCell >= 0) this.selectCell(this.selectedCell - 1);
+      else this.showHeatReading();
     }
     this.paintChart();
   }
@@ -411,25 +441,27 @@ export class TelemetryVisualizer {
 
   paintChart(): void {
     const peakVal = Math.max(...this.down, ...this.up, 0);
-    this.chartMax = peakVal <= 0.5 ? 1 : peakVal <= 5 ? Math.ceil(peakVal * 1.3) : Math.max(10, Math.ceil(peakVal * 1.24));
-    const avgD = (this.down.reduce((a, b) => a + b, 0) / this.down.length).toFixed(1);
-    const peakD = Math.max(...this.down).toFixed(1);
-    $('chartTickTop').textContent = `${this.chartMax} MB/s`;
-    $('chartTickMid').textContent = `${Number((this.chartMax / 2).toFixed(1))} MB/s`;
-    const avgEl = document.getElementById('chartAvgFoot');
-    if (avgEl) avgEl.textContent = `平均下载 ${avgD} MB/s · 峰值 ${peakD} MB/s`;
+    this.chartMax = peakVal > 0 ? Math.max(1 / 1048576, 2 ** Math.ceil(Math.log2(peakVal))) : 1;
+    const count = Math.min(this.samples, this.down.length);
+    const avgD = this.down.reduce((a, b) => a + b, 0) / (count || 1);
+    $('chartTickTop').textContent = formatRate(this.chartMax);
+    $('chartTickMid').textContent = formatRate(this.chartMax / 2);
+    $('chartAvgFoot').textContent = count
+      ? `平均下载 ${formatRate(avgD)} · 峰值 ${formatRate(Math.max(...this.down))}` : '等待流量采样';
 
+    const start = this.down.length - count;
     const toXY = (arr: number[]): [number, number][] =>
-      arr.map((v, i) => [
-        (i / (arr.length - 1)) * 600,
+      arr.slice(start).map((v, i) => [
+        ((start + i) / (arr.length - 1)) * 600,
         120 - (Math.min(v, this.chartMax) / this.chartMax) * 104,
       ]);
     const dPath = this.smoothPath(toXY(this.down));
     const uPath = this.smoothPath(toXY(this.up));
     $('mainDownLine').setAttribute('d', dPath);
     $('mainUpLine').setAttribute('d', uPath);
-    $('mainDownArea').setAttribute('d', `${dPath} L 600 130 L 0 130 Z`);
-    $('mainUpArea').setAttribute('d', `${uPath} L 600 130 L 0 130 Z`);
+    const closeArea = ` L 600 130 L ${600 * start / (this.down.length - 1)} 130 Z`;
+    $('mainDownArea').setAttribute('d', dPath ? dPath + closeArea : '');
+    $('mainUpArea').setAttribute('d', uPath ? uPath + closeArea : '');
 
     const waveCoords: [number, number][] = this.down.slice(-16).map((v, i, arr) => [
       (i / (arr.length - 1)) * 200,
@@ -466,7 +498,8 @@ export class TelemetryVisualizer {
     uDot.style.opacity = '1';
     const tip = $('chartTooltip');
     const stepAgo = this.down.length - 1 - i;
-    tip.textContent = `${stepAgo === 0 ? '实时' : `${stepAgo} 采样前`} · ↓ ${this.down[i].toFixed(2)}  ↑ ${this.up[i].toFixed(2)} MB/s`;
+    tip.textContent = stepAgo >= this.samples ? '尚未采样'
+      : `${stepAgo === 0 ? '最近采样' : `${stepAgo} 次采样前`} · ↓ ${formatRate(this.down[i])}  ↑ ${formatRate(this.up[i])}`;
     tip.style.left = pctX > 62 ? 'auto' : `calc(${pctX}% + 10px)`;
     tip.style.right = pctX > 62 ? `calc(${100 - pctX}% + 10px)` : 'auto';
     tip.classList.add('show');
@@ -483,7 +516,7 @@ export class TelemetryVisualizer {
       return;
     }
     grid.innerHTML = this.heat
-      .map(s => `<span class="hm-cell ${s.cls}" data-hm="${s.idx - 1}"></span>`)
+      .map((s, i) => `<span class="hm-cell ${s.cls}" data-hm="${i}"></span>`)
       .join('');
   }
 }

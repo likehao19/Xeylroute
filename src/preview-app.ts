@@ -136,8 +136,8 @@ export function mountPreviewApp(shell: ShellController): void {
         ? '未接管'
         : `${state.mode === 'direct' ? '直连' : '已连接'} · ${active.name}`;
 
-    $('topPowerBtn').classList.toggle('off-state', !state.connected);
-    $('topPowerLabel').textContent = state.connected ? '断开' : '连接';
+    $('coreControlBtn').textContent = state.connected ? '停止内核' : '启动内核';
+    $('setCoreSub').textContent = state.connected ? '运行中' : '已停止';
   }
 
   function renderConnect(): void {
@@ -160,7 +160,7 @@ export function mountPreviewApp(shell: ShellController): void {
     $('homeAutoFoot').textContent = state.selectedNodeId === 'auto'
       ? `已启用 AUTO 智能优选 · 当前 ${best.name} (${best.delay} ms)`
       : `自动优选推荐：${best.name} · ${best.delay} ms`;
-    $('pickAutoQuickBtn').textContent = state.selectedNodeId === 'auto' ? '已启用 AUTO' : '切换 AUTO ›';
+    $('pickAutoQuickBtn').hidden = state.selectedNodeId === 'auto';
     $('pickAutoQuickBtn').dataset.pickNode = 'auto';
 
     const q = shell.getSearch().trim().toLowerCase();
@@ -213,7 +213,6 @@ export function mountPreviewApp(shell: ShellController): void {
               <small style="color:var(--muted);font-size:11px">更新于 ${esc(sub.updated)}</small>
             </div>
           </div>
-          <button type="button" class="glass-btn-soft lg-track" id="homeRefreshSubBtn">刷新</button>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
           <span>已用 ${sub.used} GB / ${sub.quota} GB</span>
@@ -253,8 +252,8 @@ export function mountPreviewApp(shell: ShellController): void {
     }[] = [
       {
         id: 'SHARED',
-        name: 'Auto / 共享全局出口',
-        sub: `Selector · 当前 ${exitName(state.selectedNodeId)}`,
+        name: '全局出口',
+        sub: `当前使用 ${exitName(state.selectedNodeId)}`,
         selected: state.selectedNodeId,
         nodes: [
           { id: 'auto', name: 'AUTO · 自动优选', proto: 'URLTest', tone: 'blue', delay: bestAuto().delay, builtin: true },
@@ -280,13 +279,13 @@ export function mountPreviewApp(shell: ShellController): void {
       const open = expandedGroups.has(d.id);
       return `
         <div class="group-drawer ${open ? 'open' : ''}">
-          <div class="group-drawer-head" data-toggle-drawer="${esc(d.id)}">
-            <div>
+          <button type="button" class="group-drawer-head" aria-expanded="${open}" data-toggle-drawer="${esc(d.id)}">
+            <span>
               <strong style="font-size:14px;font-weight:650;display:block">${esc(d.name)}</strong>
               <small style="color:var(--muted);font-size:11.5px">${esc(d.sub)}</small>
-            </div>
+            </span>
             <svg class="drawer-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
-          </div>
+          </button>
           ${open ? `
             <div class="group-drawer-body">
               <div class="node-pills-grid cols-3">
@@ -463,6 +462,7 @@ export function mountPreviewApp(shell: ShellController): void {
   }
 
   function renderLogs(): void {
+    $<HTMLButtonElement>('clearLogsBtn').disabled = !state.logs.length;
     const curProc = DEMO_RUNNING.find(p => String(p.pid) === String(simAppValue));
     const curLabel = curProc ? `${curProc.name} (${curProc.exe})` : '仅测试域名';
     $('simAppSelectHost').innerHTML = macPopupBtnHtml({
@@ -523,14 +523,6 @@ export function mountPreviewApp(shell: ShellController): void {
   }
 
   function renderSettings(): void {
-    $<HTMLInputElement>('setSysProxyToggle').checked = state.systemProxy;
-    $('setSysProxySub').innerHTML = state.systemProxy
-      ? `<i class="mini-dot"></i> 已启用 · 127.0.0.1:${state.ports.mixed || state.ports.http}`
-      : `<i class="mini-dot off"></i> 停用`;
-    $<HTMLInputElement>('setTunToggle').checked = state.tun;
-    $('setTunSub').innerHTML = state.tun
-      ? `<i class="mini-dot"></i> 已接管 (${state.tunScope === 'selected' ? '仅指定分组和程序' : '全部受支持流量'})`
-      : `<i class="mini-dot off"></i> 停用`;
     $('setTunScopeHost').innerHTML = macPopupBtnHtml({
       id: 'setTunScopeBtn',
       value: state.tunScope,
@@ -570,20 +562,19 @@ export function mountPreviewApp(shell: ShellController): void {
     });
   });
 
-  const setSysProxy = (v: boolean) => { state.systemProxy = v; renderAll(); notify(v ? '系统代理已开启' : '系统代理已关闭'); };
-  const setTun = (v: boolean) => { state.tun = v; renderAll(); notify(v ? '虚拟网卡 (TUN) 已开启' : '虚拟网卡 (TUN) 已关闭'); };
+  const setSysProxy = (v: boolean) => { state.systemProxy = v; if (v) state.connected = true; renderAll(); notify(v ? '系统代理已开启' : '系统代理已关闭'); };
+  const setTun = (v: boolean) => { state.tun = v; if (v) state.connected = true; renderAll(); notify(v ? '虚拟网卡 (TUN) 已开启' : '虚拟网卡 (TUN) 已关闭'); };
   $('sideSysProxy').addEventListener('change', e => setSysProxy((e.target as HTMLInputElement).checked));
-  $('setSysProxyToggle').addEventListener('change', e => setSysProxy((e.target as HTMLInputElement).checked));
   $('sideTunToggle').addEventListener('change', e => setTun((e.target as HTMLInputElement).checked));
-  $('setTunToggle').addEventListener('change', e => setTun((e.target as HTMLInputElement).checked));
   $('setFallbackToggle').addEventListener('change', e => {
     state.fallback = (e.target as HTMLInputElement).checked;
     renderAll();
     notify('故障回退策略已更新');
   });
 
-  $('topPowerBtn').addEventListener('click', () => {
+  $('coreControlBtn').addEventListener('click', () => {
     state.connected = !state.connected;
+    if (!state.connected) { state.systemProxy = false; state.tun = false; }
     renderAll();
     notify(state.connected ? `已连接 · ${currentNode().name}` : '已断开并暂停接管');
   });
@@ -600,7 +591,6 @@ export function mountPreviewApp(shell: ShellController): void {
       notify('全部节点延迟与下载测速完成');
     }, 320);
   }
-  $('topSpeedBtn').addEventListener('click', batchSpeedTest);
   $('heroProbeBtn').addEventListener('click', () => {
     const n = currentNode();
     n.delay = Math.max(18, n.delay + Math.floor(Math.random() * 9) - 4);
@@ -707,16 +697,12 @@ export function mountPreviewApp(shell: ShellController): void {
 
     if (!target.closest('#macMenuPopover')) closeMacMenu();
 
-    if (target.id === 'homeRefreshSubBtn') {
-      const s = state.subscriptions.find(x => x.active) || state.subscriptions[0];
-      if (s) { s.updated = '刚刚'; renderAll(); notify(`「${s.name}」已刷新`); }
-      return;
-    }
     const drawerHead = target.closest<HTMLElement>('[data-toggle-drawer]');
     if (drawerHead?.dataset.toggleDrawer) {
       const id = drawerHead.dataset.toggleDrawer;
       if (expandedGroups.has(id)) expandedGroups.delete(id); else expandedGroups.add(id);
       renderNodes();
+      document.querySelector<HTMLElement>(`[data-toggle-drawer="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
       return;
     }
     const pickNode = target.closest<HTMLElement>('[data-pick-node]');
@@ -840,38 +826,31 @@ export function mountPreviewApp(shell: ShellController): void {
     renderAll();
     notify(`已导入并切换至 ${name}`);
   }
-  $('subBarForm').addEventListener('submit', e => {
-    e.preventDefault();
-    const input = $<HTMLInputElement>('subBarInput');
-    const v = input.value.trim();
-    if (!v) return;
-    importLink(v);
-    input.value = '';
-  });
-  $('subFileBtn').addEventListener('click', () => $('subFileInput').click());
   $('subFileInput').addEventListener('change', e => {
     const input = e.target as HTMLInputElement;
     const f = input.files?.[0];
     if (f) { importLink(f.name); input.value = ''; }
   });
 
-  $('topImportBtn').addEventListener('click', () => {
+  $('subImportBtn').addEventListener('click', () => {
     openSheet({
-      title: '导入订阅或分享链接',
-      subtitle: '支持 HTTPS 订阅与 vless / trojan / ss / hy2 / tuic / Base64',
-      iconHtml: `<span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></span>`,
-      size: 'wide',
+      title: '导入订阅或节点',
       bodyHtml: `
         <div class="sheet-field">
           <label for="sheetImportVal">链接或节点列表</label>
           <textarea class="sheet-textarea" id="sheetImportVal" placeholder="粘贴订阅链接或单/多行分享链接…"></textarea>
         </div>
       `,
+      actionsSplit: true,
       actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport">导入</button>
+        <button type="button" class="glass-btn-soft" id="sheetImportFileBtn">从文件导入…</button>
+        <div class="sheet-actions-group"><button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
+        <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport" disabled>导入</button></div>
       `,
     });
+    const input = $<HTMLTextAreaElement>('sheetImportVal');
+    input.oninput = () => { $<HTMLButtonElement>('sheetConfirmImport').disabled = !input.value.trim(); };
+    $('sheetImportFileBtn').onclick = () => { closeSheet(); $('subFileInput').click(); };
     $('sheetCancel').onclick = closeSheet;
     $('sheetConfirmImport').onclick = () => {
       const v = $<HTMLTextAreaElement>('sheetImportVal').value.trim();

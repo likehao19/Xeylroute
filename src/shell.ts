@@ -40,9 +40,6 @@ export function initShell(): ShellController {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
     if (isTauri()) void invoke('window_set_theme', { theme }).catch(() => {});
-    $('themeSvg').innerHTML = theme === 'dark'
-      ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
-      : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
     document.querySelectorAll<HTMLElement>('#settingsThemeSeg button').forEach(b =>
       b.classList.toggle('active', b.dataset.setTheme === theme)
     );
@@ -76,6 +73,7 @@ export function initShell(): ShellController {
   $('sidebarExpandBtn').addEventListener('click', toggleSidebar);
 
   document.addEventListener('keydown', e => {
+    if ($('macWindow').inert && e.key !== 'Escape') return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       $('macWindow').classList.remove('sidebar-collapsed');
@@ -122,7 +120,6 @@ export function initShell(): ShellController {
     for (const cb of searchListeners) cb(globalSearch);
   });
 
-  $('topThemeBtn').addEventListener('click', () => applyTheme(theme === 'dark' ? 'light' : 'dark'));
   $('settingsThemeSeg').addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme]');
     if (b?.dataset.setTheme === 'dark' || b?.dataset.setTheme === 'light') {

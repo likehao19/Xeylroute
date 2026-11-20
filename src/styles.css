@@ -1627,6 +1627,7 @@
       margin-bottom: 12px;
     }
     .group-drawer-head {
+      width: 100%; border: 0; background: transparent; color: inherit; text-align: left;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1634,6 +1635,7 @@
       cursor: pointer;
       transition: background 0.12s ease;
     }
+    .group-drawer-head:focus-visible { outline-offset: -2px; }
     .group-drawer-head:hover { background: var(--card-surface-hover); }
     .drawer-chevron {
       width: 14px;
@@ -1898,24 +1900,6 @@
       color: var(--muted);
       line-height: 1.35;
     }
-    .sheet-close-btn {
-      width: 26px;
-      height: 26px;
-      padding: 0;
-      border: 0;
-      border-radius: 999px;
-      background: var(--node-bg);
-      box-shadow: inset 0 0 0 0.5px var(--card-hairline);
-      color: var(--muted);
-      display: inline-grid;
-      place-items: center;
-      flex: none;
-      transition: background 0.14s ease, color 0.14s ease, transform 0.12s ease;
-    }
-    .sheet-close-btn:hover { background: var(--node-hover); color: var(--ink); }
-    .sheet-close-btn:active { transform: scale(0.92); }
-    .sheet-close-btn svg { width: 13px; height: 13px; stroke-width: 2; }
-
     .sheet-body {
       position: relative;
       z-index: 4;
@@ -2198,9 +2182,6 @@
       flex: 1;
       min-width: 0;
       padding-right: 44px;
-    }
-    .cp-node-wrap.has-del > .cp-node {
-      padding-right: 70px;
     }
     .cp-node-tools {
       position: absolute;
@@ -2538,3 +2519,47 @@
     .platform-windows .modal-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
     .platform-windows .modal-sheet::after { content: none; }
     .platform-windows .glass-btn-primary:disabled { cursor: default; }
+
+    .hm-cell[data-selected] { outline: 2px solid var(--ink); outline-offset: 1px; }
+    #heatmapReadout { text-align: right; }
+    #clearLogsBtn:disabled { opacity: .5; }
+    #splitScopePill { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #subsGridPane > :only-child { grid-column: 1 / -1; }
+    .modal-backdrop[inert] { visibility: hidden; }
+
+    :root.platform-macos {
+      --card-shadow: 0 0 0 1px var(--card-hairline), 0 1px 3px rgb(0 0 0 / 5%);
+      --lg-accent-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+      --sheet-fill: #303033;
+    }
+    :root.platform-macos[data-theme="light"] { --sheet-fill: #f6f6f8; }
+    .platform-macos .glass-toolbar { position: relative; flex: none; height: 55px; }
+    .platform-macos .glass-toolbar::before { content: none; }
+    .platform-macos .view { padding-top: 6px; }
+    .platform-macos .glass-toolbar :is(.glass-capsule,.online-pill) { background: transparent; box-shadow: none; }
+    .platform-macos .online-pill { padding-inline: 6px; color: var(--muted); }
+    .platform-macos .stage-title { font-size: 19px; font-weight: 650; }
+    .platform-macos :is(.mac-card,.telemetry-capsule,.group-drawer) { border-radius: 12px; }
+    .platform-macos .cp-node { border-radius: 8px; }
+    .platform-macos :is(.glass-btn-primary,.glass-btn-soft) { border-radius: 7px; }
+    .platform-macos .sub-card-clickable.active-sub { box-shadow: inset 3px 0 var(--accent), var(--card-shadow); }
+    .platform-macos .modal-backdrop {
+      align-items: flex-start; padding: clamp(30px, 6vh, 54px) 16px 16px;
+      backdrop-filter: none; -webkit-backdrop-filter: none;
+    }
+    .platform-macos .modal-sheet {
+      max-height: 100%; border-radius: 12px; background: var(--sheet-fill);
+      backdrop-filter: none; -webkit-backdrop-filter: none;
+      transform: translateY(-8px);
+    }
+    .platform-macos .modal-backdrop.open .modal-sheet { transform: none; }
+    .platform-macos .modal-sheet::before, .platform-macos .modal-sheet::after { content: none; }
+    .platform-macos .sheet-head { padding: 20px 20px 6px; border: 0; }
+    .platform-macos .sheet-body { padding-inline: 20px; }
+    .platform-macos .sheet-actions { padding: 4px 20px 18px; border: 0; }
+    .platform-macos .sheet-actions button { min-height: 28px; border-radius: 6px; }
+    .platform-macos .sheet-textarea { background: var(--card-surface); border-radius: 6px; font-family: var(--font-ui); }
+
+    .mac-window:has(#view-connect.active) .sidebar-live-top,
+    .mac-window:has(#view-connect.active) .sidebar-wave-bg { display: none; }
+    .mac-window:has(#view-connect.active) .sidebar-core-foot { margin-top: 0; border-top: 0; padding-top: 0; }

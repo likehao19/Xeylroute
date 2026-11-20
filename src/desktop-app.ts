@@ -10,6 +10,7 @@ import {
   SF_TRASH,
 } from './icons';
 import { groupRunningApps, normalizedProgramPath } from './running-apps.mjs';
+import { formatRate, trafficRates } from './traffic.mjs';
 import { runProbeQueue } from './probe-queue.mjs';
 import type { ShellController } from './shell';
 import {
@@ -69,7 +70,7 @@ type NodeCardItem = {
 };
 
 type NetworkControlAction = {
-  control: 'power' | 'core' | 'system' | 'tun';
+  control: 'core' | 'system' | 'tun';
   enabled: boolean;
   fromTray?: boolean;
 };
@@ -138,9 +139,6 @@ export function mountDesktopApp(shell: ShellController): void {
     if (!root.classList.contains('platform-windows')) toggleMaximize();
   });
 
-  $('topSpeedBtn').setAttribute('aria-label', '测量全部节点的 HTTP 延迟');
-  $('topSpeedBtn').dataset.tip = '测量全部节点的 HTTP 延迟';
-  $('topSpeedBtn').querySelector('span')!.textContent = '测延迟';
   $('tunScopeHelp').textContent = '全局 TUN 接管系统流量，可用程序规则指定出口。';
   const sites = createSiteCatalog(true);
   const telemetry = new TelemetryVisualizer(false);
@@ -210,7 +208,6 @@ export function mountDesktopApp(shell: ShellController): void {
   $('simFailWrap').hidden = true;
   $('simSubmitBtn').textContent = '实测连通';
   $('setFallbackRow').hidden = true;
-  $('setCoreRow').hidden = false;
   $('exportBackupBtn').textContent = '保存备份';
   $('resetStateBtn').textContent = '恢复备份';
 
@@ -550,33 +547,22 @@ export function mountDesktopApp(shell: ShellController): void {
   function recordTraffic(conn: MihomoSnapshot['connections'] | undefined): void {
     const down = conn?.downloadTotal;
     const up = conn?.uploadTotal;
-    const now = performance.now();
-    if (!liveStatus?.running || !Number.isFinite(down) || !Number.isFinite(up)) {
-      lastTraffic = null;
-      $('kpiDown').textContent = '0.0 MB/s';
-      $('kpiUp').textContent = '0.0 MB/s';
-      $('sideDownRate').textContent = '0.0 MB/s ↓';
-      $('sideUpRate').textContent = '0.0 MB/s ↑';
-      $('kpiTotal').textContent = '0.0 MB';
-      $('sideMemText').textContent = '未运行';
-      return;
-    }
-    const mb = 1024 * 1024;
-    const elapsed = lastTraffic ? (now - lastTraffic.time) / 1000 : 0;
-    const downRate = elapsed > 0 && lastTraffic ? Math.max(0, (down! - lastTraffic.down) / elapsed / mb) : 0;
-    const upRate = elapsed > 0 && lastTraffic ? Math.max(0, (up! - lastTraffic.up) / elapsed / mb) : 0;
-    lastTraffic = { time: now, down: down!, up: up! };
-
-    $('kpiDown').textContent = `${downRate.toFixed(2)} MB/s`;
-    $('kpiUp').textContent = `${upRate.toFixed(2)} MB/s`;
-    $('sideDownRate').textContent = `${downRate.toFixed(2)} MB/s ↓`;
-    $('sideUpRate').textContent = `${upRate.toFixed(2)} MB/s ↑`;
-    $('kpiTotal').textContent = formatBytes((down || 0) + (up || 0));
-    const mem = conn?.memory;
-    $('sideMemText').textContent = typeof mem === 'number' && mem > 0
-      ? formatBytes(mem)
-      : `${(conn?.count ?? 0)} 连接`;
-    telemetry.pushSample(downRate, upRate, conn?.count ?? 0);
+    const current = typeof down === 'number' && typeof up === 'number' ? { time: performance.now(), down, up } : null;
+    const rates = current && trafficRates(lastTraffic, current);
+    lastTraffic = current;
+    const downText = rates ? formatRate(rates.down) : '—';
+    const upText = rates ? formatRate(rates.up) : '—';
+    $('kpiDown').textContent = downText;
+    $('kpiUp').textContent = upText;
+    $('sideDownRate').textContent = `${downText} ↓`;
+    $('sideUpRate').textContent = `${upText} ↑`;
+    $('kpiTotal').textContent = current ? formatBytes(current.down + current.up) : '—';
+    const stopped = !liveError && liveStatus?.running === false;
+    $('sideMemText').textContent = current
+      ? conn?.memory ? formatBytes(conn.memory) : `${conn?.count ?? 0} 连接`
+      : stopped ? '未运行' : '暂无采样';
+    $('chartLossFoot').textContent = rates ? '约每 2 秒采样' : stopped ? '内核已停止' : current ? '等待下次采样' : '采样不可用';
+    if (rates) telemetry.pushSample(rates.down, rates.up, conn?.count ?? 0);
   }
 
   async function refreshNetworkDetails(force = false): Promise<void> {
@@ -649,6 +635,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const previousMode = currentMode();
     const previousError = liveError;
     let full = false;
+    let counters: MihomoSnapshot['connections'];
     try {
       liveStatus = await tauriApi.coreStatus();
       liveError = '';
@@ -668,6 +655,7 @@ export function mountDesktopApp(shell: ShellController): void {
         full = !liveCore || Date.now() - lastFullSnapshot >= 15000;
         const requestedAt = Date.now();
         const snapshot = await tauriApi.mihomoSnapshot(!full);
+        counters = snapshot.connections;
         if (!snapshot.providers && liveCore?.providers) snapshot.providers = liveCore.providers;
         if (full) {
           if (!refreshQueued) lastFullSnapshot = requestedAt;
@@ -688,7 +676,7 @@ export function mountDesktopApp(shell: ShellController): void {
     } catch (err) {
       liveError = cleanError(err);
     } finally {
-      recordTraffic(liveCore?.connections);
+      recordTraffic(counters);
       if (full || previousMode !== currentMode() || previousError !== liveError || JSON.stringify(previousStatus) !== JSON.stringify(liveStatus)) {
         renderAllSafe();
       }
@@ -775,7 +763,7 @@ export function mountDesktopApp(shell: ShellController): void {
         return;
       }
 
-      if (action.control === 'core' || (action.control === 'power' && !action.enabled)) {
+      if (action.control === 'core') {
         if (action.enabled && !current.running) {
           await tauriApi.startLocalCore();
           notify('代理内核已启动');
@@ -786,7 +774,6 @@ export function mountDesktopApp(shell: ShellController): void {
         return;
       }
 
-      // control === 'system' || (control === 'power' && enabled)
       if (action.enabled && !current.running) {
         await tauriApi.startLocalCore();
       }
@@ -796,7 +783,7 @@ export function mountDesktopApp(shell: ShellController): void {
         }
         notify(action.enabled ? '已连接并开启系统代理' : '系统代理已关闭');
       } catch (err) {
-        if (action.control === 'power' && !current.running) {
+        if (action.enabled && !current.running) {
           try {
             await tauriApi.stopLocalCore();
           } catch (cleanupErr) {
@@ -811,6 +798,7 @@ export function mountDesktopApp(shell: ShellController): void {
     } finally {
       networkUpdating = false;
       await refreshLiveState(true);
+      renderHeaderState();
     }
   }
 
@@ -904,7 +892,6 @@ export function mountDesktopApp(shell: ShellController): void {
     if (batchTesting || networkUpdating || changingSubscription) return;
     const generation = probeGeneration;
     batchTesting = true;
-    $<HTMLButtonElement>('topSpeedBtn').disabled = true;
     renderView();
     try {
       if (!await ensureLocalCore()) throw new Error('请先添加订阅或节点链接。');
@@ -922,7 +909,6 @@ export function mountDesktopApp(shell: ShellController): void {
       notify(cleanError(err), true);
     } finally {
       batchTesting = false;
-      renderHeaderState();
       scheduleProbeRender();
     }
   }
@@ -981,7 +967,6 @@ export function mountDesktopApp(shell: ShellController): void {
 
     const realNodes = allSelectableNodes();
     const storedRules = (liveProfile?.rules || []).filter(r => !r.startsWith('MATCH,'));
-    $<HTMLButtonElement>('topSpeedBtn').disabled = batchTesting || liveStatus?.configured === false;
     $('navNodeBadge').textContent = String(realNodes.length);
     $('navRuleBadge').textContent = String(storedRules.length);
     $('navSubBadge').textContent = String(liveProfile?.providers.length ?? 0);
@@ -998,11 +983,10 @@ export function mountDesktopApp(shell: ShellController): void {
           ? '仅本地监听'
           : `${mode === 'direct' ? '直连' : '已连接'} · ${activeExit}`;
 
-    const pBtn = $<HTMLButtonElement>('topPowerBtn');
-    const isOn = Boolean(liveStatus?.running && activeCapture);
-    pBtn.disabled = networkUpdating;
-    pBtn.classList.toggle('off-state', !isOn);
-    $('topPowerLabel').textContent = networkUpdating ? '处理中…' : isOn ? '断开' : '连接';
+    const coreBtn = $<HTMLButtonElement>('coreControlBtn');
+    coreBtn.disabled = !liveStatus || networkUpdating || changingSubscription;
+    coreBtn.textContent = networkUpdating ? '处理中…' : liveStatus?.running ? '停止内核' : '启动内核';
+    coreBtn.title = liveStatus?.running ? '停止监听，并关闭系统代理和虚拟网卡' : '仅启动本地代理监听';
     $('sideCoreLabel').textContent = liveStatus
       ? liveStatus.available ? 'Mihomo Core' : '缺少 Mihomo 内核'
       : liveError ? '内核状态未知' : '正在检查内核…';
@@ -1072,12 +1056,13 @@ export function mountDesktopApp(shell: ShellController): void {
     const port = activeListenPort();
     $('homePortFoot').textContent = port ? `127.0.0.1:${port}` : '无 HTTP 监听';
 
-    $('heroFlag').innerHTML = flagSvg(autoNow || activeExit);
+    $('heroFlag').innerHTML = flagSvg(activeExit === 'AUTO' ? autoNow || activeExit : activeExit);
+    $('heroProbeBtn').hidden = !activeNodeObj && activeExit !== 'AUTO';
     $('heroNodeName').textContent = displayName || '—';
     $('heroNodeProto').textContent = activeNodeObj?.type || (activeExit === 'AUTO' ? 'URLTest' : activeExit);
     const heroDelayInfo = activeNodeObj
       ? delayForNode(activeNodeObj)
-      : autoNow
+      : activeExit === 'AUTO' && autoNow
         ? delayForNode({ name: autoNow, type: '', provider: selectedSubscription || null })
         : { text: '—', cls: '' };
     $('heroNodeDelay').innerHTML = heroDelayInfo.raw
@@ -1092,7 +1077,7 @@ export function mountDesktopApp(shell: ShellController): void {
     $('homeAutoFoot').textContent = activeExit === 'AUTO'
       ? `已启用 AUTO 智能优选${autoNow ? ` · 当前 ${autoNow}` : ''}`
       : `自动优选（AUTO）${autoNow ? `推荐：${autoNow}` : '可用'}`;
-    $('pickAutoQuickBtn').textContent = activeExit === 'AUTO' ? '已启用 AUTO' : '切换 AUTO ›';
+    $('pickAutoQuickBtn').hidden = activeExit === 'AUTO';
     $('pickAutoQuickBtn').dataset.pickNode = 'AUTO';
 
     const q = shell.getSearch().trim().toLowerCase();
@@ -1112,7 +1097,7 @@ export function mountDesktopApp(shell: ShellController): void {
           <span class="cp-node-ms ${d.cls}">${esc(d.text)}${d.raw ? '<small>ms</small>' : ''}</span>
         </button>
       `;
-    }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">${realNodes.length ? '没有匹配的节点' : '暂无节点，请在右上角点击「导入」'}</div>`;
+    }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">${realNodes.length ? '没有匹配的节点' : '暂无可用代理节点'}</div>`;
 
     // Right App Exits (real top 4 grouped apps)
     const ruleMap = programPathExits();
@@ -1161,7 +1146,6 @@ export function mountDesktopApp(shell: ShellController): void {
               <small style="color:var(--muted);font-size:11px">${esc(activeSub.source || (activeSub.type === 'http' ? '远程订阅' : '本地订阅'))} · ${esc(updated)}</small>
             </div>
           </div>
-          <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(activeSub.name)}">刷新</button>
         </div>
         ${hasQuota ? `
           <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
@@ -1184,7 +1168,7 @@ export function mountDesktopApp(shell: ShellController): void {
               <small style="color:var(--muted);font-size:11px">${staticCount ? '已导入节点可直接代理或加入分组' : '支持 HTTPS 订阅与单节点分享链接'}</small>
             </div>
           </div>
-          <button type="button" class="glass-btn-soft lg-track" id="homeQuickImportBtn">导入</button>
+
         </div>
       `;
     }
@@ -1243,8 +1227,8 @@ export function mountDesktopApp(shell: ShellController): void {
     }[] = [
       {
         id: 'SHARED',
-        name: 'Auto / 共享全局出口',
-        sub: `Selector · 当前 ${exitDisplayLabel(activeExit)}`,
+        name: '全局出口',
+        sub: `当前使用 ${exitDisplayLabel(activeExit)}`,
         selected: activeExit,
         canPick: true,
         nodes: shared,
@@ -1278,13 +1262,13 @@ export function mountDesktopApp(shell: ShellController): void {
       const open = expandedGroups.has(d.id);
       return `
         <div class="group-drawer ${open ? 'open' : ''}">
-          <div class="group-drawer-head" data-toggle-drawer="${esc(d.id)}">
-            <div>
+          <button type="button" class="group-drawer-head" aria-expanded="${open}" data-toggle-drawer="${esc(d.id)}">
+            <span>
               <strong style="font-size:14px;font-weight:650;display:block">${esc(d.name)}</strong>
               <small style="color:var(--muted);font-size:11.5px">${esc(d.sub)}</small>
-            </div>
+            </span>
             <svg class="drawer-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
-          </div>
+          </button>
           ${open ? `
             <div class="group-drawer-body">
               <div class="node-pills-grid cols-3">
@@ -1297,13 +1281,9 @@ export function mountDesktopApp(shell: ShellController): void {
                     : '';
                   const policyTone = n.name === 'DIRECT' ? 'green' : n.name === 'REJECT' ? 'red' : 'blue';
                   const testable = !d.isGroup && (n.name === 'AUTO' || isTestableNode(n));
-                  const removable = !d.isGroup && Boolean(n.standalone);
                   const pickAttr = d.isGroup
                     ? `data-group-pick="${esc(d.name)}::${esc(n.name)}"`
                     : `data-pick-node="${esc(n.name)}"`;
-                  const wrapCls = testable || removable
-                    ? `cp-node-wrap${removable ? ' has-del' : ''}`
-                    : '';
                   const btnHtml = `
                     <button type="button" class="cp-node ${d.selected === n.name ? 'selected' : ''}" ${d.canPick ? pickAttr : 'disabled'}>
                       <div class="cp-node-left">
@@ -1316,13 +1296,12 @@ export function mountDesktopApp(shell: ShellController): void {
                       <span class="cp-node-ms ${dInfo.cls}">${esc(dInfo.text)}${dInfo.raw ? '<small>ms</small>' : ''}</span>
                     </button>
                   `;
-                  if (!wrapCls) return btnHtml;
+                  if (!testable) return btnHtml;
                   return `
-                    <div class="${wrapCls}">
+                    <div class="cp-node-wrap">
                       ${btnHtml}
                       <div class="cp-node-tools">
-                        ${testable ? `<button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="${esc(n.provider || '')}" data-tip="测量延迟和 1 MB 下载速度">${SF_TEST}</button>` : ''}
-                        ${removable ? `<button type="button" class="sf-icon-btn danger" data-remove-node="${esc(n.name)}" data-tip="删除节点">${SF_TRASH}</button>` : ''}
+                        <button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="${esc(n.provider || '')}" data-tip="测量延迟和 1 MB 下载速度">${SF_TEST}</button>
                       </div>
                     </div>
                   `;
@@ -1575,6 +1554,7 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   function renderLogs(): void {
+    $<HTMLButtonElement>('clearLogsBtn').disabled = !liveLogs.length;
     $('logsListCard').innerHTML = liveLogs.length
       ? liveLogs.map(row => {
           const tone = row.failed ? 'red' : row.exit === 'DIRECT' ? 'green' : row.exit === 'REJECT' ? 'red' : 'blue';
@@ -1644,7 +1624,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           `;
         }).join('')
-      : `<div class="mac-card" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--muted)">还没有订阅。在上方粘贴 HTTPS 订阅链接或单/多条分享链接（vless / trojan / ss / vmess / hy2 / tuic）即可导入。</div>`;
+      : `<div class="mac-card" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--muted)">还没有订阅。导入后可以在这里切换订阅、刷新节点和查看用量。</div>`;
 
     const statics = standaloneNodes();
     const sec = $('standaloneNodesSection');
@@ -1661,7 +1641,6 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px">
-            <button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="" data-tip="测量延迟和 1 MB 下载速度">${SF_TEST}</button>
             <button type="button" class="sf-icon-btn danger" data-remove-node="${esc(n.name)}" data-tip="删除节点">${SF_TRASH}</button>
           </div>
         </div>
@@ -1672,21 +1651,7 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   function renderSettings(): void {
-    const sysInput = $<HTMLInputElement>('setSysProxyToggle');
-    const tunInput = $<HTMLInputElement>('setTunToggle');
-    sysInput.checked = Boolean(liveStatus?.systemProxy);
-    sysInput.disabled = networkUpdating || changingSubscription;
-    $('setSysProxySub').innerHTML = liveStatus?.systemProxy
-      ? `<i class="mini-dot"></i> 已启用 · 127.0.0.1:${activeListenPort()}`
-      : `<i class="mini-dot off"></i> 停用`;
-
-    tunInput.checked = Boolean(liveStatus?.tun);
-    tunInput.disabled = networkUpdating || changingSubscription;
     const scope = liveProfile?.tunScope || liveStatus?.tunScope || 'all';
-    $('setTunSub').innerHTML = liveStatus?.tun
-      ? `<i class="mini-dot"></i> 已接管 (${scope === 'selected' ? '仅指定分组和程序' : '全部受支持流量'})`
-      : `<i class="mini-dot off"></i> 停用`;
-
     const scopeHost = $('setTunScopeHost');
     if (scopeHost.dataset.scope !== scope) {
       scopeHost.dataset.scope = scope;
@@ -1710,7 +1675,7 @@ export function mountDesktopApp(shell: ShellController): void {
     mixIn.disabled = httpIn.disabled = socksIn.disabled = isRunning;
     $<HTMLButtonElement>('savePortsBtn').disabled = isRunning;
     $('portHintSub').textContent = isRunning
-      ? '内核运行中 · 断开连接后可修改本地监听端口'
+      ? '内核运行中 · 停止内核后可修改本地监听端口'
       : '绑定 127.0.0.1 · 设为 0 表示关闭该端口，保存前自动校验冲突';
 
     const localIps = networkDetails?.error ? '读取失败' : (networkDetails?.addresses?.slice(0, 3).join(', ') || '—');
@@ -1722,7 +1687,10 @@ export function mountDesktopApp(shell: ShellController): void {
       $('setCoreTitle').textContent = liveStatus.available
         ? `Mihomo 内核已就绪 (${platformLabel(liveStatus.platform)})`
         : `未安装 Mihomo 内核 (${platformLabel(liveStatus.platform)})`;
-      $('setCoreSub').textContent = liveStatus.appData;
+      $('setCoreSub').textContent = liveStatus.running
+        ? '停止内核会关闭本地监听、系统代理和虚拟网卡。'
+        : '启动内核以监听本地端口，接管方式可在边栏开启。';
+      $('setCoreSub').title = liveStatus.appData;
 
     }
   }
@@ -1844,19 +1812,16 @@ export function mountDesktopApp(shell: ShellController): void {
 
   function openImportSheet(): void {
     openSheet({
-      title: '导入订阅或节点分享链接',
-      subtitle: '支持 HTTPS 订阅、vless / trojan / ss / vmess / hy2 / tuic 与 Base64',
-      iconHtml: `<span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></span>`,
-      size: 'wide',
+      title: '导入订阅或节点',
       bodyHtml: `
         <div class="sheet-field">
-          <label for="sheetImportVal">粘贴链接或批量节点内容</label>
-          <textarea class="sheet-textarea" id="sheetImportVal" placeholder="粘贴 HTTPS 订阅地址，或一行一条节点分享链接…"></textarea>
+          <label for="sheetImportVal">订阅地址或节点列表</label>
+          <textarea class="sheet-textarea" id="sheetImportVal" placeholder="粘贴 HTTPS 订阅地址、Base64 内容，或每行一个节点链接"></textarea>
         </div>
       `,
       actionsSplit: true,
       actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetImportFileBtn">选择本地文件</button>
+        <button type="button" class="glass-btn-soft lg-track" id="sheetImportFileBtn">从文件导入…</button>
         <div class="sheet-actions-group">
           <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
           <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport">导入</button>
@@ -1868,18 +1833,22 @@ export function mountDesktopApp(shell: ShellController): void {
       closeSheet();
       $('subFileInput').click();
     };
-    $('sheetConfirmImport').onclick = async () => {
-      const btn = $<HTMLButtonElement>('sheetConfirmImport');
-      const v = $<HTMLTextAreaElement>('sheetImportVal').value.trim();
-      if (!v) return;
-      btn.disabled = true;
-      btn.textContent = '导入中…';
-      const ok = await handleTextImport(v);
-      btn.disabled = false;
-      btn.textContent = '导入';
-      if (ok) closeSheet();
+    const input = $<HTMLTextAreaElement>('sheetImportVal');
+    const submit = $<HTMLButtonElement>('sheetConfirmImport');
+    submit.disabled = true;
+    input.oninput = () => { submit.disabled = !input.value.trim(); };
+    submit.onclick = async () => {
+      input.readOnly = true;
+      submit.disabled = true;
+      submit.textContent = '导入中…';
+      const ok = await handleTextImport(input.value.trim());
+      if (!submit.isConnected || !isSheetOpen()) return;
+      input.readOnly = false;
+      submit.disabled = !input.value.trim();
+      submit.textContent = '导入';
+      if (ok) { closeSheet(); renderAllSafe(); }
     };
-    $<HTMLTextAreaElement>('sheetImportVal').focus();
+    input.focus();
   }
 
   function openAddRuleSheet(): void {
@@ -2362,33 +2331,18 @@ export function mountDesktopApp(shell: ShellController): void {
     input.checked = Boolean(liveStatus?.systemProxy);
     void performNetworkControl({ control: 'system', enabled });
   });
-  $('setSysProxyToggle').addEventListener('change', e => {
-    const input = e.target as HTMLInputElement;
-    const enabled = input.checked;
-    input.checked = Boolean(liveStatus?.systemProxy);
-    void performNetworkControl({ control: 'system', enabled });
-  });
   $('sideTunToggle').addEventListener('change', e => {
     const input = e.target as HTMLInputElement;
     const enabled = input.checked;
     input.checked = Boolean(liveStatus?.tun);
     void performNetworkControl({ control: 'tun', enabled });
   });
-  $('setTunToggle').addEventListener('change', e => {
-    const input = e.target as HTMLInputElement;
-    const enabled = input.checked;
-    input.checked = Boolean(liveStatus?.tun);
-    void performNetworkControl({ control: 'tun', enabled });
+  $('coreControlBtn').addEventListener('click', () => {
+    void performNetworkControl({ control: 'core', enabled: !liveStatus?.running });
   });
 
-  $('topPowerBtn').addEventListener('click', () => {
-    const isOn = Boolean(liveStatus?.running && (liveStatus.systemProxy || liveStatus.tun));
-    void performNetworkControl({ control: 'power', enabled: !isOn });
-  });
-
-  $('topSpeedBtn').addEventListener('click', () => void runBatch('delay'));
   $('nodesImportBtn').addEventListener('click', openImportSheet);
-  $('topImportBtn').addEventListener('click', openImportSheet);
+  $('subImportBtn').addEventListener('click', openImportSheet);
   $('heroProbeBtn').addEventListener('click', () => {
     const active = activeGlobalExit();
     const target = allSelectableNodes().find(n => n.name === active)
@@ -2449,18 +2403,6 @@ export function mountDesktopApp(shell: ShellController): void {
   });
   $('clearLogsBtn').addEventListener('click', () => void refreshConnectionLogs(true));
 
-  $('subBarForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const input = $<HTMLInputElement>('subBarInput');
-    const btn = $<HTMLButtonElement>('subImportSubmitBtn');
-    const v = input.value.trim();
-    if (!v) return;
-    btn.disabled = true;
-    const ok = await handleTextImport(v);
-    btn.disabled = false;
-    if (ok) input.value = '';
-  });
-  $('subFileBtn').addEventListener('click', () => $('subFileInput').click());
   $('subFileInput').addEventListener('change', e => {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -2470,7 +2412,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   $('savePortsBtn').addEventListener('click', async () => {
     if (liveStatus?.running) {
-      notify('请先断开连接后再修改监听端口', true);
+      notify('请先停止内核后再修改监听端口', true);
       return;
     }
     const mixed = Number($<HTMLInputElement>('portMixedInput').value || 0);
@@ -2592,7 +2534,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
     if (!target.closest('#macMenuPopover')) closeMacMenu();
 
-    if (target.id === 'bannerImportBtn' || target.id === 'homeQuickImportBtn') {
+    if (target.id === 'bannerImportBtn') {
       openImportSheet();
       return;
     }
@@ -2606,6 +2548,7 @@ export function mountDesktopApp(shell: ShellController): void {
       const id = drawerHead.dataset.toggleDrawer;
       if (expandedGroups.has(id)) expandedGroups.delete(id); else expandedGroups.add(id);
       renderNodes();
+      document.querySelector<HTMLElement>(`[data-toggle-drawer="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
       return;
     }
 
