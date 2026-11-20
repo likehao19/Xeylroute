@@ -45,7 +45,7 @@ jobs:
       - name: Exercise the TUN worker and check Windows route cleanup
         if: ${{ !cancelled() && steps.desktop.outcome == 'success' }}
         run: python scripts/smoke-windows-tun.py src-tauri/target/debug/routepilot-desktop.exe
-      - name: Drive the desktop WebView2 and verify network recovery
+      - name: Drive the native desktop controls and verify network recovery
         if: ${{ !cancelled() && steps.desktop.outcome == 'success' }}
         shell: pwsh
         run: |
@@ -58,8 +58,6 @@ jobs:
             if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation,') { throw 'Unexpected WebView2 installer signature' }
             if ((Start-Process $installer -ArgumentList '/silent','/install' -Wait -PassThru).ExitCode) { throw 'WebView2 setup failed' }
           }
-          npm install --prefix "$env:RUNNER_TEMP/webview-test" --no-audit --no-fund playwright-core@1.56.1
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/smoke-windows-desktop.mjs src-tauri/target/debug/routepilot-desktop.exe
       - name: Compare per-program capture and instance matching in sing-box
         if: ${{ !cancelled() && inputs.runner == 'windows-11-arm' }}

@@ -4,7 +4,6 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
-import { createRequire } from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -12,7 +11,6 @@ import { promisify } from 'node:util';
 
 assert.equal(process.platform, 'win32');
 assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted');
-const { chromium } = createRequire(path.join(process.env.RUNNER_TEMP, 'webview-test', 'package.json'))('playwright-core');
 const exe = fs.realpathSync(process.argv[2]);
 const data = path.join(process.env.APPDATA, 'app.routepilot.desktop', 'core');
 const journal = path.join(data, 'system-proxy-recovery.json');
@@ -52,23 +50,21 @@ fs.writeFileSync(path.join(data, 'mihomo.json'), JSON.stringify({
   rules: ['IP-CIDR,192.0.2.123/32,REJECT,no-resolve', 'MATCH,DIRECT'],
 }));
 
-let app, page;
+let app;
+const labels = {
+  sideSysProxy: '系统代理开关', sideTunToggle: '虚拟网卡开关',
+  sheetConfirmCancel: '取消', sheetConfirmOk: '继续授权',
+};
+
+async function control(id, action = 'click') {
+  await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-File',
+    'scripts/windows-desktop-control.ps1', app.pid.toString(), id.slice(1), labels[id.slice(1)], action],
+  { timeout: 50000 });
+}
+
 async function launch() {
-  const debug = await unusedPort();
-  app = spawn(exe, [], { stdio: 'inherit', env: { ...process.env,
-    WEBVIEW2_USER_DATA_FOLDER: path.join(process.env.RUNNER_TEMP, 'xeyl-webview'),
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--disable-gpu --remote-debugging-port=' + debug,
-  } });
-  const websocket = await until('WebView2 debugging endpoint', async () => {
-    assert.equal(app.exitCode, null, 'Desktop process exited');
-    const version = await fetch('http://127.0.0.1:' + debug + '/json/version')
-      .then(response => response.json()).catch(() => null);
-    return version?.webSocketDebuggerUrl;
-  }, 60000);
-  const browser = await chromium.connectOverCDP(websocket);
-  page = await until('desktop page', () => browser.contexts().flatMap(c => c.pages())
-    .find(p => p.url().includes('tauri.localhost')));
-  await page.locator('#sideSysProxy').waitFor();
+  app = spawn(exe, [], { stdio: 'inherit' });
+  await waitToggle('#sideSysProxy', false);
 }
 
 async function terminate() {
@@ -79,15 +75,12 @@ async function terminate() {
 }
 
 async function toggle(id, checked) {
-  await page.locator(id).click();
+  await control(id);
   await waitToggle(id, checked);
 }
 
 function waitToggle(id, checked) {
-  return page.waitForFunction(([selector, value]) => {
-    const input = document.querySelector(selector);
-    return input && !input.disabled && input.checked === value;
-  }, [id, checked], { timeout: 40000 });
+  return control(id, checked ? 'On' : 'Off');
 }
 
 const origin = http.createServer((_, res) => res.end('xeyl-local-origin')).listen(0, '127.0.0.1');
@@ -102,12 +95,12 @@ try {
   assert.equal(await proxy(), initialProxy);
   console.log('Homepage proxy switch, system-proxy HTTP request and normal switch-off passed.');
 
-  await page.locator('#sideTunToggle').click();
-  await page.locator('#sheetConfirmCancel').click();
+  await control('#sideTunToggle');
+  await control('#sheetConfirmCancel');
   await waitToggle('#sideTunToggle', false);
   assert.equal(await route(), initialRoute);
-  await page.locator('#sideTunToggle').click();
-  await page.locator('#sheetConfirmOk').click();
+  await control('#sideTunToggle');
+  await control('#sheetConfirmOk');
   await waitToggle('#sideTunToggle', true);
   const activeRoute = await route();
   assert.ok(Number(activeRoute) > 0 && activeRoute !== initialRoute);
@@ -125,14 +118,14 @@ try {
   await promisify(execFile)('curl.exe', ['--noproxy', '*', '--max-time', '3', 'http://192.0.2.123:18080/']).catch(() => {});
   await until('actual TUN decision', () => fs.readFileSync(path.join(data, 'mihomo.log'), 'utf8')
     .split('\n').some(line => line.includes('192.0.2.123:18080') && line.includes('REJECT')));
-  await page.locator('#sideTunToggle').click();
+  await control('#sideTunToggle');
   await waitToggle('#sideTunToggle', false);
   assert.equal(await route(), initialRoute);
   console.log('App confirmation cancel/accept, global TUN traffic and normal route restoration passed.');
 
   await toggle('#sideSysProxy', true);
-  await page.locator('#sideTunToggle').click();
-  await page.locator('#sheetConfirmOk').click();
+  await control('#sideTunToggle');
+  await control('#sheetConfirmOk');
   await waitToggle('#sideTunToggle', true);
   assert.ok(fs.existsSync(journal));
   await terminate();
@@ -144,7 +137,6 @@ try {
   console.log('Desktop restart after abrupt exit restored the original settings.');
 } catch (error) {
   console.error('Desktop processes:', await ps('Get-Process routepilot-desktop,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Name,SessionId,MainWindowTitle | Out-String').catch(() => 'unavailable'));
-  console.error('App status:', await page?.locator('#toast').textContent({ timeout: 1500 }).catch(() => 'unavailable'));
   throw error;
 } finally {
   await terminate();

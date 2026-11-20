@@ -1,10 +1,11 @@
 """Compare the pinned alternative core on a disposable Windows runner, outside the app."""
-import copy
+from contextlib import ExitStack
 import hashlib
 import json
 import os
 from pathlib import Path
 import secrets
+import select
 import socket
 import subprocess
 import sys
@@ -24,8 +25,18 @@ def verify():
     release = f"sing-box-1.14.4-windows-{arch}"
     address = "192.0.2.123"
     device = "XeylAlt" + secrets.token_hex(3)
-    with tempfile.TemporaryDirectory() as temp, socket.create_server(("127.0.0.1", 0)) as a, socket.create_server(("127.0.0.1", 0)) as b:
-        root = Path(temp)
+    with ExitStack() as resources:
+        root = Path(resources.enter_context(tempfile.TemporaryDirectory()))
+        sinks = {tag: resources.enter_context(socket.create_server(("127.0.0.1", 0)))
+                 for tag in ("selected", "instance", "remaining")}
+        def start_client(port):
+            code = ("import sys,socket; input(); "
+                    f"s=socket.create_connection(('{address}',{port}),5); s.sendall(b'x'); s.recv(1)")
+            child = resources.enter_context(subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+            resources.callback(child.kill)
+            return child
+        first, second = start_client(18080), start_client(18082)
         archive = root / "core.zip"
         urllib.request.urlretrieve(f"https://github.com/SagerNet/sing-box/releases/download/v1.14.4/{release}.zip", archive)
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == digests[arch]
@@ -37,16 +48,19 @@ def verify():
             "type": "tun", "tag": "test", "interface_name": device, "address": ["198.18.0.1/30"],
             "auto_route": True, "route_address": [address + "/32"], "include_package": ["curl.exe"]}],
             "outbounds": [{"type": "http", "server": "127.0.0.1", "tag": tag, "server_port": sock.getsockname()[1]}
-                          for tag, sock in [("selected", a), ("remaining", b)]],
+                          for tag, sock in sinks.items()],
             "route": {"rules": [{"process_name": ["curl.exe"], "action": "route", "outbound": "selected"}],
                       "final": "remaining"}}
         file = root / "config.json"
-        pid_config = copy.deepcopy(config)
-        pid_config["route"]["rules"][0] = {"process_id": os.getpid(), "action": "reject"}
-        file.write_text(json.dumps(pid_config))
-        check = subprocess.run([exe, "check", "-c", file], capture_output=True, text=True, timeout=15)
-        assert check.returncode and "process_id" in (check.stdout + check.stderr), (check.returncode, check.stdout, check.stderr)
+        instance_rule = {"process_name": [Path(sys.executable).name], "process_id": first.pid,
+                         "action": "route", "outbound": "instance"}
+        config["route"]["rules"].append(instance_rule)
         file.write_text(json.dumps(config))
+        check = subprocess.run([exe, "check", "-c", file], capture_output=True, text=True, timeout=15)
+        if check.returncode:
+            assert "process_id" in check.stdout + check.stderr, (check.returncode, check.stdout, check.stderr)
+            config["route"]["rules"].remove(instance_rule)
+            file.write_text(json.dumps(config))
         with (root / "core.log").open("w") as log:
             proc = subprocess.Popen([exe, "run", "-c", file], stdout=log, stderr=log)
             try:
@@ -59,21 +73,26 @@ def verify():
                     time.sleep(.25)
                 else:
                     raise AssertionError("Missing test route")
-                for client, marker, port in [("curl", a, 18081), ("python", b, 18080)]:
-                    cmd = (["curl.exe", "--noproxy", "*", "--max-time", "5", f"http://{address}:{port}/"]
-                           if client == "curl" else [sys.executable, "-c",
-                           f"import socket; s=socket.create_connection(('{address}',{port}),5); s.sendall(b'x'); s.recv(1)"])
-                    with subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as child:
-                        try:
-                            marker.settimeout(8)
-                            with marker.accept()[0] as conn:
-                                conn.settimeout(5)
-                                with conn.makefile("rb") as reader:
-                                    assert reader.readline(4096).split()[:2] == [b"CONNECT", f"{address}:{port}".encode()]
-                        finally:
-                            child.kill()
-                print("sing-box 1.14.4: both apps entered TUN with include_package set;"
-                      " curl and Python used different exits. process_id was rejected.")
+                curl = resources.enter_context(subprocess.Popen(["curl.exe", "--noproxy", "*", "--max-time", "5",
+                    f"http://{address}:18081/"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                resources.callback(curl.kill)
+                decisions = []
+                for child, port in [(curl, 18081), (first, 18080), (second, 18082)]:
+                    if child.stdin:
+                        child.stdin.write(b"\n")
+                        child.stdin.flush()
+                    ready, _, _ = select.select(list(sinks.values()), [], [], 8)
+                    assert len(ready) == 1, f"Missing or ambiguous outlet for port {port}"
+                    marker = ready[0]
+                    with marker.accept()[0] as conn:
+                        conn.settimeout(5)
+                        with conn.makefile("rb") as reader:
+                            assert reader.readline(4096).split()[:2] == [b"CONNECT", f"{address}:{port}".encode()]
+                    decisions.append(next(tag for tag, sock in sinks.items() if sock is marker))
+                assert decisions[0] == "selected", decisions
+                print(f"sing-box 1.14.4: with include_package set to curl.exe, all three clients entered TUN. "
+                      f"Outlets for curl, Python PID {first.pid} (selected instance), "
+                      f"Python PID {second.pid} (other instance): {decisions}.")
             except Exception:
                 print((root / "core.log").read_text(errors="replace")[-3000:], file=sys.stderr)
                 raise
