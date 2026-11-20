@@ -29,7 +29,10 @@ if (!$icon) {
     if (!$chevron) {
         $chevron = Find-ShellControl @('Shell_TrayWnd') ([System.Windows.Automation.AutomationElement]::AutomationIdProperty) 'SystemTray.Chevron'
     }
-    if (!$chevron) { throw 'The shell has no visible notification overflow control' }
+    if (!$chevron) {
+        Write-Output 'No accessible notification icon or overflow control in this Windows shell.'
+        exit 77
+    }
     $chevron.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 $deadline = [DateTime]::UtcNow.AddSeconds(8)

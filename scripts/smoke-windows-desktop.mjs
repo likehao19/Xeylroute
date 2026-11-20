@@ -146,12 +146,20 @@ try {
   console.log('Desktop restart after abrupt exit restored the original settings.');
 
   await toggle('#sideSysProxy', true);
-  await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-File',
-    'scripts/windows-tray-quit.ps1', 'RoutePilot · 系统代理', '退出 RoutePilot'], { timeout: 30000 });
-  await until('normal exit through the tray', () => app.exitCode === 0);
-  assert.equal(await proxy(), initialProxy);
-  assert.ok(!fs.existsSync(journal));
-  console.log('Quit through the system tray restored the original proxy settings.');
+  try {
+    await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-File',
+      'scripts/windows-tray-quit.ps1', 'RoutePilot · 系统代理', '退出 RoutePilot'], { timeout: 30000 });
+    await until('normal exit through the tray', () => app.exitCode === 0);
+    assert.equal(await proxy(), initialProxy);
+    assert.ok(!fs.existsSync(journal));
+    console.log('Quit through the system tray restored the original proxy settings.');
+  } catch (error) {
+    if (error.code !== 77) throw error;
+    console.log('::warning::Tray quit unverified. The runner did not expose a notification icon or overflow control.');
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'Tray quit **unverified**. The Windows shell did not expose the notification area.\n');
+    await toggle('#sideSysProxy', false);
+    assert.equal(await proxy(), initialProxy);
+  }
   if (failoverError) throw failoverError;
 } catch (error) {
   console.error('Desktop processes:', await ps('Get-Process routepilot-desktop,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Name,SessionId,MainWindowTitle | Out-String').catch(() => 'unavailable'));
