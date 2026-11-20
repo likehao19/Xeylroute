@@ -56,16 +56,21 @@ def verify(app):
                     time.sleep(.25)
                 else:
                     raise AssertionError("Windows did not install the test route")
-                # Use an ordinary socket. A matching core log ties this flow to the TUN route.
-                try:
-                    with socket.create_connection((address, 18080), timeout=3) as client:
-                        client.sendall(b"GET / HTTP/1.0\r\n\r\n")
-                        client.recv(1)
-                except OSError:
-                    pass  # REJECT can reset the socket at connect, write or read.
-                subprocess.run(["curl.exe", "--noproxy", "*", "--max-time", "3",
-                                f"http://{address}:18081/"], capture_output=True, timeout=6)
-                for _ in range(50):
+                # Windows can publish the route before new sockets can use the interface.
+                # Retry only the missing probe and require the actual rule decision for both.
+                selected = other = False
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    if not selected:
+                        subprocess.run(["curl.exe", "--noproxy", "*", "--max-time", "2",
+                                        f"http://{address}:18081/"], capture_output=True, timeout=5)
+                    if not other:
+                        try:
+                            with socket.create_connection((address, 18080), timeout=2) as client:
+                                client.sendall(b"GET / HTTP/1.0\r\n\r\n")
+                                client.recv(1)
+                        except OSError:
+                            pass  # REJECT may reset the socket at connect, write or read.
                     lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
                     selected = any(f"{address}:18081" in line and "processname" in line.lower()
                                    and "REJECT" in line for line in lines)
@@ -73,9 +78,9 @@ def verify(app):
                                 and "REJECT" in line for line in lines)
                     if selected and other:
                         break
-                    time.sleep(.1)
+                    time.sleep(.3)
                 else:
-                    raise AssertionError("Missing TUN decisions for curl or Python")
+                    raise AssertionError(f"Missing TUN decisions (curl={selected}, Python={other})")
             if worker.wait(timeout=12) != 0:
                 raise AssertionError("The TUN worker failed to stop")
             for _ in range(40):
