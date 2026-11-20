@@ -105,18 +105,25 @@ try {
   await waitToggle('#sideTunToggle', true);
   const activeRoute = await route();
   assert.ok(Number(activeRoute) > 0 && activeRoute !== initialRoute);
-  assert.equal(net.isIPv4(gateway), true, 'Expected an IPv4 gateway for the test uplink');
-  const routeArgs = ['interface', 'ipv4', 'route', 'prefix=192.0.2.123/32',
-    'interface=' + initialRoute, 'nexthop=' + gateway, 'store=active'];
-  const netsh = (action, ...extra) => promisify(execFile)('netsh.exe',
-    [...routeArgs.slice(0, 2), action, ...routeArgs.slice(2), ...extra]);
-  await netsh('add', 'metric=1');
+  let failoverError;
   try {
-    await until('test address to return to the original interface', async () => (await route()) === initialRoute);
-  } finally {
-    await netsh('delete');
+    assert.equal(net.isIPv4(gateway), true, 'Expected an IPv4 gateway for the test uplink');
+    const routeArgs = ['interface', 'ipv4', 'route', 'prefix=192.0.2.123/32',
+      'interface=' + initialRoute, 'nexthop=' + gateway, 'store=active'];
+    const netsh = (action, ...extra) => promisify(execFile)('netsh.exe',
+      [...routeArgs.slice(0, 2), action, ...routeArgs.slice(2), ...extra]);
+    await netsh('add', 'metric=1');
+    try {
+      await until('test address to return to the original interface', async () => (await route()) === initialRoute);
+    } finally {
+      await netsh('delete');
+    }
+    await until('TUN route after deleting the host route', async () => (await route()) === activeRoute);
+    console.log('Windows moved the test address from TUN to the uplink and back.');
+  } catch (error) {
+    failoverError = error;
+    console.error('Interface change:', error.message);
   }
-  await until('test address to return to TUN', async () => (await route()) === activeRoute);
   await promisify(execFile)('curl.exe', ['--noproxy', '*', '--max-time', '3', 'http://192.0.2.123:18080/']).catch(() => {});
   await until('actual TUN decision', () => fs.readFileSync(path.join(data, 'mihomo.log'), 'utf8')
     .split('\n').some(line => line.includes('192.0.2.123:18080') && line.includes('REJECT')));
@@ -137,6 +144,15 @@ try {
   assert.equal(await proxy(), initialProxy);
   assert.equal(await route(), initialRoute);
   console.log('Desktop restart after abrupt exit restored the original settings.');
+
+  await toggle('#sideSysProxy', true);
+  await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-File',
+    'scripts/windows-tray-quit.ps1', 'RoutePilot · 系统代理', '退出 RoutePilot'], { timeout: 30000 });
+  await until('normal exit through the tray', () => app.exitCode === 0);
+  assert.equal(await proxy(), initialProxy);
+  assert.ok(!fs.existsSync(journal));
+  console.log('Quit through the system tray restored the original proxy settings.');
+  if (failoverError) throw failoverError;
 } catch (error) {
   console.error('Desktop processes:', await ps('Get-Process routepilot-desktop,msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Name,SessionId,MainWindowTitle | Out-String').catch(() => 'unavailable'));
   throw error;
