@@ -31,7 +31,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 在 macOS 上运行 `python3 scripts/smoke-routing.py <随包内核路径>`，可用 Python 和 curl 验证进程、目标、端口、IPv4 顺序和 IPv6 网段边界。测试通过回环监听观察内核实际选择的策略组。
 
-在 GitHub Actions 中手动运行 **Windows network acceptance**，会在一次性 Windows Server 2022 x64 上测试随包内核、实际程序分流、进程创建时间和 WinINet 系统代理恢复。TUN 用例只为 `192.0.2.123/32` 添加测试路由，依次检查系统路由、测试连接的内核命中日志和后台退出后的路由清理。桌面授权弹窗和跨网卡切换需在交互式 Windows 桌面验收。
+在 GitHub Actions 手动运行 **Windows network acceptance**，可选择 Windows Server 2022 x64 或 Windows 11 ARM64。测试会在一次性虚拟机里操作桌面开关，向回环 HTTP 服务发送请求，并检查 WinINet、实际出口网卡和 Mihomo 命中日志。Windows 11 另用一台临时机运行 sing-box 对照实验。
 
 ## 内核打包与验证
 
@@ -49,4 +49,18 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Windows Server 2022 x64 已通过 47 项后端测试和单独执行的 WinINet 接管恢复测试。重复开启后仍可恢复原值；其他程序改写系统代理后，关闭接管会保留新值。桌面 TUN 后台也通过了单地址路由的安装、实际命中和退出清理测试。[Windows 验收日志](https://github.com/likehao19/Xeylroute/actions/runs/44757513856)
 
-仍待验收的场景包括 Windows 交互式桌面的授权与取消、全局默认路由接管、多网卡切换，以及外部订阅和代理线路测速。严格按软件限定 TUN 入站和仅对当前 PID 实例生效的规则仍待实现。
+### Windows 11 ARM64 隔离验收
+
+47 项后端测试与单独执行的 WinINet 接管恢复测试均通过。以下操作通过真实桌面控件、系统接口及网络请求验证。[Windows 11 验收日志](https://github.com/likehao19/Xeylroute/actions/runs/44766599122)
+
+| 场景 | 实测结果 |
+| --- | --- |
+| 首页系统代理开关 | 开启后，采用 Windows 系统代理的客户端成功访问测试站点。关闭后恢复原代理设置。 |
+| 全局 TUN | 在应用内取消授权提示，测试地址沿用原出口。确认后，测试连接进入 TUN 并命中配置的规则。正常关闭后恢复原出口。 |
+| 接口切换 | TUN 运行期间，为单个测试地址临时添加宿主网卡路由，Windows 选用了该网卡。移除路由后，同一目标重新经过 TUN。 |
+| 异常退出 | 系统代理与 TUN 同时开启时强制结束桌面进程，Windows 释放了 TUN 路由。重启应用后，WinINet 设置恢复原值。 |
+| 按软件和实例分流 | Mihomo 能按程序选择出口。同一路径的两个并行实例及重启后的新实例都会继承路径规则。选中的 curl 和未选中的 Python 都进入了 TUN。 |
+
+备选内核 sing-box 1.14.4 的实验在 TUN 上设置了 `include_package`。curl 与两个 Python 实例的连接都到达了受控出口，按端口分流的阳性对照也命中了指定出口。程序名对照未命中，因此这次实验无法确认按 PID 区分实例的能力。[对照实验日志](https://github.com/likehao19/Xeylroute/actions/runs/44766599122/job/136392754984)
+
+严格按软件限定 TUN 入站、只对某个 PID 实例生效的临时规则仍待实现。Windows 系统 UAC 的授权与取消、托盘菜单正常退出、Wi-Fi 与以太网实机切换，以及外部订阅线路测速仍待交互式验收。托管测试机没有暴露可操作的托盘图标时，工作流会在摘要中标注托盘验收未完成。
