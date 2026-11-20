@@ -159,9 +159,6 @@
         <div class="toolbar-drag-spacer" id="toolbarDragSpacer" data-tauri-drag-region></div>
 
         <div class="toolbar-right" id="toolbarActions">
-          <div class="page-actions" data-page-actions="connect">
-            <button type="button" class="glass-btn-soft" id="coreControlBtn">启动内核</button>
-          </div>
           <div class="page-actions" data-page-actions="nodes" id="nodeTestActions" data-glass-control hidden>
             <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
             <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
@@ -575,6 +572,7 @@
                   <span class="mac-row-sub" id="setCoreSub">—</span>
                 </div>
               </div>
+              <button type="button" class="glass-btn-soft" id="coreControlBtn">启动内核</button>
             </div>
           </div>
 

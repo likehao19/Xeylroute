@@ -198,6 +198,7 @@ export type ProfileEdit =
   | { kind: 'ports'; http: number; socks: number; mixed: number }
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
   | { kind: 'programRules'; targets: string[]; exit: string }
+  | { kind: 'clearProgramRules'; targets: string[] }
   | { kind: 'removeRule'; index: number; expected: string }
   | { kind: 'detachRule'; index: number; expected: string }
   | { kind: 'toggleRule'; index: number; expected: string; enabled: boolean }

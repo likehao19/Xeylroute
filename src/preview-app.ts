@@ -186,8 +186,8 @@ export function mountPreviewApp(shell: ShellController): void {
     }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">没有匹配的节点</div>`;
 
     $('homeAppExits').innerHTML = DEMO_RUNNING.slice(0, 4).map(app => {
-      const rule = state.rules.find(r => r.value.toLowerCase() === app.exe.toLowerCase());
-      const val = rule?.exit || 'global-follow';
+      const rule = state.rules.find(r => r.kind === 'app' && r.value.toLowerCase() === app.exe.toLowerCase());
+      const val = rule?.exit || '';
       return `
         <div class="mac-row">
           <div class="mac-row-left">
@@ -197,7 +197,7 @@ export function mountPreviewApp(shell: ShellController): void {
               <span class="mac-row-sub"><i class="mini-dot"></i> ${esc(app.exe)} · PID ${app.pid}</span>
             </div>
           </div>
-          ${macPopupBtnHtml({ value: val, label: exitName(val), width: 128, popupKind: 'app-exit', popupKey: app.exe })}
+          ${macPopupBtnHtml({ value: val, label: val ? exitName(val) : '按分流规则', width: 128, popupKind: 'app-exit', popupKey: app.exe })}
         </div>
       `;
     }).join('');
@@ -436,10 +436,10 @@ export function mountPreviewApp(shell: ShellController): void {
     $('splitProcsPane').innerHTML = `
       <div class="mac-card flush">
         ${DEMO_RUNNING.map(p => {
-          const r = state.rules.find(x => x.value.toLowerCase() === p.exe.toLowerCase());
+          const r = state.rules.find(x => x.kind === 'app' && x.value.toLowerCase() === p.exe.toLowerCase());
           const eff = r ? resolvedExit(effectiveExitId(r)) : '按当前模式';
           const tunOn = (state.tun && state.tunScope === 'all') || r?.tun === 'on';
-          const val = r?.exit || 'global-follow';
+          const val = r?.exit || '';
           return `
             <div class="mac-row">
               <div class="mac-row-left">
@@ -453,7 +453,7 @@ export function mountPreviewApp(shell: ShellController): void {
                 <span class="pill">${esc(groupById(r?.group || '')?.name || '未分组')}</span>
                 <span class="pill blue">${esc(eff)}</span>
                 <span class="pill ${tunOn ? 'green' : ''}">TUN ${tunOn ? '开' : '关'}</span>
-                ${macPopupBtnHtml({ value: val, label: exitName(val), width: 136, popupKind: 'app-exit', popupKey: p.exe })}
+                ${macPopupBtnHtml({ value: val, label: val ? exitName(val) : '按分流规则', width: 136, popupKind: 'app-exit', popupKey: p.exe })}
               </div>
             </div>
           `;
@@ -633,8 +633,17 @@ export function mountPreviewApp(shell: ShellController): void {
       const key = popTrigger.dataset.popupKey || '';
       const val = popTrigger.dataset.popupVal || '';
       if (kind === 'app-exit') {
-        openMacMenu(popTrigger, exitMenuItems(true), val, nextVal => {
-          let rule = state.rules.find(r => r.value.toLowerCase() === key.toLowerCase());
+        const items: PopupMenuItem[] = [{ value: '', label: '按分流规则（无单独设置）' }, { sep: true }, ...exitMenuItems(true)];
+        openMacMenu(popTrigger, items, val, nextVal => {
+          let rule = state.rules.find(r => r.kind === 'app' && r.value.toLowerCase() === key.toLowerCase());
+          if (!nextVal) {
+            if (!rule) return;
+            if (rule.group || rule.tun !== 'inherit') rule.exit = '';
+            else state.rules = state.rules.filter(r => r !== rule);
+            renderAll();
+            notify('已清除单独出口，恢复按分流规则');
+            return;
+          }
           if (!rule) {
             const app = DEMO_RUNNING.find(p => p.exe === key);
             rule = {

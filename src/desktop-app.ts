@@ -431,11 +431,11 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
-  async function commitProfileEdit(edit: ProfileEdit, successMsg?: string): Promise<ProfileSummary | null> {
+  async function commitProfileEdit(edit: ProfileEdit, successMsg?: string, scope = liveProfile?.subscriptionScope ?? ''): Promise<ProfileSummary | null> {
     if (profileBusy) return null;
     profileBusy = true;
     try {
-      const profile = await tauriApi.editProfile(edit, liveProfile?.subscriptionScope ?? '');
+      const profile = await tauriApi.editProfile(edit, scope);
       applyProfile(profile);
       renderAllSafe();
       if (successMsg) notify(successMsg);
@@ -1030,10 +1030,14 @@ export function mountDesktopApp(shell: ShellController): void {
     banner.hidden = true;
   }
 
+  function programRuleKey(path: string): string {
+    return liveStatus?.platform === 'windows' ? normalizedProgramPath(path) : path;
+  }
+
   function programPathExits(): Map<string, string> {
     const exits = new Map<string, string>();
     for (const rule of liveProfile?.processRules || []) {
-      const path = normalizedProgramPath(rule.target);
+      const path = programRuleKey(rule.target);
       if (rule.kind === 'PROCESS-PATH' && !exits.has(path)) exits.set(path, rule.exit);
     }
     return exits;
@@ -1071,7 +1075,9 @@ export function mountDesktopApp(shell: ShellController): void {
         ? '测速中…'
         : '';
     const subLabel = selectedSubscription || (activeNodeObj?.standalone ? '独立导入节点' : '默认配置');
-    $('heroNodeMeta').textContent = `${subLabel} · ${liveStatus?.running ? (exitIp ? `出口 ${exitIp}` : '代理运行中') : '代理未启动'}`;
+    const capture = captureSummary();
+    const status = liveStatus?.running ? capture || '仅本地监听' : '未接管';
+    $('heroNodeMeta').textContent = [subLabel, status, liveStatus?.running && exitIp ? `出口 ${exitIp}` : ''].filter(Boolean).join(' · ');
     $('chartModeBadge').textContent = `${{ rule: '规则', global: '全局', direct: '直连' }[currentMode()]}模式 · ${captureSummary() || (liveStatus?.running ? '本地监听' : '未接管')}`;
     $('homeAutoFoot').parentElement!.hidden = !hasAutoExit();
     $('homeAutoFoot').textContent = activeExit === 'AUTO'
@@ -1104,8 +1110,8 @@ export function mountDesktopApp(shell: ShellController): void {
     const topApps = liveApps.slice(0, 4);
     $('homeAppExits').innerHTML = topApps.length
       ? topApps.map(app => {
-          const exits = new Set(app.paths.map(p => ruleMap.get(normalizedProgramPath(p)) || ''));
-          const val = exits.size === 1 ? [...exits][0] : 'GLOBAL';
+          const exits = new Set(app.paths.map(p => ruleMap.get(programRuleKey(p)) || ''));
+          const val = exits.size === 1 ? [...exits][0] : null;
           const label = exits.size > 1 ? '多项规则' : val ? exitDisplayLabel(val) : '按分流规则';
           return `
             <div class="mac-row">
@@ -1525,8 +1531,8 @@ export function mountDesktopApp(shell: ShellController): void {
           const isApp = procScanType === 'app';
           const appItem = isApp ? (item as GroupedRunningApp) : null;
           const paths = appItem ? appItem.paths : [item.path];
-          const assignedExits = new Set(paths.map(p => pathRules.get(normalizedProgramPath(p)) || ''));
-          const assigned = assignedExits.size === 1 ? [...assignedExits][0] : '';
+          const assignedExits = new Set(paths.map(p => pathRules.get(programRuleKey(p)) || ''));
+          const assigned = assignedExits.size === 1 ? [...assignedExits][0] : null;
           const groupTag = assigned && groupNamesSet.has(assigned) ? assigned : '未分组';
           const metric = appItem ? `${appItem.instances} 个进程` : `PID ${item.pid} · ${item.threadCount} 线程`;
           return `
@@ -1541,10 +1547,10 @@ export function mountDesktopApp(shell: ShellController): void {
               <div style="display:flex;align-items:center;gap:7px;flex:none">
                 <span class="pill">${esc(groupTag)}</span>
                 ${macPopupBtnHtml({
-                  value: assigned || 'GLOBAL',
+                  value: assigned,
                   label: assignedExits.size > 1 ? '多项规则' : (assigned ? exitDisplayLabel(assigned) : '按分流规则'),
                   width: 132,
-                  popupKind: 'app-exit',
+                  popupKind: isApp ? 'app-exit' : 'process-exit',
                   popupKey: item.path,
                 })}
                 <button type="button" class="sf-icon-btn" data-proc-detail-pid="${item.pid}" data-proc-detail-mode="${procScanType}" data-tip="${isApp ? '查看所属进程' : '查看线程详情'}">${SF_DETAIL}</button>
@@ -1771,7 +1777,7 @@ export function mountDesktopApp(shell: ShellController): void {
         : `未安装 Mihomo 内核 (${platformLabel(liveStatus.platform)})`;
       $('setCoreSub').textContent = liveStatus.running
         ? '停止内核会关闭本地监听、系统代理和虚拟网卡。'
-        : '启动内核以监听本地端口，接管方式可在边栏开启。';
+        : '开启系统代理或虚拟网卡会自动启动内核。也可在此单独启动本地监听。';
       $('setCoreSub').title = liveStatus.appData;
 
     }
@@ -2253,20 +2259,42 @@ export function mountDesktopApp(shell: ShellController): void {
     if (!existing) $<HTMLInputElement>('gsName').focus();
   }
 
-  async function assignAppExit(pathKey: string, exit: string): Promise<void> {
-    const app = liveApps.find(a => a.path === pathKey);
-    if (!app || app.paths.length <= 1) {
-      await commitProfileEdit({ kind: 'programRules', targets: [pathKey], exit }, `程序出口已设为 ${exitDisplayLabel(exit)}`);
+  async function assignAppExit(pathKey: string, exit: string, wholeApp: boolean): Promise<void> {
+    const scope = liveProfile?.subscriptionScope ?? '';
+    const app = wholeApp ? liveApps.find(a => a.path === pathKey) : undefined;
+    let paths = app?.paths ?? [pathKey];
+    if (!exit) {
+      const savedPaths = new Set<string>();
+      for (const rule of liveProfile?.rules || []) {
+        const [kind, path] = rule.split(',', 2);
+        if (kind === 'PROCESS-PATH' && path) savedPaths.add(path.trim());
+      }
+      // Include saved helpers even when they have exited since the assignment was made.
+      if (app) {
+        const candidates = [...new Set([...paths, ...savedPaths])].map(path => ({ path, name: '', exe: '' }));
+        paths = groupRunningApps(candidates).find(group => group.paths.includes(pathKey))?.paths ?? paths;
+      }
+      const members = new Set(paths.map(programRuleKey));
+      paths = [...savedPaths].filter(path => members.has(programRuleKey(path)));
+      if (!paths.length) return;
+    }
+    const save = (targets: string[]) => commitProfileEdit(
+      exit ? { kind: 'programRules', targets, exit } : { kind: 'clearProgramRules', targets },
+      exit ? `程序出口已设为 ${exitDisplayLabel(exit)}` : '已清除单独出口，恢复按分流规则',
+      scope,
+    );
+    if (paths.length === 1 || !app) {
+      await save(paths);
       return;
     }
     openSheet({
-      title: `设置软件出口 · ${app.name}`,
-      subtitle: `包含 ${app.paths.length} 个可执行文件 · 目标出口：${exitDisplayLabel(exit)}`,
+      title: `${exit ? '设置软件出口' : '恢复默认出口'} · ${app.name}`,
+      subtitle: exit ? `包含 ${paths.length} 个可执行文件 · 目标出口：${exitDisplayLabel(exit)}` : '清除勾选程序的单独规则，之后按其余分流规则处理。',
       iconHtml: renderProgramIcon(app.icon, app.name),
       size: 'wide',
       bodyHtml: `
         <div class="sheet-picker" style="max-height:240px">
-          ${app.paths.map((p, idx) => `
+          ${paths.map((p, idx) => `
             <label class="sheet-picker-row">
               <span class="mac-check"><input type="checkbox" class="ap-path-chk" data-path-idx="${idx}" checked></span>
               <span class="picker-meta">
@@ -2279,17 +2307,17 @@ export function mountDesktopApp(shell: ShellController): void {
       `,
       actionsHtml: `
         <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="apSave">应用规则</button>
+        <button type="button" class="glass-btn-primary compact lg-track" id="apSave">${exit ? '应用规则' : '恢复默认'}</button>
       `,
     });
     $('sheetCancel').onclick = closeSheet;
     $('apSave').onclick = async () => {
       const chosen = [...document.querySelectorAll<HTMLInputElement>('.ap-path-chk')]
         .filter(c => c.checked)
-        .map(c => app.paths[Number(c.dataset.pathIdx)]);
+        .map(c => paths[Number(c.dataset.pathIdx)]);
       if (!chosen.length) return;
       closeSheet();
-      await commitProfileEdit({ kind: 'programRules', targets: chosen, exit }, `已为 ${app.name} 保存 ${chosen.length} 条程序规则`);
+      await save(chosen);
     };
   }
 
@@ -2582,9 +2610,10 @@ export function mountDesktopApp(shell: ShellController): void {
         return;
       }
 
-      if (kind === 'app-exit') {
-        openMacMenu(popTrigger, buildExitPopupItems(), val, nextVal => {
-          void assignAppExit(key, nextVal);
+      if (kind === 'app-exit' || kind === 'process-exit') {
+        const items: PopupMenuItem[] = [{ value: '', label: '按分流规则（无单独设置）' }, { sep: true }, ...buildExitPopupItems()];
+        openMacMenu(popTrigger, items, popTrigger.dataset.popupVal ?? null, nextVal => {
+          void assignAppExit(key, nextVal, kind === 'app-exit');
         });
         return;
       }

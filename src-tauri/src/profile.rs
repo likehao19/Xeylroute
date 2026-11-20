@@ -141,6 +141,9 @@ pub enum Edit {
         targets: Vec<String>,
         exit: String,
     },
+    ClearProgramRules {
+        targets: Vec<String>,
+    },
     RemoveRule {
         index: usize,
         expected: String,
@@ -214,6 +217,10 @@ fn array<'a>(profile: &'a mut Value, field: &str) -> Result<&'a mut Vec<Value>, 
 
 fn clean(value: &str) -> bool {
     !value.is_empty() && value.trim() == value && !value.chars().any(|c| c == ',' || c.is_control())
+}
+
+fn program_path_key(path: &str) -> String {
+    if cfg!(windows) { path.replace('\\', "/").to_lowercase() } else { path.to_owned() }
 }
 
 fn exits(profile: &Value) -> Vec<&str> {
@@ -825,13 +832,13 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
             }
             let mut next = profile.clone();
             for target in targets {
-                let normalized = target.replace('\\', "/").to_lowercase();
+                let normalized = program_path_key(&target);
                 let previous = entries(&next, "rules")
                     .enumerate()
                     .find_map(|(index, item)| {
                         let rule = item.as_str()?;
                         let path = rule.strip_prefix("PROCESS-PATH,")?.split_once(',')?.0;
-                        (path.replace('\\', "/").to_lowercase() == normalized)
+                        (program_path_key(path) == normalized)
                             .then(|| (index, rule.to_owned()))
                     });
                 edit(
@@ -846,6 +853,25 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 )?;
             }
             *profile = next;
+        }
+        Edit::ClearProgramRules { targets } => {
+            if targets.is_empty() || targets.len() > 250 || targets.iter().any(|path| !clean(path)) {
+                return Err("请选择 1 到 250 个有效的程序路径。".into());
+            }
+            let paths: std::collections::HashSet<_> =
+                targets.iter().map(|path| program_path_key(path)).collect();
+            let matches = |rule: &str| {
+                rule.strip_prefix("PROCESS-PATH,").and_then(|rest| rest.split_once(','))
+                    .is_some_and(|(path, _)| paths.contains(&program_path_key(path.trim())))
+            };
+            for field in ["rules", "routepilot-disabled-rules"] {
+                if let Some(rules) = profile.get_mut(field).and_then(Value::as_array_mut) {
+                    rules.retain(|rule| !rule.as_str().is_some_and(&matches));
+                }
+            }
+            if let Some(saved) = profile.get_mut("routepilot-independent-exits").and_then(Value::as_object_mut) {
+                saved.retain(|rule, _| !matches(rule));
+            }
         }
         Edit::RemoveRule { index, expected } => {
             let rules = array(profile, "rules")?;
@@ -1110,6 +1136,39 @@ mod tests {
             assert!(edit_active(&mut profile, Edit::ProviderInterval { name: name.into(), seconds }).is_err());
         }
         assert_eq!(profile, restored);
+    }
+
+    #[test]
+    fn clearing_app_exits_restores_scoped_routing_after_reload() {
+        let program = "/Apps/Chat";
+        let helper = "/Apps/Chat Helper";
+        let retired = format!("PROCESS-PATH,{helper},DIRECT");
+        let old = format!("PROCESS-PATH,{program},GLOBAL");
+        let remaining = json!(["PROCESS-NAME,Chat,REJECT", "PROCESS-PATH,/Apps/Chat Beta,DIRECT", "MATCH,AUTO"]);
+        let mut config = json!({
+            "proxy-providers": {"One":{"type":"file"}, "Two":{"type":"file"}},
+            "routepilot-active-subscription": "One",
+            "routepilot-subscription-scopes": {
+                "One": {
+                    "rules": [old, retired, "PROCESS-NAME,Chat,REJECT", "PROCESS-PATH,/Apps/Chat Beta,DIRECT", "MATCH,AUTO"],
+                    "routepilot-disabled-rules": [retired],
+                    "routepilot-independent-exits": {(&old): "DIRECT"}
+                },
+                "Two": {"rules": [old, "MATCH,AUTO"]}
+            }
+        });
+        for _ in 0..2 {
+            edit_active(&mut config, Edit::ClearProgramRules {
+                targets: vec![program.into(), helper.into()],
+            }).unwrap();
+        }
+        let restored: Value = serde_json::from_str(&config.to_string()).unwrap();
+        let scope = &restored["routepilot-subscription-scopes"]["One"];
+        assert_eq!(scope["rules"], remaining);
+        assert_eq!(scope["routepilot-disabled-rules"], json!([]));
+        assert_eq!(scope["routepilot-independent-exits"], json!({}));
+        assert_eq!(runtime_profile(&restored)["rules"], remaining);
+        assert_eq!(restored["routepilot-subscription-scopes"]["Two"]["rules"], json!([old, "MATCH,AUTO"]));
     }
 
     #[test]

@@ -64,14 +64,14 @@ export function popupDotClass(val: string): string {
 
 export function macPopupBtnHtml(opts: {
   id?: string;
-  value: string;
+  value: string | null;
   label: string;
   width?: number;
   popupKind: string;
   popupKey?: string;
   disabled?: boolean;
 }): string {
-  const dot = popupDotClass(opts.value);
+  const dot = popupDotClass(opts.value ?? '');
   const wStyle = opts.width ? `style="min-width:${opts.width}px;max-width:${opts.width + 24}px"` : '';
   return `
     <button type="button" class="mac-popup-btn"
@@ -79,7 +79,7 @@ export function macPopupBtnHtml(opts: {
       ${wStyle}
       data-popup-kind="${esc(opts.popupKind)}"
       data-popup-key="${esc(opts.popupKey || '')}"
-      data-popup-val="${esc(opts.value)}"
+      ${opts.value === null ? '' : `data-popup-val="${esc(opts.value)}"`}
       aria-haspopup="menu" aria-expanded="false"
       ${opts.disabled ? 'disabled' : ''}>
       <span class="mac-popup-dot ${dot}"></span>
@@ -102,7 +102,7 @@ export function closeMacMenu(): void {
 export function openMacMenu(
   trigger: HTMLElement,
   items: PopupMenuItem[],
-  selectedValue: string,
+  selectedValue: string | null,
   onSelect: (value: string, label: string) => void,
 ): void {
   const pop = $('macMenuPopover');
