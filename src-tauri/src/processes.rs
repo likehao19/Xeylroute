@@ -423,6 +423,18 @@ mod platform {
 mod tests {
     #[cfg(windows)]
     #[test]
+    fn verifies_real_windows_process_creation_time_before_reading_threads() {
+        let pid = std::process::id();
+        let process = super::platform::query_process(pid).unwrap();
+        assert_eq!(process.pid, pid);
+        assert!(std::path::Path::new(&process.path).is_absolute());
+        assert!(process.started_at.parse::<u64>().unwrap() > 0);
+        assert!(!super::platform::scan_threads(pid, &process.started_at).unwrap().is_empty());
+        assert!(super::platform::scan_threads(pid, "0").is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn hides_system_paths_and_preserves_app_owned_runtimes() {
         let roots = vec![
             "d:/windows".into(),

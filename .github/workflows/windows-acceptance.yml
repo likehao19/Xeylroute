@@ -1,0 +1,29 @@
+name: Windows network acceptance
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare pinned network core
+        run: npm run core
+      - name: Verify live forwarding and application routing
+        shell: pwsh
+        run: |
+          $core = "src-tauri/binaries/xeylroute-mihomo-x86_64-pc-windows-msvc.exe"
+          python scripts/smoke-mihomo.py --binary $core
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/smoke-routing.py $core
+      - name: Build frontend
+        run: npm ci && npm run build
+        shell: cmd
+      - name: Test Windows desktop backend
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Exercise WinINet ownership and recovery on the disposable VM
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml wininet_takeover_and_recovery -- --ignored

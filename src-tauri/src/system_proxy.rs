@@ -535,6 +535,46 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    #[ignore = "temporarily changes the current Windows user's proxy on a disposable VM"]
+    fn wininet_takeover_and_recovery() {
+        let before = platform::query().unwrap();
+        let dir = std::env::temp_dir().join(format!("xeyl-proxy-test-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let reserve = || std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let first = reserve();
+        let second = reserve();
+        let port = first.local_addr().unwrap().port();
+        let expected = platform::desired(port, None, &before);
+        let external = platform::desired(second.local_addr().unwrap().port(), None, &before);
+
+        // Keep the runner online even when an assertion fails inside the test.
+        let result = std::panic::catch_unwind(|| {
+            enable(&dir, port, None).unwrap();
+            assert_eq!(platform::query().unwrap(), expected);
+            assert!(is_owned(&dir).unwrap());
+            enable(&dir, port, None).unwrap();
+            assert_eq!(load(&dir).unwrap().unwrap().previous, before);
+            restore(&dir).unwrap();
+            assert_eq!(platform::query().unwrap(), before);
+            assert!(load(&dir).unwrap().is_none());
+
+            enable(&dir, port, None).unwrap();
+            platform::apply(&external).unwrap();
+            assert!(!is_owned(&dir).unwrap());
+            restore(&dir).unwrap();
+            assert_eq!(platform::query().unwrap(), external);
+            assert!(load(&dir).unwrap().is_none());
+        });
+        platform::apply(&before).unwrap();
+        assert_eq!(platform::query().unwrap(), before);
+        fs::remove_dir_all(dir).unwrap();
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn recovery_only_restores_exact_owned_settings() {
         let recovery = Recovery {
             previous: ProxySettings {
