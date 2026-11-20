@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import http.server
 import json
+import statistics
 import socket
 import secrets
 import urllib.error
@@ -28,17 +29,20 @@ class Origin(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def smoke(archive_path):
-    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    if digest != EXPECTED_SHA256:
-        raise ValueError("The archive does not match the official Mihomo v1.19.34 release")
+def smoke(source, bundled=False):
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     with tempfile.TemporaryDirectory(prefix="routepilot-core-smoke-") as folder:
         trial = Path(folder)
-        with zipfile.ZipFile(archive_path) as archive:
-            member = next(name for name in archive.namelist() if name.lower().endswith(".exe"))
-            exe = trial / "mihomo.exe"
-            exe.write_bytes(archive.read(member))
-        subprocess.run([exe, "-v"], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        if bundled:
+            exe = source.resolve(strict=True)
+        else:
+            if hashlib.sha256(source.read_bytes()).hexdigest() != EXPECTED_SHA256:
+                raise ValueError("Unexpected Mihomo archive digest")
+            with zipfile.ZipFile(source) as archive:
+                member = next(name for name in archive.namelist() if name.lower().endswith(".exe"))
+                exe = trial / "mihomo.exe"
+                exe.write_bytes(archive.read(member))
+        subprocess.run([exe, "-v"], check=True, creationflags=flags)
         with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Origin) as origin:
             threading.Thread(target=origin.serve_forever, daemon=True).start()
             with socket.socket() as reservation:
@@ -82,7 +86,7 @@ def smoke(archive_path):
                     [exe, "-d", trial, "-f", "-"],
                     stdin=subprocess.PIPE,
                     stdout=log, stderr=subprocess.STDOUT,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    creationflags=flags,
                 )
                 try:
                     with core.stdin:
@@ -124,6 +128,10 @@ def smoke(archive_path):
                     assert controller_request("/configs")["mode"] == "rule"
                     assert "GLOBAL" in controller_request("/proxies")["proxies"]
                     assert "connections" in controller_request("/connections")
+                    query = urllib.parse.urlencode({"url": f"http://{host}/verify", "timeout": "5000"})
+                    delays = [controller_request("/proxies/DIRECT/delay?" + query)["delay"] for _ in range(9)]
+                    assert all(isinstance(ms, int) and ms >= 0 for ms in delays)
+                    print(f"Loopback DIRECT delay across 9 requests: median {statistics.median(delays)} ms, max {max(delays)} ms")
                     rules = controller_request("/rules")["rules"]
                     assert any(rule.get("payload") == "blocked.invalid" and rule.get("proxy") == "REJECT" for rule in rules)
                     controller_request("/proxies/Test%20Selector", "PUT", b'{"name":"REJECT"}')
@@ -194,4 +202,4 @@ def smoke(archive_path):
 
 
 if __name__ == "__main__":
-    smoke(Path(sys.argv[1]))
+    smoke(Path(sys.argv[-1]), bundled=sys.argv[1:2] == ["--binary"])

@@ -1,5 +1,7 @@
 import { $, closeMacMenu, closeSheet, openSheet } from './ui-kit';
 
+import { invoke, isTauri } from './tauri-bridge';
+
 export type ViewId = 'connect' | 'nodes' | 'split' | 'logs' | 'subs' | 'settings';
 
 const VIEW_TITLES: Record<ViewId, string> = {
@@ -37,6 +39,7 @@ export function initShell(): ShellController {
     theme = next;
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
+    if (isTauri()) void invoke('window_set_theme', { theme }).catch(() => {});
     $('themeSvg').innerHTML = theme === 'dark'
       ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
       : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
@@ -142,7 +145,7 @@ export function initShell(): ShellController {
       bodyHtml: `
         <div style="font-size:12.5px;color:var(--ink-2);line-height:1.68;display:grid;gap:10px">
           <div><strong style="color:var(--ink)">规则优先级：</strong>显式 REJECT &gt; 显式 DIRECT &gt; 进程 &gt; 软件 &gt; 精确域名 &gt; 通配域名 &gt; 默认出口</div>
-          <div><strong style="color:var(--ink)">Scoped TUN：</strong>将「TUN 接管范围」设为「仅指定分组和程序」后，规则模式下仅接管勾选 TUN 的分组或程序。</div>
+          <div><strong style="color:var(--ink)">Scoped TUN：</strong>${isTauri() ? '桌面端支持全局 TUN。按软件指定出口请使用分流规则。' : '规则模式下仅接管勾选 TUN 的分组或程序。'}</div>
           <div><strong style="color:var(--ink)">导入支持：</strong>HTTPS 订阅链接、单/多条分享链接（vless / trojan / ss / vmess / hy2 / tuic / Base64），以及第三方 YAML / JSON 完整配置。</div>
           <div><strong style="color:var(--ink)">快捷键：</strong><kbd class="kbd-hint">${modKey}K</kbd> 全局搜索 · <kbd class="kbd-hint">${modKey}S</kbd> 收起/展开边栏 · <kbd class="kbd-hint">Esc</kbd> 关闭浮层</div>
         </div>

@@ -972,6 +972,7 @@ export function mountPreviewApp(shell: ShellController): void {
   });
 
   window.setInterval(() => {
+    if (document.hidden) return;
     if (!state.connected || !captureSummary()) {
       $('kpiDown').textContent = '0.0 MB/s';
       $('kpiUp').textContent = '0.0 MB/s';

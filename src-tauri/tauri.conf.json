@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "identifier": "app.routepilot.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run core && npm run dev",
+    "beforeBuildCommand": "npm run core && npm run build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -30,6 +31,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/xeylroute-mihomo"],
+    "resources": ["licenses/Mihomo-COPYING"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

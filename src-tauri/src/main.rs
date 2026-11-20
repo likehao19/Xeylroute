@@ -5,6 +5,7 @@ mod mihomo_api;
 mod processes;
 mod profile;
 mod program_files;
+mod runtime_tuning;
 mod share_links;
 mod system_proxy;
 mod tray;
@@ -63,8 +64,21 @@ fn require_core_access(app: &AppHandle) -> Result<(), String> {
     }
 }
 
+/// Where the Mihomo executable lives. A release ships it beside the application executable (a
+/// Tauri sidecar fetched by `npm run core`); a copy installed by hand into the data directory is
+/// the fallback, so existing set-ups keep working.
+pub(crate) fn core_binary(dir: &Path) -> Option<PathBuf> {
+    let bundled = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.join(format!("xeylroute-{CORE_BINARY}"))));
+    bundled
+        .into_iter()
+        .chain(std::iter::once(dir.join(CORE_BINARY)))
+        .find(|path| path.is_file())
+}
+
 pub(crate) fn mihomo_command(dir: &Path) -> Command {
-    let mut command = Command::new(dir.join(CORE_BINARY));
+    let mut command = Command::new(core_binary(dir).unwrap_or_else(|| dir.join(CORE_BINARY)));
     for (key, _) in std::env::vars_os() {
         if key
             .to_string_lossy()
@@ -122,38 +136,110 @@ fn running(child: &mut Option<CoreProcess>) -> Result<bool, String> {
     Ok(false)
 }
 
-fn http_port(dir: &Path) -> Option<u16> {
-    let data = fs::read(dir.join("routepilot-validated.json")).ok()?;
-    let config: Value = serde_json::from_slice(&data).ok()?;
-    ["mixed-port", "port"].iter().find_map(|key| {
+type Stamp = (std::time::SystemTime, u64);
+
+fn stamp(path: &Path) -> Option<Stamp> {
+    let metadata = fs::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+/// What the running core was started with, read from the generated runtime configuration.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct RuntimeFacts {
+    tun: bool,
+    /// A port that accepts HTTP proxy requests (the mixed port, else the HTTP port).
+    http: Option<u16>,
+    /// A port that accepts SOCKS5 (the mixed port, else the SOCKS port).
+    socks: Option<u16>,
+}
+
+fn parse_runtime_facts(config: &Value) -> RuntimeFacts {
+    let port = |key: &str| {
         config
-            .get(*key)?
-            .as_u64()
+            .get(key)
+            .and_then(Value::as_u64)
             .and_then(|port| u16::try_from(port).ok())
             .filter(|port| *port > 0)
-    })
+    };
+    RuntimeFacts {
+        tun: config["tun"]["enable"] == true,
+        http: port("mixed-port").or_else(|| port("port")),
+        socks: port("mixed-port").or_else(|| port("socks-port")),
+    }
+}
+
+/// The interface polls status every two seconds. Both files it depends on grow to megabytes once
+/// a subscription is inlined, so their derived facts are kept until the file changes on disk.
+struct DiskFacts {
+    runtime: Option<(Stamp, RuntimeFacts)>,
+    scope: Option<(Stamp, String)>,
+}
+
+static DISK_FACTS: Mutex<DiskFacts> = Mutex::new(DiskFacts {
+    runtime: None,
+    scope: None,
+});
+
+fn runtime_facts(dir: &Path) -> RuntimeFacts {
+    let path = dir.join("routepilot-validated.json");
+    let Some(current) = stamp(&path) else {
+        return RuntimeFacts::default();
+    };
+    if let Ok(cache) = DISK_FACTS.lock() {
+        if let Some((seen, facts)) = cache.runtime {
+            if seen == current {
+                return facts;
+            }
+        }
+    }
+    let facts = fs::read(&path)
+        .ok()
+        .and_then(|data| serde_json::from_slice::<Value>(&data).ok())
+        .map(|config| parse_runtime_facts(&config))
+        .unwrap_or_default();
+    if let Ok(mut cache) = DISK_FACTS.lock() {
+        cache.runtime = Some((current, facts));
+    }
+    facts
+}
+
+fn configured_tun_scope(dir: &Path) -> String {
+    let Some(current) = stamp(&dir.join("mihomo.json")) else {
+        return "all".into();
+    };
+    if let Ok(cache) = DISK_FACTS.lock() {
+        if let Some((seen, scope)) = &cache.scope {
+            if *seen == current {
+                return scope.clone();
+            }
+        }
+    }
+    let scope = configured_profile(dir)
+        .map(|config| profile::tun_scope(&config).to_owned())
+        .unwrap_or_else(|_| "all".into());
+    if let Ok(mut cache) = DISK_FACTS.lock() {
+        cache.scope = Some((current, scope.clone()));
+    }
+    scope
+}
+
+fn http_port(dir: &Path) -> Option<u16> {
+    runtime_facts(dir).http
 }
 
 fn status(dir: &Path, child: &mut Option<CoreProcess>) -> Result<CoreStatus, String> {
     let is_running = running(child)?;
-    let tun = is_running
-        && fs::read(dir.join("routepilot-validated.json"))
-            .ok()
-            .and_then(|data| serde_json::from_slice::<Value>(&data).ok())
-            .is_some_and(|config| config["tun"]["enable"] == true);
-    let tun_scope = configured_profile(dir)
-        .map(|cfg| profile::tun_scope(&cfg).to_owned())
-        .unwrap_or_else(|_| "all".into());
+    let facts = runtime_facts(dir);
     Ok(CoreStatus {
         app_data: dir.display().to_string(),
         platform: platform_name(),
-        available: dir.join(CORE_BINARY).is_file(),
+        available: core_binary(dir).is_some(),
         configured: dir.join("mihomo.json").is_file(),
         running: is_running,
-        tun,
-        tun_scope,
-        system_proxy: system_proxy::is_owned(dir)?,
-        http_port: http_port(dir),
+        tun: is_running && facts.tun,
+        tun_scope: configured_tun_scope(dir),
+        system_proxy: system_proxy::is_owned_cached(dir)?,
+        http_port: facts.http,
     })
 }
 
@@ -305,11 +391,11 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
     for &port in &ports {
         TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).map_err(|err| {
             eprintln!("Local port {port} is unavailable: {err}");
-            "暂时无法启动代理服务，请重试。".to_string()
+            format!("本地代理端口 {port} 无法监听，请在设置中更换端口。")
         })?;
     }
     let configured: Value = serde_json::from_str(&contents).map_err(|err| err.to_string())?;
-    let mut normalized = profile::runtime_profile(&configured);
+    let mut normalized = runtime_config(&configured, tun);
     normalized["bind-address"] = Value::String("127.0.0.1".into());
     normalized["allow-lan"] = Value::Bool(false);
     if normalized.get("profile").is_none() {
@@ -319,41 +405,7 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
         settings.insert("store-selected".into(), Value::Bool(true));
     }
     if tun {
-        let mut tun_cfg = serde_json::json!({
-            "enable": true,
-            "stack": "mixed",
-            "auto-route": true,
-            "auto-detect-interface": true,
-        });
-        let scope = profile::tun_scope(&configured);
-        let is_rule_mode = normalized["mode"]
-            .as_str()
-            .is_none_or(|m| m.eq_ignore_ascii_case("rule"));
-        if scope == "selected" && is_rule_mode {
-            let paths = profile::scoped_tun_process_paths(&configured);
-            if paths.is_empty() {
-                return Err(
-                    "当前未勾选任何需要 TUN 接管的分组或程序，请先在分流与程序中开启目标 TUN，或将接管范围切换为「全部受支持流量」。"
-                        .into(),
-                );
-            }
-            let names: Vec<String> = paths
-                .iter()
-                .filter_map(|p| Path::new(p).file_name()?.to_str().map(str::to_owned))
-                .collect();
-            tun_cfg["include-process-path"] = serde_json::json!(paths);
-            if !names.is_empty() {
-                tun_cfg["include-process"] = serde_json::json!(names);
-            }
-        }
-        normalized["tun"] = tun_cfg;
-        if normalized.get("dns").is_none() {
-            normalized["dns"] = serde_json::json!({
-                "enable": true,
-                "enhanced-mode": "fake-ip",
-                "nameserver": ["223.5.5.5", "1.1.1.1"],
-            });
-        }
+        normalized["tun"] = global_tun_config(&configured)?;
     }
     let management = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).map_err(|err| err.to_string())?;
     let endpoint = management.local_addr().map_err(|err| err.to_string())?;
@@ -440,6 +492,35 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
         "代理服务启动失败，请重试。"
     }
     .into())
+}
+
+fn global_tun_config(configured: &Value) -> Result<Value, String> {
+    if profile::tun_scope(configured) == "selected" {
+        return Err("此内核支持全局 TUN。仅指定程序接管暂不可用，请在设置中明确选择全局范围。".into());
+    }
+    Ok(runtime_tuning::tun_inbound())
+}
+
+/// The configuration Mihomo actually runs: the saved profile narrowed to the active subscription,
+/// plus runtime defaults. Starting, hot-reloading and offline validation all go through here so
+/// an edit made while the core runs cannot drop a setting that start-up added.
+fn runtime_config(configured: &Value, tun: bool) -> Value {
+    let mut runtime = profile::runtime_profile(configured);
+    runtime_tuning::apply(&mut runtime, profile::is_managed(configured));
+    if tun {
+        if let Some(map) = runtime.as_object_mut() {
+            map.entry("dns").or_insert_with(|| {
+                serde_json::json!({
+                    "enable": true,
+                    "enhanced-mode": "fake-ip",
+                    "nameserver": ["223.5.5.5", "1.1.1.1"],
+                })
+            });
+            map.entry("sniffer")
+                .or_insert_with(runtime_tuning::tun_sniffer);
+        }
+    }
+    runtime
 }
 
 fn terminate(process: &mut Option<CoreProcess>) -> Result<(), String> {
@@ -708,12 +789,11 @@ fn save_profile(dir: &Path, config: &Value) -> Result<(), String> {
 }
 
 fn validate_with_core(dir: &Path, config: &Value) -> Result<(), String> {
-    if !dir.join(CORE_BINARY).is_file() {
+    if core_binary(dir).is_none() {
         return Ok(());
     }
     let path = dir.join("routepilot-profile-check.json");
-    fs::write(&path, profile::runtime_profile(config).to_string())
-        .map_err(|err| err.to_string())?;
+    fs::write(&path, runtime_config(config, false).to_string()).map_err(|err| err.to_string())?;
     let result = (|| {
         let mut child = mihomo_command(dir)
             .arg("-t")
@@ -769,6 +849,9 @@ fn update_profile(
                 &fs::read(dir.join("routepilot-validated.json")).map_err(|err| err.to_string())?,
             )
             .map_err(|err| err.to_string())?;
+            if validated["tun"]["enable"] == true {
+                global_tun_config(&config)?;
+            }
             let prepared = serde_json::to_string_pretty(&config).map_err(|err| err.to_string())?;
             validate_config(&prepared)?;
             let temporary = dir.join("mihomo.json.tmp");
@@ -802,7 +885,8 @@ fn update_profile(
                             Some(serde_json::json!({"mode":mode})),
                         ));
                     }
-                    let mut runtime = profile::runtime_profile(raw);
+                    let mut runtime =
+                        runtime_config(raw, validated["tun"]["enable"] == true);
                     for key in [
                         "bind-address",
                         "allow-lan",
@@ -1008,7 +1092,8 @@ async fn set_system_proxy(app: AppHandle, enabled: bool) -> Result<CoreStatus, S
             if !running(&mut process)? {
                 return Err("请先启动本地内核，再开启系统代理。".into());
             }
-            let port = http_port(&dir).ok_or("系统代理需要 HTTP 或混合端口。")?;
+            let facts = runtime_facts(&dir);
+            let port = facts.http.ok_or("系统代理需要 HTTP 或混合端口。")?;
             if TcpStream::connect_timeout(
                 &SocketAddrV4::new(Ipv4Addr::LOCALHOST, port).into(),
                 Duration::from_millis(200),
@@ -1017,7 +1102,7 @@ async fn set_system_proxy(app: AppHandle, enabled: bool) -> Result<CoreStatus, S
             {
                 return Err("本地 HTTP 代理端口尚未就绪。".into());
             }
-            system_proxy::enable(&dir, port)?;
+            system_proxy::enable(&dir, port, facts.socks)?;
         } else {
             system_proxy::restore(&dir)?;
         }
@@ -1233,6 +1318,18 @@ fn window_close(window: tauri::WebviewWindow) -> Result<(), String> {
     window.close().map_err(|err| err.to_string())
 }
 
+/// Keeps the native window appearance in step with the in-app theme. The window material on macOS
+/// and the system-drawn chrome follow this setting, not the page's own colours.
+#[tauri::command]
+fn window_set_theme(window: tauri::WebviewWindow, theme: Option<String>) -> Result<(), String> {
+    let theme = match theme.as_deref() {
+        Some("dark") => Some(tauri::Theme::Dark),
+        Some("light") => Some(tauri::Theme::Light),
+        _ => None,
+    };
+    window.set_theme(theme).map_err(|err| err.to_string())
+}
+
 fn main() {
     let mut args = std::env::args_os().skip(1);
     if args.next().is_some_and(|arg| arg == tun_worker::ARG) {
@@ -1300,6 +1397,7 @@ fn main() {
             window_minimize,
             window_toggle_maximize,
             window_close,
+            window_set_theme,
             tray::update_tray_menu,
             tray::show_routepilot,
             core_status,
@@ -1332,21 +1430,59 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("failed to initialize RoutePilot")
-        .run(|app, event| {
-            if matches!(event, RunEvent::Exit) && require_core_access(app).is_ok() {
-                if let Ok(mut process) = app.state::<Core>().0.lock() {
-                    if let Ok(dir) = core_dir(app) {
-                        let _ = system_proxy::restore(&dir);
+        .run(|app, event| match event {
+            RunEvent::Exit => {
+                if require_core_access(app).is_ok() {
+                    if let Ok(mut process) = app.state::<Core>().0.lock() {
+                        if let Ok(dir) = core_dir(app) {
+                            let _ = system_proxy::restore(&dir);
+                        }
+                        let _ = terminate(&mut process);
                     }
-                    let _ = terminate(&mut process);
                 }
             }
+            // Closing the window only hides it to the tray, so a Dock click has to bring it back.
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen { .. } => {
+                let _ = tray::show_routepilot(app.clone());
+            }
+            _ => {}
         });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_imported_config, subscription_usage, validate_config};
+    use super::{global_tun_config, parse_runtime_facts, sanitize_imported_config, subscription_usage, validate_config};
+
+    #[test]
+    fn selected_scope_never_starts_global_tun() {
+        for mode in ["global", "direct", "rule"] {
+            assert!(global_tun_config(&serde_json::json!({
+                "mode": mode, "routepilot-tun-scope": "selected"
+            })).is_err());
+        }
+    }
+
+    #[test]
+    fn runtime_facts_pick_the_port_that_speaks_each_protocol() {
+        let mixed = parse_runtime_facts(&serde_json::json!({
+            "mixed-port": 7890, "port": 8080, "socks-port": 1080, "tun": {"enable": true}
+        }));
+        assert!(mixed.tun);
+        assert_eq!((mixed.http, mixed.socks), (Some(7890), Some(7890)));
+
+        let split = parse_runtime_facts(&serde_json::json!({
+            "mixed-port": 0, "port": 8080, "socks-port": 1080, "tun": {"enable": false}
+        }));
+        assert!(!split.tun);
+        assert_eq!((split.http, split.socks), (Some(8080), Some(1080)));
+
+        let http_only = parse_runtime_facts(&serde_json::json!({"port": 8080}));
+        assert_eq!((http_only.http, http_only.socks), (Some(8080), None));
+
+        let invalid = parse_runtime_facts(&serde_json::json!({"mixed-port": 70000, "port": "x"}));
+        assert_eq!((invalid.http, invalid.socks), (None, None));
+    }
 
     #[test]
     fn accepts_third_party_yaml_or_json_with_dns_after_sanitization() {

@@ -156,12 +156,17 @@ fn menu(app: &AppHandle, state: &TrayState) -> tauri::Result<Menu<tauri::Wry>> {
     )
 }
 
+/// Tells the page whether anyone can see it, so it can stop rendering and poll slowly while the
+/// window sits hidden in the tray.
+const VISIBILITY_EVENT: &str = "routepilot-window-visible";
+
 #[tauri::command]
 pub fn show_routepilot(app: AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
         window.show()?;
         window.unminimize()?;
         window.set_focus()?;
+        let _ = app.emit_to(MAIN_WINDOW, VISIBILITY_EVENT, true);
     }
     Ok(())
 }
@@ -205,12 +210,22 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
-    if window.label() == MAIN_WINDOW && window.app_handle().tray_by_id(TRAY_ID).is_some() {
-        if let WindowEvent::CloseRequested { api, .. } = event {
+    if window.label() != MAIN_WINDOW {
+        return;
+    }
+    match event {
+        WindowEvent::CloseRequested { api, .. }
+            if window.app_handle().tray_by_id(TRAY_ID).is_some() =>
+        {
             if window.hide().is_ok() {
                 api.prevent_close();
+                let _ = window.emit_to(MAIN_WINDOW, VISIBILITY_EVENT, false);
             }
         }
+        WindowEvent::Focused(true) => {
+            let _ = window.emit_to(MAIN_WINDOW, VISIBILITY_EVENT, true);
+        }
+        _ => {}
     }
 }
 

@@ -481,7 +481,7 @@
                 <span class="sq md indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span>
                 <div>
                   <span class="mac-row-title">TUN 接管范围</span>
-                  <span class="mac-row-sub">仅指定目标模式只在规则模式下对开启 TUN 的组/程序生效</span>
+                  <span class="mac-row-sub" id="tunScopeHelp">仅指定目标模式只在规则模式下对开启 TUN 的组/程序生效</span>
                 </div>
               </div>
               <div id="setTunScopeHost"></div>
@@ -539,7 +539,6 @@
                   <span class="mac-row-sub" id="setCoreSub">—</span>
                 </div>
               </div>
-              <button type="button" class="glass-btn-soft lg-track" id="copyCoreInstallBtn" hidden>复制安装命令</button>
             </div>
           </div>
 
@@ -550,7 +549,7 @@
                 <span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg></span>
                 <div>
                   <span class="mac-row-title">外观材质</span>
-                  <span class="mac-row-sub">macOS 27 纯组件毛玻璃深色 / 浅色</span>
+                  <span class="mac-row-sub">选择浅色或深色外观</span>
                 </div>
               </div>
               <div class="appearance-picker" id="settingsThemeSeg">
@@ -584,7 +583,7 @@
 
   <!-- Sheet Modal -->
   <div class="modal-backdrop" id="sheetBackdrop">
-    <div class="modal-sheet" id="sheetContent"></div>
+    <div class="modal-sheet" id="sheetContent" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
   </div>
 
   <div class="toast" id="toast" role="status"></div>

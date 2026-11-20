@@ -119,7 +119,7 @@ export type MihomoSnapshot = {
   connections?: {
     downloadTotal?: number;
     uploadTotal?: number;
-    connections?: unknown[];
+    count?: number;
     memory?: number;
   };
 };
@@ -227,6 +227,10 @@ export function listenTrayAction(handler: (payload: string) => void): Promise<()
   return win.__TAURI__?.event?.listen<string>('routepilot-tray-action', ({ payload }) => handler(payload));
 }
 
+export function listenWindowVisibility(handler: (visible: boolean) => void): Promise<() => void> | undefined {
+  return win.__TAURI__?.event?.listen<boolean>('routepilot-window-visible', ({ payload }) => handler(payload));
+}
+
 export const tauriApi = {
   coreStatus: () => invoke<CoreStatus>('core_status'),
   startLocalCore: () => invoke<CoreStatus>('start_local_core'),
@@ -247,9 +251,9 @@ export const tauriApi = {
   importSubscriptionFile: (name: string, content: string) =>
     invoke<ProfileSummary>('import_subscription_file', { name, content }),
   coreProfileBackup: (restore: boolean) => invoke<void>('core_profile_backup', { restore }),
-  mihomoSnapshot: () => invoke<MihomoSnapshot>('mihomo_snapshot'),
-  mihomoDelay: (name: string, provider: string | null) =>
-    invoke<DelayResult>('mihomo_delay', { name, provider }),
+  mihomoSnapshot: (light: boolean) => invoke<MihomoSnapshot>('mihomo_snapshot', { light }),
+  mihomoDelay: (name: string, provider: string | null, download: boolean) =>
+    invoke<DelayResult>('mihomo_delay', { name, provider, download }),
   mihomoSelect: (name: string) => invoke<void>('mihomo_select', { name }),
   mihomoSelectGroup: (group: string, name: string) =>
     invoke<void>('mihomo_select_group', { group, name }),
@@ -289,11 +293,6 @@ export function tunElevationMessage(platform?: Platform, scope?: TunScope): stri
     return `虚拟网卡 (TUN) 需要管理员权限。${scopeDesc}确认后，系统将通过 pkexec 请求授权启动 TUN 后台。`;
   }
   return `虚拟网卡 (TUN) 会接管系统网络流量。${scopeDesc}确认后，Windows 会请求 UAC 授权启动 TUN 后台，主窗口继续以普通权限运行。`;
-}
-
-export function coreInstallCommand(platform?: Platform): string {
-  if (platform === 'windows') return '.\\scripts\\Install-Mihomo.ps1 -Download';
-  return './scripts/install-mihomo.sh --download';
 }
 
 export function buildProxyEnvText(port: number, platform?: Platform): string {

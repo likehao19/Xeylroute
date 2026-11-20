@@ -14,13 +14,13 @@ import type { ShellController } from './shell';
 import {
   buildProxyEnvText,
   type ConnectionLogRow,
-  coreInstallCommand,
   type CoreStatus,
   type DelayResult,
   formatBytes,
   formatProcessStartedAt,
   type GroupedRunningApp,
   listenTrayAction,
+  listenWindowVisibility,
   looksLikeFullConfig,
   looksLikeShareLinks,
   type MihomoSnapshot,
@@ -31,12 +31,10 @@ import {
   type ProfileNode,
   type ProfileSummary,
   type RoutingMode,
-  type RuleTunMode,
   type RunningProcess,
   type SubscriptionUsage,
   tauriApi,
   tunElevationMessage,
-  type TunScope,
 } from './tauri-bridge';
 import {
   $,
@@ -115,6 +113,7 @@ export function mountDesktopApp(shell: ShellController): void {
   function applyPlatformClass(platform: 'macos' | 'windows' | 'linux'): void {
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
+    root.classList.toggle('vibrant', platform === 'macos');
   }
   const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
   applyPlatformClass(ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : 'linux');
@@ -133,6 +132,9 @@ export function mountDesktopApp(shell: ShellController): void {
   $('winCloseBtn').addEventListener('click', () => { void tauriApi.windowClose(); });
   $('toolbarDragSpacer').addEventListener('dblclick', toggleMaximize);
 
+  $('topSpeedBtn').dataset.tip = '测量全部节点的 HTTP 延迟';
+  $('topSpeedBtn').querySelector('span')!.textContent = '测延迟';
+  $('tunScopeHelp').textContent = '全局 TUN 接管系统流量，可用程序规则指定出口。';
   const sites = createSiteCatalog(true);
   const telemetry = new TelemetryVisualizer(false);
   telemetry.bindInteractions();
@@ -143,6 +145,7 @@ export function mountDesktopApp(shell: ShellController): void {
   let liveCore: MihomoSnapshot | null = null;
   let liveError = '';
   let liveProcesses: RunningProcess[] = [];
+  let processStatus = '正在读取运行中的程序…';
   let liveApps: GroupedRunningApp[] = [];
   let liveLogs: ConnectionLogRow[] = [];
   let networkDetails: NetworkDetails | null = null;
@@ -206,9 +209,9 @@ export function mountDesktopApp(shell: ShellController): void {
     return liveCore?.config?.mode || liveProfile?.mode || 'rule';
   }
 
-  function activeListenPort(): number {
+  function activeListenPort(): number | null {
     const cfg = liveCore?.config;
-    return cfg?.['mixed-port'] || cfg?.port || liveProfile?.mixed || liveProfile?.http || liveStatus?.httpPort || 7890;
+    return cfg?.['mixed-port'] || cfg?.port || liveProfile?.mixed || liveProfile?.http || liveStatus?.httpPort || null;
   }
 
   function isTestableNode(item: { name: string; type?: string }): boolean {
@@ -249,11 +252,15 @@ export function mountDesktopApp(shell: ShellController): void {
     return [...map.values()];
   }
 
+  function hasAutoExit(): boolean {
+    return liveCore ? Boolean(liveCore.proxies?.proxies?.AUTO) : Boolean(liveProfile?.exits.includes('AUTO'));
+  }
+
   function sharedDrawerNodes(): NodeCardItem[] {
     const real = allSelectableNodes();
     const autoNow = liveCore?.proxies?.proxies?.AUTO?.now;
     const policies: NodeCardItem[] = [
-      ...(real.length > 0 || liveCore?.proxies?.proxies?.AUTO
+      ...(hasAutoExit()
         ? [{ name: 'AUTO', type: '自动优选', provider: selectedSubscription || null, policy: true, now: autoNow }]
         : []),
       { name: 'DIRECT', type: '直连', provider: null, policy: true },
@@ -267,8 +274,7 @@ export function mountDesktopApp(shell: ShellController): void {
     if (global?.now) return global.now;
     const saved = subscriptionSelections.get(selectedSubscription);
     if (saved) return saved;
-    const real = allSelectableNodes();
-    if (real.length) return 'AUTO';
+    if (hasAutoExit()) return 'AUTO';
     return 'DIRECT';
   }
 
@@ -559,8 +565,8 @@ export function mountDesktopApp(shell: ShellController): void {
     const mem = conn?.memory;
     $('sideMemText').textContent = typeof mem === 'number' && mem > 0
       ? formatBytes(mem)
-      : `${(conn?.connections?.length ?? 0)} 连接`;
-    telemetry.pushSample(downRate, upRate, conn?.connections?.length ?? 0);
+      : `${(conn?.count ?? 0)} 连接`;
+    telemetry.pushSample(downRate, upRate, conn?.count ?? 0);
   }
 
   async function refreshNetworkDetails(force = false): Promise<void> {
@@ -596,17 +602,23 @@ export function mountDesktopApp(shell: ShellController): void {
       const list = await tauriApi.listRunningProcesses();
       liveProcesses = list;
       liveApps = groupRunningApps(list);
+      processStatus = '暂无可显示的运行程序';
       renderConnect();
       if (shell.getView() === 'split') renderSplit();
       if (showToast) notify(`已扫描 ${liveApps.length} 个应用（${liveProcesses.length} 个进程）`);
     } catch (err) {
+      processStatus = '读取程序失败，可在分流与程序中重试';
+      if (shell.getView() === 'connect') renderConnect();
       if (showToast) notify(cleanError(err), true);
     } finally {
       if (btn) btn.disabled = false;
     }
   }
 
+  let lastFullSnapshot = 0;
+
   function refreshLiveState(afterChange = false): Promise<void> {
+    if (afterChange) lastFullSnapshot = 0;
     if (refreshPromise) {
       if (afterChange) refreshQueued = true;
       return refreshPromise;
@@ -623,6 +635,10 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   async function readLiveState(): Promise<void> {
+    const previousStatus = liveStatus;
+    const previousMode = currentMode();
+    const previousError = liveError;
+    let full = false;
     try {
       liveStatus = await tauriApi.coreStatus();
       liveError = '';
@@ -639,10 +655,17 @@ export function mountDesktopApp(shell: ShellController): void {
       }
 
       if (liveStatus.running) {
-        const snapshot = await tauriApi.mihomoSnapshot();
+        full = !liveCore || Date.now() - lastFullSnapshot >= 15000;
+        const requestedAt = Date.now();
+        const snapshot = await tauriApi.mihomoSnapshot(!full);
         if (!snapshot.providers && liveCore?.providers) snapshot.providers = liveCore.providers;
-        await rememberLiveNodes(snapshot).catch(() => {});
-        await restoreGroupSelections(snapshot).catch(() => {});
+        if (full) {
+          if (!refreshQueued) lastFullSnapshot = requestedAt;
+          await rememberLiveNodes(snapshot).catch(() => {});
+          await restoreGroupSelections(snapshot).catch(() => {});
+        } else {
+          snapshot.proxies = liveCore?.proxies;
+        }
         liveCore = snapshot;
       } else {
         liveCore = null;
@@ -656,7 +679,9 @@ export function mountDesktopApp(shell: ShellController): void {
       liveError = cleanError(err);
     } finally {
       recordTraffic(liveCore?.connections);
-      renderAllSafe();
+      if (full || previousMode !== currentMode() || previousError !== liveError || JSON.stringify(previousStatus) !== JSON.stringify(liveStatus)) {
+        renderAllSafe();
+      }
     }
   }
 
@@ -667,7 +692,7 @@ export function mountDesktopApp(shell: ShellController): void {
     localCoreStart = (async () => {
       const status = await tauriApi.coreStatus();
       if (!status.configured) return false;
-      if (!status.available) throw new Error('尚未安装 Mihomo 代理内核，请先运行安装脚本。');
+      if (!status.available) throw new Error('应用内核缺失，请重新安装完整的 Xeylroute 安装包。');
       if (!status.running) await tauriApi.startLocalCore();
       await refreshLiveState(true);
       if (!liveCore) throw new Error(liveError || '暂时无法连接到运行中的代理内核。');
@@ -688,7 +713,7 @@ export function mountDesktopApp(shell: ShellController): void {
       await localCoreStart?.catch(() => {});
       const current = await tauriApi.coreStatus();
       if (action.enabled && !current.available) {
-        throw new Error(`缺少代理内核（${platformLabel(current.platform)}），请先执行：${coreInstallCommand(current.platform)}`);
+        throw new Error('应用内核缺失，请重新安装完整的 Xeylroute 安装包。');
       }
       if (action.enabled && !current.configured) {
         throw new Error('请先在「订阅管理」中添加订阅、粘贴节点链接或导入配置文件。');
@@ -697,6 +722,7 @@ export function mountDesktopApp(shell: ShellController): void {
       if (action.control === 'tun') {
         if (action.enabled === current.tun) return;
         if (action.enabled) {
+          if (current.tunScope === 'selected') throw new Error('仅指定程序接管暂不可用。需要全局 TUN 时，请先在设置中更改范围。');
           const accepted = await confirmSheet({
             title: '开启虚拟网卡 (TUN)',
             message: tunElevationMessage(current.platform, liveProfile?.tunScope),
@@ -830,7 +856,7 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
-  async function testSingleNode(node: NodeCardItem): Promise<void> {
+  async function testSingleNode(node: NodeCardItem, download = true): Promise<void> {
     if (networkUpdating || changingSubscription) return;
     if (!(node.name === 'AUTO' || isTestableNode(node))) return;
     const key = delayKey(node.provider, node.name);
@@ -840,7 +866,9 @@ export function mountDesktopApp(shell: ShellController): void {
     try {
       const ready = await ensureLocalCore();
       if (!ready) throw new Error('请先导入订阅或节点链接。');
-      const result = await tauriApi.mihomoDelay(node.name, node.policy ? null : node.provider);
+      const result = await tauriApi.mihomoDelay(node.name, node.policy ? null : node.provider, download);
+      const previous = liveDelays.get(key);
+      if (!download && previous && typeof previous !== 'string') result.mbps = previous.mbps;
       liveDelays.set(key, result);
     } catch (err) {
       liveDelays.set(key, cleanError(err));
@@ -850,7 +878,7 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
-  async function batchTestNodes(): Promise<void> {
+  async function batchTestNodes(download = true): Promise<void> {
     if (batchTesting || networkUpdating || changingSubscription) return;
     const nodes = allSelectableNodes();
     if (!nodes.length) {
@@ -863,8 +891,8 @@ export function mountDesktopApp(shell: ShellController): void {
       if (!await ensureLocalCore()) throw new Error('请先添加订阅或节点链接。');
       notify(`正在顺序测速 ${nodes.length} 个节点…`);
       for (const node of nodes) {
-        if (!liveStatus?.running || changingSubscription) break;
-        await testSingleNode(node);
+        if (!liveStatus?.running || changingSubscription) { notify('测速已中止'); return; }
+        await testSingleNode(node, download);
       }
       notify('全部节点测速完成');
     } catch (err) {
@@ -958,16 +986,8 @@ export function mountDesktopApp(shell: ShellController): void {
       return;
     }
     if (!liveStatus.available) {
-      const cmd = coreInstallCommand(liveStatus.platform);
       banner.hidden = false;
-      banner.innerHTML = `
-        <div class="desktop-banner-text">
-          <strong>未检测到 Mihomo 代理内核（${esc(platformLabel(liveStatus.platform))}）</strong>
-          <small>数据目录：${esc(liveStatus.appData)} · 运行下方命令即可自动下载校验并安装：</small>
-          <code class="desktop-banner-code">${esc(cmd)}</code>
-        </div>
-        <button type="button" class="glass-btn-primary compact lg-track" data-copy-cmd="${esc(cmd)}">复制安装命令</button>
-      `;
+      banner.textContent = '应用内核缺失，请重新安装完整的 Xeylroute 安装包。';
       return;
     }
     if (!liveStatus.configured) {
@@ -995,6 +1015,15 @@ export function mountDesktopApp(shell: ShellController): void {
     banner.hidden = true;
   }
 
+  function programPathExits(): Map<string, string> {
+    const exits = new Map<string, string>();
+    for (const rule of liveProfile?.processRules || []) {
+      const path = normalizedProgramPath(rule.target);
+      if (rule.kind === 'PROCESS-PATH' && !exits.has(path)) exits.set(path, rule.exit);
+    }
+    return exits;
+  }
+
   function renderConnect(): void {
     renderDesktopBanner();
     const realNodes = allSelectableNodes();
@@ -1009,7 +1038,8 @@ export function mountDesktopApp(shell: ShellController): void {
     $('kpiTimer').textContent = fmtTime(elapsedSec);
     $('kpiRules').textContent = `${activeRuleCount} 条`;
     $('goAllNodesBtn').textContent = `全部 ${realNodes.length} 个节点 ›`;
-    $('homePortFoot').textContent = `127.0.0.1:${activeListenPort()}`;
+    const port = activeListenPort();
+    $('homePortFoot').textContent = port ? `127.0.0.1:${port}` : '无 HTTP 监听';
 
     $('heroFlag').innerHTML = flagSvg(autoNow || activeExit);
     $('heroNodeName').textContent = displayName || '—';
@@ -1027,6 +1057,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const subLabel = selectedSubscription || (activeNodeObj?.standalone ? '独立导入节点' : '默认配置');
     $('heroNodeMeta').textContent = `${subLabel} · ${liveStatus?.running ? (exitIp ? `出口 ${exitIp}` : '代理运行中') : '代理未启动'}`;
     $('chartModeBadge').textContent = `${{ rule: '规则', global: '全局', direct: '直连' }[currentMode()]}模式 · ${captureSummary() || (liveStatus?.running ? '本地监听' : '未接管')}`;
+    $('homeAutoFoot').parentElement!.hidden = !hasAutoExit();
     $('homeAutoFoot').textContent = activeExit === 'AUTO'
       ? `已启用 AUTO 智能优选${autoNow ? ` · 当前 ${autoNow}` : ''}`
       : `自动优选（AUTO）${autoNow ? `推荐：${autoNow}` : '可用'}`;
@@ -1053,18 +1084,13 @@ export function mountDesktopApp(shell: ShellController): void {
     }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">${realNodes.length ? '没有匹配的节点' : '暂无节点，请在右上角点击「导入」'}</div>`;
 
     // Right App Exits (real top 4 grouped apps)
-    const ruleMap = new Map<string, string>();
-    for (const line of liveProfile?.rules || []) {
-      if (!line.startsWith('PROCESS-PATH,') || liveProfile?.disabledRules?.includes(line)) continue;
-      const [, path, exit] = line.split(',');
-      if (path && exit) ruleMap.set(normalizedProgramPath(path), exit);
-    }
+    const ruleMap = programPathExits();
     const topApps = liveApps.slice(0, 4);
     $('homeAppExits').innerHTML = topApps.length
       ? topApps.map(app => {
-          const exits = new Set(app.paths.map(p => ruleMap.get(normalizedProgramPath(p)) || 'GLOBAL'));
+          const exits = new Set(app.paths.map(p => ruleMap.get(normalizedProgramPath(p)) || ''));
           const val = exits.size === 1 ? [...exits][0] : 'GLOBAL';
-          const label = exits.size > 1 ? '多项规则' : exitDisplayLabel(val);
+          const label = exits.size > 1 ? '多项规则' : val ? exitDisplayLabel(val) : '按分流规则';
           return `
             <div class="mac-row">
               <div class="mac-row-left">
@@ -1084,7 +1110,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           `;
         }).join('')
-      : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:12px">正在读取运行中的程序…</div>`;
+      : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:12px">${processStatus}</div>`;
 
     // Right Active Subscription Card
     const activeSub = liveProfile?.providers.find(p => p.name === selectedSubscription) || liveProfile?.providers[0];
@@ -1163,6 +1189,10 @@ export function mountDesktopApp(shell: ShellController): void {
     }
 
     const q = shell.getSearch().trim().toLowerCase();
+    if (nodesSub === 'sites') {
+      renderSiteTests();
+      return;
+    }
     const shared = sharedDrawerNodes().filter(n => !q || [n.name, n.type].join(' ').toLowerCase().includes(q));
     const activeExit = activeGlobalExit();
 
@@ -1255,7 +1285,7 @@ export function mountDesktopApp(shell: ShellController): void {
                     <div class="${wrapCls}">
                       ${btnHtml}
                       <div class="cp-node-tools">
-                        ${testable ? `<button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="${esc(n.provider || '')}" data-tip="测速">${SF_TEST}</button>` : ''}
+                        ${testable ? `<button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="${esc(n.provider || '')}" data-tip="测量延迟和 1 MB 下载速度">${SF_TEST}</button>` : ''}
                         ${removable ? `<button type="button" class="sf-icon-btn danger" data-remove-node="${esc(n.name)}" data-tip="删除节点">${SF_TRASH}</button>` : ''}
                       </div>
                     </div>
@@ -1268,6 +1298,9 @@ export function mountDesktopApp(shell: ShellController): void {
       `;
     }).join('');
 
+  }
+
+  function renderSiteTests(): void {
     $('nodesSitesPane').innerHTML = `
       <div class="grid-2col">
         ${sites.map(([cat, items], ci) => `
@@ -1307,11 +1340,6 @@ export function mountDesktopApp(shell: ShellController): void {
     `;
   }
 
-  function tunModeLabel(mode: RuleTunMode): string {
-    if (mode === 'on') return 'TUN 开';
-    if (mode === 'off') return 'TUN 关';
-    return 'TUN 继承';
-  }
 
   function renderSplit(): void {
     $('splitRulesPane').hidden = splitSub !== 'rules';
@@ -1340,8 +1368,12 @@ export function mountDesktopApp(shell: ShellController): void {
     });
 
     const q = shell.getSearch().trim().toLowerCase();
-    const tunTargets = liveProfile?.tunTargets || {};
-    const tunGroups = new Set(liveProfile?.tunGroups || []);
+    if (splitSub === 'groups') renderGroups(q);
+    else if (splitSub === 'procs') renderProcesses(q);
+    else renderRules(q);
+  }
+
+  function renderRules(q: string): void {
     const disabledRules = new Set(liveProfile?.disabledRules || []);
     const disabledGroups = new Set(liveProfile?.disabledGroups || []);
 
@@ -1373,7 +1405,6 @@ export function mountDesktopApp(shell: ShellController): void {
               ? renderSiteIcon(r.payload, shortName, 'blue')
               : `<span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>`;
           const editable = /^(?:DOMAIN|DOMAIN-SUFFIX|PROCESS-PATH),[^,]+,[^,]+$/.test(r.line);
-          const tunOverride: RuleTunMode = tunTargets[r.payload] || 'inherit';
           return `
             <div class="mac-row">
               <div class="mac-row-left">
@@ -1384,13 +1415,6 @@ export function mountDesktopApp(shell: ShellController): void {
                 </div>
               </div>
               <div class="rule-right-cols live-cols">
-                ${isProc ? macPopupBtnHtml({
-                  value: tunOverride,
-                  label: tunModeLabel(tunOverride),
-                  width: 96,
-                  popupKind: 'rule-tun',
-                  popupKey: r.payload,
-                }) : ''}
                 <span class="pill ${r.active ? tone : 'orange'}">${esc(r.exit)}${r.active ? '' : ' · 停用'}</span>
                 <label class="mac-switch">
                   <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
@@ -1405,7 +1429,9 @@ export function mountDesktopApp(shell: ShellController): void {
       </div>
     `;
 
-    // Sub-tab 2: Groups
+  }
+
+  function renderGroups(q: string): void {
     const groups = (liveProfile?.groups || []).filter(g => !q || g.name.toLowerCase().includes(q));
     $('splitGroupsPane').innerHTML = groups.length
       ? `
@@ -1417,7 +1443,6 @@ export function mountDesktopApp(shell: ShellController): void {
               .filter(item => liveProfile?.ruleExits?.[item.index] === g.name && !item.line.startsWith('MATCH,'));
             const editable = ['select', 'url-test', 'fallback'].includes(g.type);
             const curExit = live?.now || g.proxies?.[0] || g.use?.[0] || '—';
-            const groupTunOn = tunGroups.has(g.name);
             return `
               <div class="mac-card" style="display:flex;flex-direction:column;gap:12px;${g.enabled ? '' : 'opacity:0.58'}">
                 <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1438,10 +1463,6 @@ export function mountDesktopApp(shell: ShellController): void {
                   ${live?.type === 'Selector' && live.all?.length
                     ? macPopupBtnHtml({ value: curExit, label: curExit, width: 162, popupKind: 'group-exit', popupKey: g.name })
                     : `<span class="pill blue">${esc(curExit)}</span>`}
-                  <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer" data-tip="在指定目标 TUN 模式下对该分组内的程序开启 TUN">
-                    <span>组 TUN</span>
-                    <span class="mac-switch"><input type="checkbox" data-group-tun="${esc(g.name)}" ${groupTunOn ? 'checked' : ''}><i></i></span>
-                  </label>
                 </div>
                 <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:12px">
                   <summary style="cursor:pointer;color:var(--accent);font-weight:580">管理组成员 (${members.length})</summary>
@@ -1465,20 +1486,14 @@ export function mountDesktopApp(shell: ShellController): void {
       `
       : `<div class="mac-card" style="padding:36px;text-align:center;color:var(--muted)">暂无策略分组，点击右上角「+ 创建分组」创建</div>`;
 
-    // Sub-tab 3: Running Apps & Processes
+  }
+
+  function renderProcesses(q: string): void {
     document.querySelectorAll<HTMLElement>('#procScanSeg button').forEach(b =>
       b.classList.toggle('active', b.dataset.scanType === procScanType)
     );
     const groupNamesSet = new Set((liveProfile?.groups || []).map(g => g.name));
-    const pathRules = new Map<string, string>();
-    for (const line of liveProfile?.rules || []) {
-      if (!line.startsWith('PROCESS-PATH,') || disabledRules.has(line)) continue;
-      const [, path, exit] = line.split(',');
-      if (path && exit && !pathRules.has(normalizedProgramPath(path))) {
-        pathRules.set(normalizedProgramPath(path), exit);
-      }
-    }
-
+    const pathRules = programPathExits();
     const matchQuery = (item: RunningProcess) =>
       !q || [item.name, item.exe, item.path, String(item.pid)].some(v => v.toLowerCase().includes(q));
 
@@ -1495,10 +1510,6 @@ export function mountDesktopApp(shell: ShellController): void {
           const assignedExits = new Set(paths.map(p => pathRules.get(normalizedProgramPath(p)) || ''));
           const assigned = assignedExits.size === 1 ? [...assignedExits][0] : '';
           const groupTag = assigned && groupNamesSet.has(assigned) ? assigned : '未分组';
-          const tunState: RuleTunMode = tunTargets[item.path] || 'inherit';
-          const effectiveTun = liveStatus?.tun
-            ? (liveProfile?.tunScope === 'all' || tunState === 'on' || (tunState === 'inherit' && tunGroups.has(assigned)))
-            : false;
           const metric = appItem ? `${appItem.instances} 个进程` : `PID ${item.pid} · ${item.threadCount} 线程`;
           return `
             <div class="mac-row">
@@ -1512,15 +1523,8 @@ export function mountDesktopApp(shell: ShellController): void {
               <div style="display:flex;align-items:center;gap:7px;flex:none">
                 <span class="pill">${esc(groupTag)}</span>
                 ${macPopupBtnHtml({
-                  value: tunState,
-                  label: effectiveTun && tunState === 'inherit' ? 'TUN 生效' : tunModeLabel(tunState),
-                  width: 96,
-                  popupKind: 'app-tun',
-                  popupKey: item.path,
-                })}
-                ${macPopupBtnHtml({
                   value: assigned || 'GLOBAL',
-                  label: assignedExits.size > 1 ? '多项规则' : exitDisplayLabel(assigned || 'GLOBAL'),
+                  label: assignedExits.size > 1 ? '多项规则' : (assigned ? exitDisplayLabel(assigned) : '按分流规则'),
                   width: 132,
                   popupKind: 'app-exit',
                   popupKey: item.path,
@@ -1621,7 +1625,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px">
-            <button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="" data-tip="测速">${SF_TEST}</button>
+            <button type="button" class="sf-icon-btn" data-test-node="${esc(n.name)}" data-test-provider="" data-tip="测量延迟和 1 MB 下载速度">${SF_TEST}</button>
             <button type="button" class="sf-icon-btn danger" data-remove-node="${esc(n.name)}" data-tip="删除节点">${SF_TRASH}</button>
           </div>
         </div>
@@ -1647,21 +1651,22 @@ export function mountDesktopApp(shell: ShellController): void {
       ? `<i class="mini-dot"></i> 已接管 (${scope === 'selected' ? '仅指定分组和程序' : '全部受支持流量'})`
       : `<i class="mini-dot off"></i> 停用`;
 
-    $('setTunScopeHost').innerHTML = macPopupBtnHtml({
-      id: 'setTunScopeBtn',
-      value: scope,
-      label: scope === 'selected' ? '仅指定分组和程序' : '全部受支持流量',
-      width: 166,
-      popupKind: 'tun-scope',
-      disabled: !liveProfile,
-    });
+    const scopeHost = $('setTunScopeHost');
+    if (scopeHost.dataset.scope !== scope) {
+      scopeHost.dataset.scope = scope;
+      scopeHost.innerHTML = scope === 'selected'
+        ? '<button type="button" class="glass-btn-soft" data-popup-kind="tun-scope">改用全局范围</button>'
+        : '<span class="pill">全部受支持流量</span>';
+    }
 
     const isRunning = Boolean(liveStatus?.running);
     const mixIn = $<HTMLInputElement>('portMixedInput');
     const httpIn = $<HTMLInputElement>('portHttpInput');
     const socksIn = $<HTMLInputElement>('portSocksInput');
     const portsFocused = [mixIn, httpIn, socksIn].includes(document.activeElement as HTMLInputElement);
-    if (!portsFocused && liveProfile) {
+    const configuredPorts = liveProfile && [liveProfile.mixed, liveProfile.http, liveProfile.socks].join(',');
+    if (!portsFocused && liveProfile && mixIn.dataset.configured !== configuredPorts) {
+      mixIn.dataset.configured = configuredPorts!;
       mixIn.value = String(liveProfile.mixed ?? 0);
       httpIn.value = String(liveProfile.http ?? 0);
       socksIn.value = String(liveProfile.socks ?? 0);
@@ -1682,8 +1687,7 @@ export function mountDesktopApp(shell: ShellController): void {
         ? `Mihomo 内核已就绪 (${platformLabel(liveStatus.platform)})`
         : `未安装 Mihomo 内核 (${platformLabel(liveStatus.platform)})`;
       $('setCoreSub').textContent = liveStatus.appData;
-      const copyBtn = $('copyCoreInstallBtn');
-      copyBtn.hidden = liveStatus.available;
+
     }
   }
 
@@ -2346,7 +2350,7 @@ export function mountDesktopApp(shell: ShellController): void {
     void performNetworkControl({ control: 'power', enabled: !isOn });
   });
 
-  $('topSpeedBtn').addEventListener('click', () => void batchTestNodes());
+  $('topSpeedBtn').addEventListener('click', () => void batchTestNodes(false));
   $('topImportBtn').addEventListener('click', openImportSheet);
   $('heroProbeBtn').addEventListener('click', () => {
     const active = activeGlobalExit();
@@ -2452,6 +2456,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   $('copyEnvBtn').addEventListener('click', () => {
     const port = activeListenPort();
+    if (!port) { notify('请先配置 HTTP 或混合监听端口。'); return; }
     const text = buildProxyEnvText(port, liveStatus?.platform);
     navigator.clipboard?.writeText(text).then(
       () => notify(`已复制终端代理环境变量 (127.0.0.1:${port})`),
@@ -2473,14 +2478,6 @@ export function mountDesktopApp(shell: ShellController): void {
     } finally {
       btn.disabled = !liveCore;
     }
-  });
-
-  $('copyCoreInstallBtn').addEventListener('click', () => {
-    const cmd = coreInstallCommand(liveStatus?.platform);
-    navigator.clipboard?.writeText(cmd).then(
-      () => notify('已复制内核安装命令'),
-      () => notify('无法访问剪贴板', true),
-    );
   });
 
   $('exportBackupBtn').addEventListener('click', async () => {
@@ -2562,55 +2559,14 @@ export function mountDesktopApp(shell: ShellController): void {
       }
 
       if (kind === 'tun-scope') {
-        openMacMenu(popTrigger, [
-          { value: 'all', label: '全部受支持流量' },
-          { value: 'selected', label: '仅指定分组和程序' },
-        ], val, async nextVal => {
-          const scope = nextVal as TunScope;
-          const res = await commitProfileEdit({ kind: 'tunScope', scope }, 'TUN 接管范围已更新');
-          if (res && liveStatus?.tun) {
-            const restart = await confirmSheet({
-              title: '应用新的 TUN 范围',
-              message: '虚拟网卡 (TUN) 正在运行，需要重启 TUN 后台才能应用新的接管范围。是否立即重启？',
-              confirmLabel: '立即重启 TUN',
-            });
-            if (restart) {
-              await performNetworkControl({ control: 'tun', enabled: false });
-              await performNetworkControl({ control: 'tun', enabled: true });
-            }
-          }
-        });
+        await commitProfileEdit({ kind: 'tunScope', scope: 'all' }, '已选择全局 TUN 范围');
         return;
       }
 
-      if (kind === 'rule-tun' || kind === 'app-tun') {
-        openMacMenu(popTrigger, [
-          { value: 'inherit', label: '继承分组设置' },
-          { value: 'on', label: '强制开启 TUN' },
-          { value: 'off', label: '禁用 TUN' },
-        ], val, async nextVal => {
-          const mode = nextVal as RuleTunMode;
-          const app = kind === 'app-tun' ? liveApps.find(a => a.path === key) : undefined;
-          const targets = app ? app.paths : [key];
-          for (const t of targets) {
-            await commitProfileEdit({ kind: 'setRuleTun', target: t, mode });
-          }
-          notify(`目标 TUN 已设为：${tunModeLabel(mode)}`);
-        });
-        return;
-      }
     }
 
     if (!target.closest('#macMenuPopover')) closeMacMenu();
 
-    const copyCmd = target.closest<HTMLElement>('[data-copy-cmd]');
-    if (copyCmd?.dataset.copyCmd) {
-      navigator.clipboard?.writeText(copyCmd.dataset.copyCmd).then(
-        () => notify('已复制安装命令'),
-        () => notify('无法访问剪贴板', true),
-      );
-      return;
-    }
     if (target.id === 'bannerImportBtn' || target.id === 'homeQuickImportBtn') {
       openImportSheet();
       return;
@@ -2802,14 +2758,7 @@ export function mountDesktopApp(shell: ShellController): void {
       void commitProfileEdit({ kind: 'toggleGroup', name: input.dataset.toggleGroup, enabled });
       return;
     }
-    if (input.dataset.groupTun) {
-      const enabled = input.checked;
-      input.checked = !enabled;
-      void commitProfileEdit(
-        { kind: 'toggleGroupTun', name: input.dataset.groupTun, enabled },
-        `分组「${input.dataset.groupTun}」TUN 已${enabled ? '开启' : '关闭'}`,
-      );
-    }
+
   });
 
   // Tray actions from Rust backend
@@ -2836,17 +2785,30 @@ export function mountDesktopApp(shell: ShellController): void {
   telemetry.renderHeatmap();
   telemetry.paintChart();
   void reloadProfile();
-  void refreshLiveState();
   void refreshProcesses(false);
-  void refreshNetworkDetails();
 
-  window.setInterval(() => {
-    void refreshLiveState();
-  }, 2000);
+  let nativeVisible = true;
+  let pollTimer = 0;
+  let clockTimer = 0;
+  function updateTimers(): void {
+    clearInterval(pollTimer);
+    clearInterval(clockTimer);
+    lastTraffic = null;
+    if (document.hidden || !nativeVisible) return;
+    void refreshLiveState(true);
+    pollTimer = window.setInterval(() => void refreshLiveState(), 2000);
+    clockTimer = window.setInterval(() => {
+      if (sessionStartedAt && shell.getView() === 'connect') {
+        $('kpiTimer').textContent = fmtTime(Math.floor((Date.now() - sessionStartedAt) / 1000));
+      }
+    }, 1000);
+  }
 
-  window.setInterval(() => {
-    if (sessionStartedAt && shell.getView() === 'connect') {
-      $('kpiTimer').textContent = fmtTime(Math.floor((Date.now() - sessionStartedAt) / 1000));
-    }
-  }, 1000);
+  document.addEventListener('visibilitychange', updateTimers);
+  void listenWindowVisibility(visible => {
+    if (nativeVisible === visible) return;
+    nativeVisible = visible;
+    updateTimers();
+  });
+  updateTimers();
 }

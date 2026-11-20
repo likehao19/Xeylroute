@@ -19,52 +19,11 @@ pub fn tun_scope(profile: &Value) -> &str {
     }
 }
 
-pub fn scoped_tun_process_paths(profile: &Value) -> Vec<String> {
-    let scoped = scoped_profile(profile);
-    let view = scoped.as_ref();
-    let tun_groups: std::collections::HashSet<&str> = entries(view, "routepilot-tun-groups")
-        .filter_map(Value::as_str)
-        .filter(|name| !disabled(view, "routepilot-disabled-groups", name))
-        .collect();
-    let targets_map = view["routepilot-tun-targets"].as_object();
-    let mut paths = Vec::new();
-    let mut seen = std::collections::HashSet::new();
 
-    // 1. Explicit per-target "on" overrides
-    if let Some(map) = targets_map {
-        for (target, mode) in map {
-            if mode.as_str() == Some("on")
-                && std::path::Path::new(target).is_absolute()
-                && seen.insert(target.to_lowercase())
-            {
-                paths.push(target.clone());
-            }
-        }
-    }
-
-    // 2. Active PROCESS-PATH rules targeting a TUN-enabled group (unless explicitly "off")
-    let mut active_rules = view["rules"].as_array().cloned().unwrap_or_default();
-    apply_rule_order(view, &mut active_rules);
-    for rule in active_rules.iter().filter_map(Value::as_str) {
-        let Some(rest) = rule.strip_prefix("PROCESS-PATH,") else {
-            continue;
-        };
-        let Some((target, _)) = rest.split_once(',') else {
-            continue;
-        };
-        let target = target.trim();
-        let override_mode = targets_map
-            .and_then(|map| map.get(target))
-            .and_then(Value::as_str);
-        if override_mode == Some("off") {
-            continue;
-        }
-        let in_tun_group = rule_exit(rule).is_some_and(|exit| tun_groups.contains(exit));
-        if (override_mode == Some("on") || in_tun_group) && seen.insert(target.to_lowercase()) {
-            paths.push(target.to_owned());
-        }
-    }
-    paths
+/// True when this application owns the rule list being run: a profile it created, or any profile
+/// narrowed to a subscription. A complete configuration the user imported is left as written.
+pub fn is_managed(profile: &Value) -> bool {
+    profile["routepilot-created"] == true || active_subscription(profile).is_some()
 }
 
 pub fn active_subscription(profile: &Value) -> Option<&str> {
@@ -1436,7 +1395,7 @@ mod tests {
     }
 
     #[test]
-    fn scoped_tun_resolves_group_and_explicit_target_overrides() {
+    fn scoped_tun_preferences_are_saved_outside_the_core_configuration() {
         let mut config = json!({
             "routepilot-created": true,
             "proxy-groups": [{"name":"AI","type":"select","proxies":["DIRECT"]}],
@@ -1479,12 +1438,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(tun_scope(&config), "selected");
-        let paths = scoped_tun_process_paths(&config);
-        assert!(paths.contains(&"/Applications/Claude.app/Contents/MacOS/Claude".to_owned()));
-        assert!(paths.contains(&"/Applications/Codex.app/Contents/MacOS/Codex".to_owned()));
-        assert!(!paths.contains(&"/Applications/Chrome.app/Contents/MacOS/Chrome".to_owned()));
-
-        // Runtime config strips RoutePilot TUN metadata cleanly
         let rt = runtime_profile(&config);
         assert!(rt.get("routepilot-tun-scope").is_none());
         assert!(rt.get("routepilot-tun-groups").is_none());

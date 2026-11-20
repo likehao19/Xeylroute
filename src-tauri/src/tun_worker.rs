@@ -338,10 +338,32 @@ impl Worker {
 
     #[cfg(not(windows))]
     pub fn stop(&self) -> io::Result<()> {
-        let _ = self.lease.shutdown(Shutdown::Both);
-        // Give the elevated worker a short window to PATCH tun.enable=false and kill Mihomo.
-        std::thread::sleep(Duration::from_millis(320));
-        Ok(())
+        // Closing our write half is the stop signal. The elevated worker then turns TUN off,
+        // stops Mihomo and exits, which closes its end of the lease. Waiting for that close
+        // keeps the next start from racing the old core for the same ports.
+        let _ = self.lease.set_nonblocking(false);
+        let _ = self
+            .lease
+            .set_read_timeout(Some(Duration::from_millis(250)));
+        let _ = self.lease.shutdown(Shutdown::Write);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut byte = [0_u8; 1];
+        while Instant::now() < deadline {
+            match (&self.lease).read(&mut byte) {
+                Ok(0) => return Ok(()),
+                Ok(_) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                    ) => {}
+                // A reset means the worker is already gone.
+                Err(_) => return Ok(()),
+            }
+        }
+        // Status polls peek at the lease; leave it non-blocking so they stay instant.
+        let _ = self.lease.set_nonblocking(true);
+        Err(io::Error::new(io::ErrorKind::TimedOut, "TUN 后台尚未退出"))
     }
 }
 

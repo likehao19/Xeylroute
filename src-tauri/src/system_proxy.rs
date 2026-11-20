@@ -3,6 +3,8 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::Path,
+    sync::Mutex,
+    time::{Duration, Instant},
 };
 
 const JOURNAL: &str = "system-proxy-recovery.json";
@@ -86,7 +88,7 @@ mod platform {
             .map_err(|err| err.to_string())
     }
 
-    pub fn desired(port: u16, _previous: &ProxySettings) -> ProxySettings {
+    pub fn desired(port: u16, _socks: Option<u16>, _previous: &ProxySettings) -> ProxySettings {
         ProxySettings {
             flags: PROXY_TYPE_DIRECT | PROXY_TYPE_PROXY,
             server: format!("127.0.0.1:{port}"),
@@ -262,11 +264,22 @@ mod platform {
         Ok(ProxySettings { services: entries })
     }
 
-    pub fn desired(port: u16, previous: &ProxySettings) -> ProxySettings {
-        let target = ServiceProxy {
+    pub fn desired(port: u16, socks: Option<u16>, previous: &ProxySettings) -> ProxySettings {
+        let local = |port: u16| ServiceProxy {
             enabled: true,
             server: "127.0.0.1".into(),
             port,
+        };
+        // macOS sends non-HTTP traffic to the SOCKS entry, so it must name a port that speaks
+        // SOCKS5. With only an HTTP listener the entry is switched off rather than pointed at a
+        // port that would reject the handshake.
+        let socks = match socks {
+            Some(port) => local(port),
+            None => ServiceProxy {
+                enabled: false,
+                server: String::new(),
+                port: 0,
+            },
         };
         ProxySettings {
             services: previous
@@ -274,9 +287,9 @@ mod platform {
                 .iter()
                 .map(|entry| ServiceEntry {
                     service: entry.service.clone(),
-                    http: target.clone(),
-                    https: target.clone(),
-                    socks: target.clone(),
+                    http: local(port),
+                    https: local(port),
+                    socks: socks.clone(),
                 })
                 .collect(),
         }
@@ -355,7 +368,7 @@ mod platform {
         Ok(ProxySettings { mode, host, port })
     }
 
-    pub fn desired(port: u16, _previous: &ProxySettings) -> ProxySettings {
+    pub fn desired(port: u16, _socks: Option<u16>, _previous: &ProxySettings) -> ProxySettings {
         ProxySettings {
             mode: "manual".into(),
             host: "127.0.0.1".into(),
@@ -432,10 +445,42 @@ pub fn is_owned(dir: &Path) -> Result<bool, String> {
     Ok(restore_target(&recovery, &query_matching(&recovery)?).is_some())
 }
 
+/// How long a status poll may reuse the last ownership answer. Reading the live setting costs
+/// three `networksetup` launches per network service on macOS (three `gsettings` on Linux), and
+/// the interface asks every two seconds; the only thing the wait delays is noticing that another
+/// application replaced the proxy.
+const OWNED_TTL: Duration = Duration::from_secs(8);
+
+static OWNED: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+
+fn forget_owned() {
+    if let Ok(mut cached) = OWNED.lock() {
+        *cached = None;
+    }
+}
+
+/// Ownership for status display. Anything that decides whether to write the system setting must
+/// call [`is_owned`] instead.
+pub fn is_owned_cached(dir: &Path) -> Result<bool, String> {
+    if let Ok(cached) = OWNED.lock() {
+        if let Some((at, owned)) = *cached {
+            if at.elapsed() < OWNED_TTL {
+                return Ok(owned);
+            }
+        }
+    }
+    let owned = is_owned(dir)?;
+    if let Ok(mut cached) = OWNED.lock() {
+        *cached = Some((Instant::now(), owned));
+    }
+    Ok(owned)
+}
+
 pub fn restore(dir: &Path) -> Result<(), String> {
     let Some(recovery) = load(dir)? else {
         return Ok(());
     };
+    forget_owned();
     let current = query_matching(&recovery)?;
     if let Some(previous) = restore_target(&recovery, &current) {
         platform::apply(previous)?;
@@ -443,13 +488,16 @@ pub fn restore(dir: &Path) -> Result<(), String> {
     fs::remove_file(dir.join(JOURNAL)).map_err(|err| err.to_string())
 }
 
-pub fn enable(dir: &Path, port: u16) -> Result<(), String> {
+/// `socks` is the port that actually speaks SOCKS5 (the mixed port, or a dedicated SOCKS port).
+/// It is `None` when only an HTTP listener is configured.
+pub fn enable(dir: &Path, port: u16, socks: Option<u16>) -> Result<(), String> {
+    forget_owned();
     if is_owned(dir)? {
         return Ok(());
     }
     restore(dir)?;
     let previous = platform::query()?;
-    let applied = platform::desired(port, &previous);
+    let applied = platform::desired(port, socks, &previous);
     if previous == applied {
         return Err(platform::ALREADY_OWNED_ERR.into());
     }
@@ -476,11 +524,9 @@ pub fn enable(dir: &Path, port: u16) -> Result<(), String> {
             Err(platform::APPLY_MISMATCH_ERR.into())
         }
     });
-    if let Err(error) = result {
-        // Leave the recovery journal intact when the result of a partial write is uncertain.
-        return Err(error);
-    }
-    Ok(())
+    forget_owned();
+    // On failure the recovery journal stays in place: the result of a partial write is uncertain.
+    result
 }
 
 #[cfg(test)]
@@ -559,5 +605,41 @@ mod tests {
         };
         assert_eq!(restore_target(&recovery, &applied), Some(&prev));
         assert_eq!(restore_target(&recovery, &prev), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_socks_entry_only_names_a_port_that_speaks_socks() {
+        let off = platform::ServiceProxy {
+            enabled: false,
+            server: String::new(),
+            port: 0,
+        };
+        let previous = ProxySettings {
+            services: vec![platform::ServiceEntry {
+                service: "Wi-Fi".into(),
+                http: off.clone(),
+                https: off.clone(),
+                socks: platform::ServiceProxy {
+                    enabled: true,
+                    server: "10.0.0.2".into(),
+                    port: 1080,
+                },
+            }],
+        };
+
+        let mixed = platform::desired(7890, Some(7890), &previous);
+        assert_eq!(mixed.services[0].http.port, 7890);
+        assert_eq!(mixed.services[0].https.port, 7890);
+        assert!(mixed.services[0].socks.enabled);
+        assert_eq!(mixed.services[0].socks.port, 7890);
+
+        let split = platform::desired(8080, Some(1081), &previous);
+        assert_eq!(split.services[0].http.port, 8080);
+        assert_eq!(split.services[0].socks.port, 1081);
+
+        let http_only = platform::desired(8080, None, &previous);
+        assert_eq!(http_only.services[0].http.port, 8080);
+        assert_eq!(http_only.services[0].socks, off);
     }
 }

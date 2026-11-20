@@ -149,6 +149,7 @@ impl Controller {
             .build()
             .map_err(|err| err.to_string())?;
         const SIZE: usize = 1_000_000;
+        let start = Instant::now();
         let mut response = client
             .get("https://speed.cloudflare.com/__down?bytes=1000000")
             .send()
@@ -156,7 +157,6 @@ impl Controller {
             .map_err(|err| err.to_string())?
             .error_for_status()
             .map_err(|err| err.to_string())?;
-        let start = Instant::now();
         let mut bytes = 0;
         while let Some(chunk) = response.chunk().await.map_err(|err| err.to_string())? {
             bytes += chunk.len();
@@ -180,37 +180,122 @@ pub fn take(state: &LiveController) -> Result<Controller, String> {
         .ok_or("代理服务未启动。".into())
 }
 
+// The interface polls this snapshot for as long as the window is open, so every field that
+// crosses the IPC bridge is paid for again on each tick. A raw `/proxies` entry carries per-URL
+// health history and transport flags, and `/connections` lists every open connection; the
+// interface reads a handful of fields from each, so only those are forwarded.
+
+fn slim_proxy(entry: &Value) -> Value {
+    let mut slim = serde_json::Map::new();
+    for key in ["name", "type", "now", "all", "provider"] {
+        if let Some(value) = entry.get(key).filter(|value| !value.is_null()) {
+            slim.insert(key.into(), value.clone());
+        }
+    }
+    if let Some(delay) = entry["history"]
+        .as_array()
+        .and_then(|history| history.last())
+        .and_then(|latest| latest.get("delay"))
+    {
+        slim.insert("history".into(), json!([{ "delay": delay }]));
+    }
+    Value::Object(slim)
+}
+
+fn slim_proxies(raw: &Value) -> Value {
+    let entries: serde_json::Map<String, Value> = raw["proxies"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(name, entry)| (name.clone(), slim_proxy(entry)))
+        .collect();
+    json!({ "proxies": entries })
+}
+
+fn slim_providers(raw: &Value) -> Value {
+    let entries: serde_json::Map<String, Value> = raw["providers"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(name, provider)| {
+            let mut slim = serde_json::Map::new();
+            for key in ["name", "vehicleType", "updatedAt", "subscriptionInfo"] {
+                if let Some(value) = provider.get(key).filter(|value| !value.is_null()) {
+                    slim.insert(key.into(), value.clone());
+                }
+            }
+            if let Some(proxies) = provider["proxies"].as_array() {
+                let nodes: Vec<Value> = proxies
+                    .iter()
+                    .map(|node| json!({ "name": node.get("name"), "type": node.get("type") }))
+                    .collect();
+                slim.insert("proxies".into(), Value::Array(nodes));
+            }
+            (name.clone(), Value::Object(slim))
+        })
+        .collect();
+    json!({ "providers": entries })
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectionSnapshot {
+    download_total: Option<u64>,
+    upload_total: Option<u64>,
+    memory: Option<u64>,
+    connections: Option<Vec<serde::de::IgnoredAny>>,
+}
+
+impl ConnectionSnapshot {
+    fn totals(self) -> Value {
+        json!({
+            "downloadTotal": self.download_total, "uploadTotal": self.upload_total,
+            "memory": self.memory, "count": self.connections.map_or(0, |rows| rows.len())
+        })
+    }
+}
+
+/// `light` skips the proxy and provider tables. They change only when a group reselects or a
+/// subscription refreshes, so the interface asks for them on a slower cadence than traffic.
 #[tauri::command]
-pub async fn mihomo_snapshot(state: tauri::State<'_, LiveController>) -> Result<Value, String> {
+pub async fn mihomo_snapshot(
+    state: tauri::State<'_, LiveController>,
+    light: Option<bool>,
+) -> Result<Value, String> {
     let core = take(&state)?;
-    let paths: [&[&str]; 5] = [
-        &["configs"],
-        &["proxies"],
-        &["connections"],
-        &["rules"],
-        &["providers", "proxies"],
-    ];
-    let [config, proxies, connections, rules, providers] = paths.map(|path| {
+    let fetch = |path: &'static [&'static str]| {
         let controller = core.clone();
         tauri::async_runtime::spawn(async move {
             controller
                 .request(reqwest::Method::GET, path, &[], None)
                 .await
         })
-    });
+    };
+    let config = fetch(&["configs"]);
+    let connections = core.client.get(format!("http://{}/connections", core.endpoint))
+        .bearer_auth(&core.token).send();
+    let tables = (!light.unwrap_or(false))
+        .then(|| (fetch(&["proxies"]), fetch(&["providers", "proxies"])));
+
+    let connections = match connections.await.and_then(reqwest::Response::error_for_status) {
+        Ok(response) => response.json::<ConnectionSnapshot>().await.ok().map(ConnectionSnapshot::totals),
+        Err(_) => None,
+    };
     let config = config.await.map_err(|err| err.to_string())??;
-    let proxies = proxies.await.map_err(|err| err.to_string())??;
-    let connections = connections.await.ok().and_then(Result::ok);
-    let rules = rules.await.ok().and_then(Result::ok);
-    let providers = providers.await.ok().and_then(Result::ok);
-    let config = json!({
-        "mode": config.get("mode"), "port": config.get("port"),
-        "socks-port": config.get("socks-port"), "mixed-port": config.get("mixed-port")
+    let mut snapshot = json!({
+        "config": {
+            "mode": config.get("mode"), "port": config.get("port"),
+            "socks-port": config.get("socks-port"), "mixed-port": config.get("mixed-port")
+        },
+        "connections": connections,
     });
-    Ok(json!({
-        "config":config, "proxies":proxies, "connections":connections,
-        "rules":rules, "providers":providers
-    }))
+    if let Some((proxies, providers)) = tables {
+        let proxies = proxies.await.map_err(|err| err.to_string())??;
+        let providers = providers.await.ok().and_then(Result::ok);
+        snapshot["proxies"] = slim_proxies(&proxies);
+        snapshot["providers"] = providers.as_ref().map_or(Value::Null, slim_providers);
+    }
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -218,9 +303,9 @@ pub async fn mihomo_delay(
     state: tauri::State<'_, LiveController>,
     name: String,
     provider: Option<String>,
+    download: Option<bool>,
 ) -> Result<Value, String> {
     let core = take(&state)?;
-    let _lock = core.probe_lock.lock().await;
     let route = match provider.as_deref() {
         Some(provider) => vec!["providers", "proxies", provider, &name, "healthcheck"],
         None => vec!["proxies", &name, "delay"],
@@ -238,7 +323,12 @@ pub async fn mihomo_delay(
         .await
         .ok()
         .and_then(|result| result["delay"].as_u64());
-    let mbps = core.download(&name).await.ok();
+    let mbps = if download.unwrap_or(true) {
+        let _lock = core.probe_lock.lock().await;
+        core.download(&name).await.ok()
+    } else {
+        None
+    };
     if delay.is_none() && mbps.is_none() {
         return Err("测速失败".into());
     }
@@ -292,4 +382,76 @@ pub async fn mihomo_refresh_provider(
         )
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proxies_keep_only_the_fields_the_interface_reads() {
+        let raw = json!({"proxies": {
+            "GLOBAL": {
+                "name": "GLOBAL", "type": "Selector", "now": "HK 01",
+                "all": ["HK 01", "DIRECT"], "alive": true, "udp": true,
+                "extra": {"https://example.com": {"alive": true, "history": []}},
+                "history": []
+            },
+            "HK 01": {
+                "name": "HK 01", "type": "Trojan", "alive": true, "tfo": false,
+                "history": [
+                    {"time": "2026-11-20T10:00:00Z", "delay": 120},
+                    {"time": "2026-11-20T10:05:00Z", "delay": 48}
+                ]
+            }
+        }});
+        let slim = slim_proxies(&raw);
+        assert_eq!(
+            slim["proxies"]["GLOBAL"],
+            json!({"name": "GLOBAL", "type": "Selector", "now": "HK 01", "all": ["HK 01", "DIRECT"]})
+        );
+        assert_eq!(
+            slim["proxies"]["HK 01"],
+            json!({"name": "HK 01", "type": "Trojan", "history": [{"delay": 48}]})
+        );
+    }
+
+    #[test]
+    fn providers_keep_usage_and_node_identity() {
+        let raw = json!({"providers": {
+            "Home": {
+                "name": "Home", "vehicleType": "HTTP", "updatedAt": "2026-11-20T10:00:00Z",
+                "subscriptionInfo": {"Upload": 1, "Download": 2, "Total": 3, "Expire": 4},
+                "testUrl": "https://example.com", "expectedStatus": "*",
+                "proxies": [{"name": "HK 01", "type": "Trojan", "alive": true, "history": [{"delay": 48}]}]
+            }
+        }});
+        assert_eq!(
+            slim_providers(&raw)["providers"]["Home"],
+            json!({
+                "name": "Home", "vehicleType": "HTTP", "updatedAt": "2026-11-20T10:00:00Z",
+                "subscriptionInfo": {"Upload": 1, "Download": 2, "Total": 3, "Expire": 4},
+                "proxies": [{"name": "HK 01", "type": "Trojan"}]
+            })
+        );
+    }
+
+    #[test]
+    fn connections_collapse_to_totals_and_a_count() {
+        let raw = json!({
+            "downloadTotal": 2048, "uploadTotal": 512, "memory": 31_000_000,
+            "connections": [{"id": "a", "metadata": {"host": "example.com"}}, {"id": "b"}]
+        });
+        assert_eq!(
+            serde_json::from_value::<ConnectionSnapshot>(raw).unwrap().totals(),
+            json!({"downloadTotal": 2048, "uploadTotal": 512, "memory": 31_000_000, "count": 2})
+        );
+        assert_eq!(serde_json::from_value::<ConnectionSnapshot>(json!({"connections": null})).unwrap().totals()["count"], 0);
+    }
+
+    #[test]
+    fn malformed_tables_slim_to_empty_maps() {
+        assert_eq!(slim_proxies(&json!({})), json!({"proxies": {}}));
+        assert_eq!(slim_providers(&json!({"providers": []})), json!({"providers": {}}));
+    }
 }

@@ -142,14 +142,29 @@ export function openMacMenu(
     ? (matchTriggerWidth ? 'top center' : 'top right')
     : (matchTriggerWidth ? 'bottom center' : 'bottom right');
   activePopupCtx = { trigger, items, onSelect };
+  (pop.querySelector<HTMLButtonElement>('.selected') ?? pop.querySelector('button'))?.focus({ preventScroll: true });
 }
 
 export function initMacMenuListener(): void {
+  $('macMenuPopover').addEventListener('keydown', e => {
+    if (!activePopupCtx) return;
+    const buttons = Array.from($('macMenuPopover').querySelectorAll('button'));
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      activePopupCtx.trigger.focus();
+      closeMacMenu();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      buttons[(index + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+    }
+  });
   $('macMenuPopover').addEventListener('click', e => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-menu-idx]');
     if (!btn || !activePopupCtx) return;
     const item = activePopupCtx.items[Number(btn.dataset.menuIdx)];
     const cb = activePopupCtx.onSelect;
+    activePopupCtx.trigger.focus();
     closeMacMenu();
     if (item && !item.sep) cb(item.value, item.label);
   });
@@ -174,10 +189,17 @@ export type SheetOptions = {
   size?: 'default' | 'wide' | 'compact';
 };
 
+let sheetOpener: HTMLElement | null = null;
 let sheetDismissResolve: ((value: boolean) => void) | null = null;
 
 export function isSheetOpen(): boolean {
   return $('sheetBackdrop').classList.contains('open');
+}
+
+function showSheet(): void {
+  if (!isSheetOpen()) sheetOpener = document.activeElement as HTMLElement | null;
+  $('macWindow').inert = true;
+  $('sheetBackdrop').classList.add('open');
 }
 
 export function openSheet(opts: SheetOptions): void {
@@ -190,7 +212,7 @@ export function openSheet(opts: SheetOptions): void {
       <div class="sheet-head-left">
         ${opts.iconHtml || ''}
         <div style="min-width:0">
-          <h3>${esc(opts.title)}</h3>
+          <h3 id="sheetTitle">${esc(opts.title)}</h3>
           ${opts.subtitle ? `<p>${esc(opts.subtitle)}</p>` : ''}
         </div>
       </div>
@@ -205,12 +227,16 @@ export function openSheet(opts: SheetOptions): void {
   $('sheetScrollBody').addEventListener('scroll', () => {
     if (activePopupCtx) closeMacMenu();
   }, { passive: true });
-  $('sheetBackdrop').classList.add('open');
+  showSheet();
+  $('sheetHeadCloseBtn').focus();
 }
 
 export function closeSheet(): void {
   closeMacMenu();
   $('sheetBackdrop').classList.remove('open');
+  $('macWindow').inert = false;
+  sheetOpener?.focus({ preventScroll: true });
+  sheetOpener = null;
   if (sheetDismissResolve) {
     const resolve = sheetDismissResolve;
     sheetDismissResolve = null;
@@ -248,7 +274,7 @@ export function confirmSheet(opts: {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
           </span>
           <div class="confirm-alert-copy">
-            <h4>${esc(opts.title)}</h4>
+            <h4 id="sheetTitle">${esc(opts.title)}</h4>
             <p>${esc(opts.message)}</p>
           </div>
         </div>
@@ -258,17 +284,17 @@ export function confirmSheet(opts: {
         <button type="button" class="${primaryCls}" id="sheetConfirmOk">${esc(opts.confirmLabel || '确定')}</button>
       </div>
     `;
-    $('sheetBackdrop').classList.add('open');
+    showSheet();
 
     const finish = (accepted: boolean) => {
       sheetDismissResolve = null;
-      $('sheetBackdrop').classList.remove('open');
+      closeSheet();
       resolve(accepted);
     };
     const cancel = document.getElementById('sheetConfirmCancel');
     if (cancel) cancel.onclick = () => finish(false);
     $('sheetConfirmOk').onclick = () => finish(true);
-    $('sheetConfirmOk').focus();
+    (cancel || $('sheetConfirmOk')).focus();
   });
 }
 
@@ -447,7 +473,16 @@ export class TelemetryVisualizer {
   }
 
   renderHeatmap(): void {
-    $('activityHeatmap').innerHTML = this.heat
+    const grid = $('activityHeatmap');
+    if (grid.childElementCount === this.heat.length) {
+      this.heat.forEach((sample, i) => {
+        const cell = grid.children[i];
+        const cls = `hm-cell ${sample.cls}`;
+        if (cell.className !== cls) cell.className = cls;
+      });
+      return;
+    }
+    grid.innerHTML = this.heat
       .map(s => `<span class="hm-cell ${s.cls}" data-hm="${s.idx - 1}"></span>`)
       .join('');
   }
@@ -457,14 +492,6 @@ export class TelemetryVisualizer {
    Pointer-Tracking Glass Specular Sheen + Viewport-Aware Tooltip
    ========================================================================= */
 export function initGlobalPolish(): void {
-  document.addEventListener('pointermove', e => {
-    const target = (e.target as HTMLElement | null)?.closest<HTMLElement>('.lg-track');
-    if (!target) return;
-    const r = target.getBoundingClientRect();
-    target.style.setProperty('--mx', `${e.clientX - r.left}px`);
-    target.style.setProperty('--my', `${e.clientY - r.top}px`);
-  });
-
   let tipTimer: number | null = null;
   document.addEventListener('pointerover', e => {
     const el = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-tip]');

@@ -8,6 +8,12 @@
       /* Pure Neutral Apple Graphite Canvas (Zero Colorful/Neon Glow!) */
       --window-bg: #18181b;
       --stage-fade: rgba(24, 24, 27, 0.76);
+      /* Quiet tonal falloff behind the stage, so translucent surfaces have something to pick up */
+      --window-depth: radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.055) 0%, transparent 58%), radial-gradient(90% 80% at 100% 100%, rgba(0, 0, 0, 0.26) 0%, transparent 62%);
+      /* Tints laid over the operating system's own window material (macOS) */
+      --stage-vibrant: rgba(22, 22, 25, 0.60);
+      --sidebar-vibrant: linear-gradient(180deg, rgba(74, 74, 82, 0.34) 0%, rgba(46, 46, 52, 0.42) 100%);
+      --focus-ring: rgba(64, 156, 255, 0.92);
 
       /* Component-Level Frosted Glass Micro-Grain */
       --frost-noise-opacity: 0.036;
@@ -18,11 +24,11 @@
       --sidebar-shadow: 0 18px 42px -10px rgba(0, 0, 0, 0.55), 0 0 0 0.5px var(--sidebar-outer), inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1px 1px rgba(0, 0, 0, 0.25);
 
       /* Pure Monochrome Curved Frosted-Glass Capsules (Ref #5 Exact Optical Depth) */
-      --lg-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.175) 0%, rgba(255, 255, 255, 0.068) 50%, rgba(255, 255, 255, 0.105) 100%);
-      --lg-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.235) 0%, rgba(255, 255, 255, 0.105) 50%, rgba(255, 255, 255, 0.145) 100%);
-      --lg-rim-grad: linear-gradient(142deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.10) 36%, rgba(255, 255, 255, 0.03) 64%, rgba(255, 255, 255, 0.24) 100%);
-      --lg-outer: rgba(0, 0, 0, 0.58);
-      --lg-shadow: 0 3px 10px rgba(0, 0, 0, 0.34), 0 10px 24px -8px rgba(0, 0, 0, 0.52), 0 0 0 0.5px var(--lg-outer), inset 0 1px 0.5px rgba(255, 255, 255, 0.30), inset 0 -1px 1.5px rgba(0, 0, 0, 0.28);
+      --lg-bg: linear-gradient(180deg, rgba(82, 82, 90, 0.74) 0%, rgba(60, 60, 67, 0.74) 100%);
+      --lg-bg-hover: linear-gradient(180deg, rgba(98, 98, 107, 0.82) 0%, rgba(74, 74, 82, 0.82) 100%);
+      --lg-rim-grad: linear-gradient(142deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.08) 36%, rgba(255, 255, 255, 0.02) 64%, rgba(255, 255, 255, 0.16) 100%);
+      --lg-outer: rgba(0, 0, 0, 0.50);
+      --lg-shadow: 0 1px 2px rgba(0, 0, 0, 0.30), 0 8px 18px -10px rgba(0, 0, 0, 0.55), 0 0 0 0.5px var(--lg-outer), inset 0 0.5px 0 rgba(255, 255, 255, 0.24);
       --lg-specular: rgba(255, 255, 255, 0.20);
 
       /* Tinted Frosted-Glass Primary Action */
@@ -105,6 +111,10 @@
       /* Pure Neutral Apple Alabaster-Silver Canvas (Zero Colorful Blobs!) */
       --window-bg: #ebedf0;
       --stage-fade: rgba(235, 237, 240, 0.78);
+      --window-depth: radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.70) 0%, transparent 58%), radial-gradient(90% 80% at 100% 100%, rgba(0, 0, 0, 0.045) 0%, transparent 62%);
+      --stage-vibrant: rgba(240, 241, 244, 0.58);
+      --sidebar-vibrant: linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(250, 250, 252, 0.32) 100%);
+      --focus-ring: rgba(0, 122, 255, 0.78);
 
       --frost-noise-opacity: 0.028;
 
@@ -114,11 +124,11 @@
       --sidebar-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.11), 0 1px 3px rgba(0, 0, 0, 0.05), 0 0 0 0.5px var(--sidebar-outer), inset 0 1.25px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 1.5px rgba(0, 0, 0, 0.04);
 
       /* Pure Monochrome Curved Frosted-Glass Capsules (Ref #3 Crisp Tactile Glass!) */
-      --lg-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(244, 245, 248, 0.66) 52%, rgba(255, 255, 255, 0.82) 100%);
-      --lg-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 251, 253, 0.82) 52%, rgba(255, 255, 255, 0.94) 100%);
+      --lg-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(250, 251, 253, 0.76) 100%);
+      --lg-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.90) 100%);
       --lg-rim-grad: linear-gradient(142deg, rgba(255, 255, 255, 1) 0%, rgba(0, 0, 0, 0.065) 38%, rgba(0, 0, 0, 0.03) 64%, rgba(255, 255, 255, 0.95) 100%);
-      --lg-outer: rgba(0, 0, 0, 0.11);
-      --lg-shadow: 0 2px 6px rgba(0, 0, 0, 0.065), 0 10px 22px -8px rgba(0, 0, 0, 0.11), 0 0 0 0.5px var(--lg-outer), inset 0 1.5px 0.5px rgba(255, 255, 255, 1), inset 0 -1px 1.5px rgba(0, 0, 0, 0.06);
+      --lg-outer: rgba(0, 0, 0, 0.10);
+      --lg-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 16px -10px rgba(0, 0, 0, 0.16), 0 0 0 0.5px var(--lg-outer), inset 0 1px 0 rgba(255, 255, 255, 0.96);
       --lg-specular: rgba(255, 255, 255, 0.72);
 
       /* Tinted Frosted-Glass Primary Action */
@@ -199,12 +209,50 @@
       color: var(--ink);
       font: 13px/1.46 var(--font-ui);
       -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
+      /* Interface text is not selectable, as in a native window; fields opt back in below */
+      -webkit-user-select: none;
       user-select: none;
     }
+    input, textarea, .selectable {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+    img, svg { -webkit-user-drag: none; }
     button, input, select { font: inherit; color: inherit; }
     button { cursor: pointer; }
     button:disabled { opacity: 0.34; cursor: not-allowed; }
+    /* A desktop window keeps the arrow pointer over its controls */
+    :root.tauri-native button,
+    :root.tauri-native label,
+    :root.tauri-native summary,
+    :root.tauri-native [data-toggle-drawer],
+    :root.tauri-native .cp-node,
+    :root.tauri-native .qtile,
+    :root.tauri-native .hm-cell,
+    :root.tauri-native .sub-card-clickable,
+    :root.tauri-native .sheet-picker-row,
+    :root.tauri-native .mac-switch input,
+    :root.tauri-native .mac-check input { cursor: default; }
+
+    /* Keyboard focus: one ring, only when the keyboard is driving */
+    :focus { outline: none; }
+    button:focus-visible,
+    summary:focus-visible,
+    [tabindex]:focus-visible,
+    .mac-check input:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    .mac-switch:has(input:focus-visible) i {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+    .mac-menu-item:focus-visible {
+      outline: none;
+      background: var(--accent);
+      color: #ffffff;
+    }
+    .mac-menu-item:focus-visible .mac-menu-meta { color: rgba(255, 255, 255, 0.78); }
     input[type="number"]::-webkit-inner-spin-button,
     input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
@@ -227,20 +275,16 @@
     /* =========================================================================
        Optical Fresnel Prismatic Specular Rim + Pointer-Tracking Caustic Sheen
        ========================================================================= */
+    /* The lit edge is drawn only on the few large panes that float above everything else.
+       Controls and cards carry their edge in box-shadow, which costs no extra layer. */
     .sidebar::before,
-    .glass-capsule::before,
-    .glass-circle::before,
-    .online-pill::before,
-    .glass-btn-soft::before,
-    .glass-btn-primary::before,
     .mac-menu-popover::before,
-    .toast::before,
     .modal-sheet::before {
       content: "";
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      padding: 1.2px;
+      padding: 1px;
       background: var(--lg-rim-grad);
       -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
       -webkit-mask-composite: xor;
@@ -248,48 +292,10 @@
       pointer-events: none;
       z-index: 3;
     }
-    .mac-card::before,
-    .telemetry-capsule::before,
-    .group-drawer::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      padding: 1px;
-      background: var(--card-rim-grad);
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      pointer-events: none;
-      z-index: 3;
-    }
-    .glass-btn-primary::before { background: var(--lg-accent-rim); }
 
-    /* Pointer-tracking dynamic caustic specular reflection on Liquid Glass pills */
-    .lg-track {
-      --mx: 50%;
-      --my: 0%;
-      --sp: 0;
-    }
-    .lg-track::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      background: radial-gradient(96px circle at var(--mx) var(--my), var(--lg-specular) 0%, transparent 72%);
-      opacity: var(--sp);
-      transition: opacity 0.22s ease;
-      pointer-events: none;
-      z-index: 1;
-    }
-    .lg-track:hover { --sp: 1; }
-
-    /* Component-Level Frosted Glass Micro-Grain (Tactile Sandblasted Glass Feel) */
+    /* Fine grain on the two largest glass panes only. A plain low-opacity tile: blend modes
+       would force each pane into its own offscreen pass. */
     .sidebar::after,
-    .mac-card::after,
-    .telemetry-capsule::after,
-    .group-drawer::after,
-    .mac-menu-popover::after,
     .modal-sheet::after {
       content: "";
       position: absolute;
@@ -300,7 +306,6 @@
       opacity: var(--frost-noise-opacity);
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
       background-size: 120px 120px;
-      mix-blend-mode: overlay;
     }
 
     /* =========================================================================
@@ -311,9 +316,16 @@
       display: flex;
       width: 100vw;
       height: 100vh;
-      background: var(--window-bg);
+      background: var(--window-depth), var(--window-bg);
       overflow: hidden;
     }
+
+    /* macOS: the window itself is the glass. The operating system blurs the desktop behind it,
+       so the page only lays tints on top and runs no blur of its own for the sidebar. */
+    :root.vibrant,
+    :root.vibrant body { background: transparent; }
+    :root.vibrant .mac-window { background: var(--stage-vibrant); }
+    :root.vibrant .sidebar { background: var(--sidebar-vibrant); }
 
     .sidebar {
       position: relative;
@@ -324,8 +336,6 @@
       border-radius: 18px;
       background: var(--sidebar-surface);
       box-shadow: var(--sidebar-shadow);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
       display: flex;
       flex-direction: column;
       padding: 12px 10px 10px;
@@ -820,8 +830,6 @@
       z-index: -1;
       pointer-events: none;
       background: linear-gradient(180deg, var(--stage-fade) 0%, transparent 100%);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
       -webkit-mask-image: linear-gradient(to bottom, #000 44%, transparent 100%);
       mask-image: linear-gradient(to bottom, #000 44%, transparent 100%);
     }
@@ -843,8 +851,6 @@
       border-radius: 999px;
       background: var(--lg-bg);
       box-shadow: var(--lg-shadow);
-      backdrop-filter: blur(30px) saturate(225%) brightness(1.08);
-      -webkit-backdrop-filter: blur(30px) saturate(225%) brightness(1.08);
       overflow: hidden;
       flex-shrink: 0;
     }
@@ -881,8 +887,6 @@
       border-radius: 999px;
       background: var(--lg-bg);
       box-shadow: var(--lg-shadow);
-      backdrop-filter: blur(30px) saturate(195%) brightness(1.06);
-      -webkit-backdrop-filter: blur(30px) saturate(195%) brightness(1.06);
       color: var(--ink);
       display: inline-grid;
       place-items: center;
@@ -917,8 +921,6 @@
       border-radius: 999px;
       background: var(--lg-bg);
       box-shadow: var(--lg-shadow);
-      backdrop-filter: blur(28px) saturate(190%);
-      -webkit-backdrop-filter: blur(28px) saturate(190%);
       font-size: 12px;
       font-weight: 550;
       color: var(--ink-2);
@@ -950,8 +952,6 @@
       border-radius: 999px;
       background: var(--lg-accent-bg);
       box-shadow: var(--lg-accent-shadow);
-      backdrop-filter: blur(22px) saturate(185%);
-      -webkit-backdrop-filter: blur(22px) saturate(185%);
       color: #ffffff;
       font-size: 12.5px;
       font-weight: 600;
@@ -971,7 +971,7 @@
       color: var(--ink);
       box-shadow: var(--lg-shadow);
     }
-    .glass-btn-primary.off-state::before { background: var(--lg-rim-grad); }
+    .glass-btn-primary:disabled { opacity: 0.6; cursor: progress; }
 
     .glass-btn-soft {
       position: relative;
@@ -981,8 +981,6 @@
       border-radius: 999px;
       background: var(--lg-bg);
       box-shadow: var(--lg-shadow);
-      backdrop-filter: blur(20px) saturate(175%);
-      -webkit-backdrop-filter: blur(20px) saturate(175%);
       color: var(--ink);
       font-size: 12px;
       font-weight: 550;
@@ -1097,8 +1095,6 @@
       border-radius: 15px;
       box-shadow: var(--card-shadow);
       padding: 14px 15px;
-      backdrop-filter: blur(30px) saturate(200%);
-      -webkit-backdrop-filter: blur(30px) saturate(200%);
     }
     .mac-card.flush { padding: 0; overflow: hidden; }
 
@@ -1112,8 +1108,6 @@
       border: 0;
       border-radius: 14px;
       box-shadow: var(--card-shadow);
-      backdrop-filter: blur(30px) saturate(200%);
-      -webkit-backdrop-filter: blur(30px) saturate(200%);
       padding: 9px 6px;
       margin-bottom: 14px;
     }
@@ -1162,8 +1156,6 @@
       border-radius: 8px;
       background: var(--popup-bg);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), inset 0 0 0 0.5px var(--popup-border), inset 0 0.5px 0 rgba(255, 255, 255, 0.28);
-      backdrop-filter: blur(18px) saturate(180%);
-      -webkit-backdrop-filter: blur(18px) saturate(180%);
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -1537,8 +1529,6 @@
       border-radius: 9px;
       background: var(--tooltip-bg);
       box-shadow: var(--lg-shadow);
-      backdrop-filter: blur(22px) saturate(185%);
-      -webkit-backdrop-filter: blur(22px) saturate(185%);
       font-size: 11px;
       font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
@@ -1633,8 +1623,6 @@
       border: 0;
       border-radius: 15px;
       box-shadow: var(--card-shadow);
-      backdrop-filter: blur(30px) saturate(200%);
-      -webkit-backdrop-filter: blur(30px) saturate(200%);
       overflow: hidden;
       margin-bottom: 12px;
     }
@@ -1781,8 +1769,6 @@
       border-radius: 7px;
       background: var(--tooltip-bg);
       box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), 0 0 0 0.5px var(--lg-outer);
-      backdrop-filter: blur(24px) saturate(190%);
-      -webkit-backdrop-filter: blur(24px) saturate(190%);
       font-size: 11px;
       font-weight: 500;
       color: var(--ink);
@@ -1805,8 +1791,6 @@
       border-radius: 999px;
       background: var(--menu-surface);
       box-shadow: var(--menu-shadow);
-      backdrop-filter: blur(36px) saturate(200%);
-      -webkit-backdrop-filter: blur(36px) saturate(200%);
       color: var(--ink);
       font-size: 12.5px;
       font-weight: 550;
@@ -2367,8 +2351,6 @@
       position: sticky;
       top: 0;
       background: var(--card-surface);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
       z-index: 1;
     }
 
@@ -2454,4 +2436,16 @@
     /* Auto-compact sidebar slightly on very narrow window */
     @media (max-width: 860px) {
       .sidebar { width: 204px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      :root.vibrant .mac-window { background: var(--window-bg); }
+      .mac-menu-popover, .modal-sheet { backdrop-filter: none; background: var(--window-bg); }
     }

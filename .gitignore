@@ -6,3 +6,4 @@ src-tauri/gen/schemas/
 output/
 __pycache__/
 public/site-icons/claude.ai.bin
+src-tauri/binaries/
