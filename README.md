@@ -31,6 +31,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 在 macOS 上运行 `python3 scripts/smoke-routing.py <随包内核路径>`，可用 Python 和 curl 验证进程、目标、端口、IPv4 顺序和 IPv6 网段边界。测试通过回环监听观察内核实际选择的策略组。
 
+在 GitHub Actions 中手动运行 **Windows network acceptance**，会在一次性 Windows Server 2022 x64 上测试随包内核、实际程序分流、进程创建时间和 WinINet 系统代理恢复。TUN 用例只为 `192.0.2.123/32` 添加测试路由，依次检查系统路由、测试连接的内核命中日志和后台退出后的路由清理。桌面授权弹窗和跨网卡切换需在交互式 Windows 桌面验收。
+
 ## 内核打包与验证
 
 桌面开发和打包会按目标架构获取官方 Mihomo v1.19.34，核对 SHA-256 后由 Tauri 随应用一起分发。支持 macOS、Windows、Linux 的 x64 和 arm64。首次安装后可直接进入「订阅管理」导入订阅或节点。本机验证也可以使用 [回环验证配置](./scripts/mihomo-loopback-example.json)。

@@ -485,7 +485,7 @@ fn disable_tun(config: &[u8]) {
 #[cfg(all(test, windows))]
 #[test]
 fn closing_job_stops_managed_child() {
-    use std::os::windows::io::AsRawHandle;
+    use std::os::windows::io::{AsHandle, AsRawHandle};
     use windows_sys::Win32::{Foundation::WAIT_OBJECT_0, System::Threading::WaitForSingleObject};
 
     let mut command = Command::new("ping.exe");
@@ -494,9 +494,9 @@ fn closing_job_stops_managed_child() {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let managed = spawn_managed_core(command).unwrap();
-    let handle = managed.child.as_raw_handle();
+    let handle = managed.child.as_handle().try_clone_to_owned().unwrap();
     drop(managed);
-    let result = unsafe { WaitForSingleObject(handle, 2000) };
+    let result = unsafe { WaitForSingleObject(handle.as_raw_handle(), 2000) };
     assert_eq!(result, WAIT_OBJECT_0);
 }
 

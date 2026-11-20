@@ -8,7 +8,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - name: Prepare pinned network core
@@ -24,6 +24,14 @@ jobs:
         run: npm ci && npm run build
         shell: cmd
       - name: Test Windows desktop backend
+        id: backend
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Exercise WinINet ownership and recovery on the disposable VM
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml wininet_takeover_and_recovery -- --ignored
+      - name: Exercise the TUN worker and check Windows route cleanup
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          cargo build --locked --manifest-path src-tauri/Cargo.toml
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/smoke-windows-tun.py src-tauri/target/debug/routepilot-desktop.exe
