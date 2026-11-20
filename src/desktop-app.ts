@@ -2192,6 +2192,7 @@ export function mountDesktopApp(shell: ShellController): void {
           <button class="glass-btn-soft" id="ruleBrowse" type="button">浏览…</button></div>
           <datalist id="runningExecutables"></datalist>
           <select class="sheet-input" id="ruleRunning" aria-label="选择运行中的程序"><option value="">选择运行中的程序…</option></select>
+          ${index === undefined && !shared ? '<details><summary>批量选择软件及辅助进程</summary><div class="sheet-picker" id="ruleAppList"></div></details>' : ''}
         </div>
         <div class="sheet-field"><label for="ruleTarget">目标网站或 IP</label>
           <input class="sheet-input" id="ruleTarget" placeholder="任意目标，支持域名、网址、IP 或网段" value="${esc(initial.target)}">
@@ -2208,6 +2209,8 @@ export function mountDesktopApp(shell: ShellController): void {
     const target = $<HTMLInputElement>('ruleTarget');
     const suffix = $<HTMLInputElement>('ruleSuffix');
     const running = $<HTMLSelectElement>('ruleRunning');
+    const appList = document.getElementById('ruleAppList');
+    const selectedPaths = new Set<string>();
     const error = $('ruleError');
     function fillPrograms(): void {
       if (!running.isConnected) return;
@@ -2215,6 +2218,18 @@ export function mountDesktopApp(shell: ShellController): void {
       const options = [...paths].sort((a,b) => a[1].localeCompare(b[1])).map(([path,name]) => `<option value="${esc(path)}">${esc(name)} · ${esc(path)}</option>`).join('');
       running.innerHTML = '<option value="">选择运行中的程序…</option>' + options;
       $('runningExecutables').innerHTML = options;
+      if (appList) {
+        const apps = liveApps.filter(app => app.paths.length);
+        appList.innerHTML = apps.map((app, i) => `<label class="sheet-picker-row"><input type="checkbox" data-app="${i}">
+          ${renderProgramIcon(app.icon, app.name)}<span class="picker-meta"><strong>${esc(app.name)}</strong>
+          <small>${app.paths.length} 个可执行文件</small></span></label>`).join('') || '暂无运行中的软件';
+        appList.onchange = () => {
+          selectedPaths.clear();
+          appList.querySelectorAll<HTMLInputElement>('input:checked').forEach(box => {
+            apps[Number(box.dataset.app)].paths.forEach(path => selectedPaths.add(path));
+          });
+        };
+      }
     }
     fillPrograms();
     if (!liveProcesses.length) void refreshProcesses(false).then(fillPrograms);
@@ -2249,7 +2264,9 @@ export function mountDesktopApp(shell: ShellController): void {
       try {
         const conditions = { program: program.value.trim(), target: target.value.trim(), suffix: !suffix.disabled && suffix.checked, port: $<HTMLInputElement>('rulePort').value.trim() };
         const global = shared || (document.getElementById('ruleCoverage') as HTMLSelectElement | null)?.value === 'shared';
-        const mutation: ProfileEdit = global ? {kind:'sharedRule',expected:shared?.source,conditions,exit} :
+        const targets = [...new Set([...selectedPaths, conditions.program].filter(Boolean))];
+        const mutation: ProfileEdit = selectedPaths.size ? {kind:'addProgramMatches',targets,conditions,exit,shared:Boolean(global)} :
+          global ? {kind:'sharedRule',expected:shared?.source,conditions,exit} :
           {kind:'matchRule', conditions,exit,index,expected:original};
         const updated = await tauriApi.editProfile(mutation, scope);
         if (save.isConnected) closeSheet();

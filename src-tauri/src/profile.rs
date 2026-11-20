@@ -91,7 +91,9 @@ fn scoped_profile(profile: &Value) -> std::borrow::Cow<'_, Value> {
 }
 
 pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
-    if let Edit::SharedRule { .. } = &mutation { return edit(profile, mutation); }
+    if matches!(&mutation, Edit::SharedRule { .. } | Edit::AddProgramMatches { shared: true, .. }) {
+        return edit(profile, mutation);
+    }
     if let Edit::RemoveProvider { name } = &mutation {
         let name = name.clone();
         edit(profile, mutation)?;
@@ -141,6 +143,7 @@ pub struct RuleSelection {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Edit {
+    AddProgramMatches { targets: Vec<String>, conditions: crate::rule_conditions::Conditions, exit: String, shared: bool },
     SharedRule { expected: Option<String>, conditions: Option<crate::rule_conditions::Conditions>, exit: Option<String> },
     MatchRule { index: Option<usize>, expected: Option<String>, conditions: crate::rule_conditions::Conditions, exit: String },
     RuleOrder { expected: Vec<String>, order: Option<Vec<String>> },
@@ -776,6 +779,24 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
 
 pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     match mutation {
+        Edit::AddProgramMatches { targets, conditions, exit, shared } => {
+            if !(1..=250).contains(&targets.len()) {
+                return Err("请选择 1 到 250 个可执行文件".into());
+            }
+            if !shared && conditions.target.is_empty() && conditions.port.is_empty() {
+                return edit(profile, Edit::ProgramRules { targets, exit });
+            }
+            let mut candidate = profile.clone();
+            for program in targets {
+                let conditions = crate::rule_conditions::Conditions { program, ..conditions.clone() };
+                if shared {
+                    shared::edit_shared(&mut candidate, None, Some(conditions), Some(exit.clone()))?;
+                } else {
+                    edit(&mut candidate, Edit::MatchRule { index: None, expected: None, conditions, exit: exit.clone() })?;
+                }
+            }
+            *profile = candidate;
+        }
         Edit::SharedRule { expected, conditions, exit } => {
             return shared::edit_shared(profile, expected, conditions, exit);
         }
@@ -1237,6 +1258,23 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adding_compound_rules_to_multiple_helpers_is_atomic() {
+        let mut profile = json!({"rules":["MATCH,DIRECT"]});
+        let root = if cfg!(windows) { "C:/Apps" } else { "/opt" };
+        let batch = |second: String| Edit::AddProgramMatches {
+            targets: vec![format!("{root}/app"), second],
+            conditions: crate::rule_conditions::Conditions { target: "work.test".into(), ..Default::default() },
+            exit: "DIRECT".into(),
+            shared: false,
+        };
+        let before = profile.clone();
+        assert!(edit_active(&mut profile, batch("relative".into())).is_err());
+        assert_eq!(profile, before);
+        edit_active(&mut profile, batch(format!("{root}/helper"))).unwrap();
+        assert_eq!(entries(&profile, "rules").count(), 3);
+    }
 
     #[test]
     fn network_preferences_survive_scoping_and_profile_round_trip() {

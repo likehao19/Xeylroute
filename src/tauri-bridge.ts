@@ -217,6 +217,7 @@ export type ProfileEdit =
   | { kind: 'ruleOrder'; expected: string[]; order: string[] | null }
   | { kind: 'sharedRule'; expected?: string; conditions?: RuleConditions; exit?: string }
   | { kind: 'matchRule'; index?: number; expected?: string; conditions: RuleConditions; exit: string }
+  | { kind: 'addProgramMatches'; targets: string[]; conditions: RuleConditions; exit: string; shared: boolean }
   | { kind: 'programRules'; targets: string[]; exit: string }
   | { kind: 'clearProgramRules'; targets: string[] }
   | { kind: 'batchRules'; action: 'enable' | 'disable' | 'delete'; rules: { index: number; expected: string }[] }
