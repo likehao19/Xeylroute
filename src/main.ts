@@ -15,3 +15,7 @@ if (isTauri()) {
 } else {
   mountPreviewApp(shell);
 }
+
+if (document.documentElement.classList.contains('platform-macos')) {
+  void import('./glass-controls').then(({ mountGlassControls }) => mountGlassControls());
+}

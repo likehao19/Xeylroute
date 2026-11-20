@@ -40,7 +40,7 @@
       </div>
 
       <!-- Recessed Search Capsule + ⌘K Keycap -->
-      <div class="glass-search" id="searchWrap">
+      <div class="glass-search" id="searchWrap" data-glass-control>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.8-3.8"/>
         </svg>
@@ -150,7 +150,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
           </button>
 
-          <div class="glass-capsule lg-track">
+          <div class="glass-capsule lg-track" data-glass-control>
             <button type="button" id="navBackBtn" aria-label="返回" data-tip="返回" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -343,7 +343,7 @@
             </div>
             <div class="node-actions" id="nodeActionRow">
               <span class="pill" id="nodesScopePill" hidden></span>
-              <div id="nodeTestActions">
+              <div id="nodeTestActions" data-glass-control>
                 <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
                 <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
               </div>
@@ -398,7 +398,10 @@
              =============================================================== -->
         <section class="view" id="view-logs">
           <form class="mac-card" id="simForm" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-            <input type="text" class="sheet-input" id="simHostInput" style="width:200px" value="github.com" placeholder="输入测试域名…" required>
+            <label class="probe-field">
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.35"><circle cx="10" cy="10" r="7"/><ellipse cx="10" cy="10" rx="3" ry="7"/><path d="M3 10h14"/></svg>
+              <input type="text" class="sheet-input" id="simHostInput" aria-label="测试域名" value="github.com" placeholder="输入测试域名…" required>
+            </label>
             <div id="simAppSelectHost"></div>
             <label class="mac-check" id="simSysProxyWrap">
               <input type="checkbox" id="simSysProxyCheck" checked> 遵循系统代理
@@ -406,7 +409,7 @@
             <label class="mac-check" id="simFailWrap">
               <input type="checkbox" id="simFailCheck"> 模拟出口故障
             </label>
-            <div style="margin-left:auto;display:flex;gap:8px">
+            <div class="probe-action">
               <button type="submit" class="glass-btn-primary compact lg-track" id="simSubmitBtn">测试走向</button>
             </div>
           </form>
@@ -460,8 +463,8 @@
               </div>
               <div class="glass-sample" role="img" aria-label="山谷上方的导航和搜索控件材质预览">
                 <div class="sample-tools" aria-hidden="true">
-                  <span class="glass-capsule"><svg viewBox="0 0 32 16"><path d="m8 3-5 5 5 5m15-10 5 5-5 5"/></svg></span>
-                  <span class="glass-search"><svg viewBox="0 0 18 18"><circle cx="7.5" cy="7.5" r="4.5"/><path d="m11 11 4 4"/></svg>搜索节点</span>
+                  <span class="glass-capsule" data-glass-control><svg viewBox="0 0 32 16"><path d="m8 3-5 5 5 5m15-10 5 5-5 5"/></svg></span>
+                  <span class="glass-search" data-glass-control><svg viewBox="0 0 18 18"><circle cx="7.5" cy="7.5" r="4.5"/><path d="m11 11 4 4"/></svg>搜索节点</span>
                 </div>
               </div>
             </div>

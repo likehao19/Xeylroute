@@ -14,5 +14,9 @@
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",
     "vite": "7.3.6"
+  },
+  "dependencies": {
+    "@wxperia/liquid-glass-vue": "1.0.9",
+    "vue": "3.5.46"
   }
 }

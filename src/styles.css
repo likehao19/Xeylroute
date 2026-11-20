@@ -2487,7 +2487,7 @@
       box-shadow: inset 0 0 0 1px #0001;
     }
     .sample-tools { display: flex; align-items: center; gap: 8px; width: min(82%, 255px); }
-    .sample-tools span { height: 35px; color: var(--ink); }
+    .sample-tools > span { height: 35px; color: var(--ink); }
     .sample-tools .glass-capsule { padding-inline: 11px; }
     .sample-tools .glass-search { flex: 1; margin: 0; font-size: 12px; font-weight: 550; }
     .sample-tools svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -2514,17 +2514,13 @@
       --edge-light: rgb(255 255 255 / 32%);
       --card-surface: rgb(var(--panel-rgb));
       --glass-fill: rgb(var(--button-rgb) / calc(.96 - var(--glass-alpha-range) * var(--glass-clarity)));
-      --glass-sheen: radial-gradient(ellipse 78% 52% at 24% -8%, var(--edge-light), transparent 80%),
-        radial-gradient(ellipse 60% 35% at 90% 108%, rgb(255 255 255 / 28%), transparent);
-      --lg-bg: var(--glass-sheen), linear-gradient(var(--glass-fill), var(--glass-fill));
-      --lg-bg-hover: var(--glass-sheen), linear-gradient(var(--glass-fill), var(--glass-fill)), var(--well-bg);
-      --lg-shadow: inset 0 1px 1px var(--edge-light), inset 1px 0 1.5px #fff4, inset -1px -1px 2px #18253e29,
-        0 0 0 .5px var(--lg-outer), 0 2px 5px #10294219;
-      --lg-accent-bg: radial-gradient(ellipse 85% 55% at 25% 0%, #ffffff4a, transparent 76%), linear-gradient(180deg, rgb(14 105 204 / calc(1 - .13 * var(--glass-clarity))), #075ab9);
-      --lg-accent-bg-hover: radial-gradient(ellipse 85% 55% at 25% 0%, #ffffff59, transparent 76%), linear-gradient(180deg, #267ad6, #0965c9);
-      --lg-accent-shadow: inset 0 1px 1px #fffa, inset 0 -1px 1px #00459766,
-        0 0 0 .5px #00489155, 0 2px 5px #00366a21;
-      --seg-thumb-bg: var(--lg-bg);
+      --lg-bg: var(--well-bg);
+      --lg-bg-hover: var(--node-hover);
+      --lg-shadow: inset 0 0 0 .5px var(--well-stroke);
+      --lg-accent-bg: #0874dd;
+      --lg-accent-bg-hover: #0568c9;
+      --lg-accent-shadow: none;
+      --seg-thumb-bg: rgb(var(--panel-rgb));
       --seg-thumb-shadow: var(--lg-shadow);
       --popup-bg: var(--lg-bg);
       --popup-bg-hover: var(--lg-bg-hover);
@@ -2534,13 +2530,13 @@
     }
     :root.platform-macos[data-theme="light"] {
       --panel-rgb: 252 252 254;
-      --button-rgb: 224 233 243;
+      --button-rgb: 251 252 253;
       --glass-alpha-range: .66;
       --edge-light: rgb(255 255 255 / 90%);
       --muted: #4c515a;
       --nav-active-bg: #0969ce;
       --nav-active-ink: white;
-      --node-bg: #eef0f4;
+      --node-bg: #f6f7f9;
     }
     @media (prefers-reduced-transparency: reduce) {
       :root.platform-macos {
@@ -2556,9 +2552,10 @@
     }
     .platform-macos .glass-toolbar { height: 56px; }
     .platform-macos .glass-toolbar::before { inset-block-end: -5px; }
-    .platform-macos .view { padding-top: 64px; }
+    .platform-macos .views-host { margin-top: 56px; }
+    .platform-macos .view { padding-top: 8px; }
     .platform-macos .glass-toolbar .glass-capsule button { min-width: 34px; }
-    .platform-macos .online-pill { color: var(--ink-2); }
+    .platform-macos .online-pill { padding-inline: 4px; background: transparent; box-shadow: none; color: var(--muted); font-weight: 500; }
     .platform-macos .stage-title { font-size: 19px; font-weight: 650; }
     .platform-macos :is(.mac-card,.telemetry-capsule,.group-drawer) { border-radius: 12px; }
     .platform-macos .cp-node { border-radius: 8px; }
@@ -2575,16 +2572,11 @@
     .platform-macos :is(.glass-btn-primary,.glass-btn-soft,.glass-btn-danger):disabled {
       opacity: .48; transform: none; box-shadow: none;
     }
-    /* These small floating controls can overlap scrolling content. Lists share the window material. */
-    @media (prefers-reduced-transparency: no-preference) {
-      .platform-macos :is(.glass-toolbar .glass-capsule, .glass-toolbar .glass-circle, .online-pill, #toolbarActions > #nodeTestActions, .glass-sample .glass-capsule, .glass-search) {
-        -webkit-backdrop-filter: blur(calc(3px + 8px * (1 - var(--glass-clarity)))) saturate(1.35); backdrop-filter: blur(calc(3px + 8px * (1 - var(--glass-clarity)))) saturate(1.35);
-      }
-    }
     .platform-macos #toolbarActions > #nodeTestActions {
-      gap: 0; padding: 3px; border-radius: 999px; background: var(--lg-bg); box-shadow: var(--lg-shadow);
+      gap: 1px; padding: 3px; border-radius: 999px;
     }
     .platform-macos #nodeTestActions button { height: 28px; }
+    .platform-macos #nodesActionBtn { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
     .platform-macos #nodesBandwidthBtn { background: transparent; box-shadow: none; }
     .platform-macos #nodesBandwidthBtn:hover:not(:disabled) { background: var(--well-bg); }
     .platform-macos #nodeTestActions button:focus-visible { outline-offset: -2px; }
@@ -2612,9 +2604,16 @@
     .platform-macos .sheet-actions #sheetImportFileBtn { background: transparent; box-shadow: none; color: var(--accent); }
     .platform-macos .sheet-actions #sheetImportFileBtn:hover { background: var(--node-hover); }
     .platform-macos .sheet-actions button { min-height: 28px; }
-    .platform-macos :is(.glass-search, .port-chip, .sheet-input, .sheet-textarea, .settings-select) {
-      background: var(--lg-bg); box-shadow: var(--lg-shadow);
+    .platform-macos :is(.port-chip, .sheet-input, .sheet-textarea) {
+      background: var(--well-bg); box-shadow: inset 0 0 0 .5px var(--well-stroke);
     }
+    .platform-macos #view-settings .glass-btn-soft {
+      background: transparent; color: var(--accent); box-shadow: none; border-radius: 6px;
+    }
+    .platform-macos #view-settings .glass-btn-soft:hover:not(:disabled) { background: var(--accent-soft); }
+    .platform-macos #view-settings .glass-btn-soft:disabled { color: var(--muted); }
+    .platform-macos .port-chip { border-radius: 6px; }
+
     .platform-macos :is(.sheet-input, .sheet-textarea, .settings-select, .glass-search input, .port-chip input) {
       -webkit-appearance: none; appearance: none; font-family: var(--font-ui); color: var(--ink);
     }
@@ -2647,10 +2646,43 @@
       border-radius: 8px; background-color: var(--window-bg); color: var(--ink);
     }
     .platform-macos .settings-select {
-      padding-inline: 12px 29px; border: 0; border-radius: 99px;
-      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23777e88' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 5 3-3 3 3m-6 4 3 3 3-3'/%3E%3C/svg%3E") right 9px center / 12px no-repeat, var(--lg-bg);
+      padding-inline: 7px 24px; border: 0; border-radius: 6px; box-shadow: none;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23777e88' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 5 3-3 3 3m-6 4 3 3 3-3'/%3E%3C/svg%3E") right 6px center / 11px no-repeat;
     }
+    .platform-macos .settings-select:hover { background-color: var(--well-bg); }
     @media (forced-colors: active) {
       .platform-macos .settings-select { appearance: auto; border: 1px solid ButtonText; }
     }
     .settings-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+    .probe-field { display: flex; align-items: center; width: min(100%, 245px); position: relative; }
+    .probe-field svg { position: absolute; left: 10px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+    #simHostInput { padding-inline-start: 34px; }
+    .probe-action { margin-inline-start: auto; }
+    .tauri-native.platform-macos #simForm { padding: 2px 0 6px; background: transparent; box-shadow: none; }
+    .tauri-native.platform-macos .probe-action { margin-inline-start: 0; }
+    .platform-macos #simHostInput { background: var(--card-surface); }
+
+    /* Only floating control groups use the library's optical surface. */
+    .platform-macos [data-glass-control] {
+      position: relative; isolation: isolate;
+      background: var(--glass-fill); box-shadow: 0 0 0 .5px var(--lg-outer), 0 1px 3px #00000012;
+    }
+    .platform-macos [data-glass-control]:has(> .control-material .glass) { background: transparent; }
+    .control-material { position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit; }
+    .control-material > div, .control-material .glass { width: 100%; height: 100%; border-radius: inherit; }
+    /* The library defaults to a large shadow intended for a standalone demo card. */
+    .control-material .glass { box-shadow: inset 0 .5px 0 var(--edge-light) !important; }
+    .control-material .glass::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--glass-fill);
+    }
+    .control-material .glass__warp { border-radius: inherit; }
+    /* WKWebView draws colored seams with the upstream SVG displacement filter. */
+    @supports (-webkit-touch-callout: none) {
+      .control-material .glass__warp { filter: none !important; }
+    }
+    .control-material svg { overflow: hidden; }
+    @media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+      .control-material { display: none; }
+      .platform-macos [data-glass-control]:has(> .control-material .glass) { background: var(--card-surface); }
+    }
