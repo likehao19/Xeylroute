@@ -110,6 +110,8 @@ struct CoreStatus {
     tun: bool,
     tun_scope: String,
     http_port: Option<u16>,
+    dns_mode: Option<&'static str>,
+    tun_dns_hijack: bool,
 }
 
 fn core_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -148,6 +150,8 @@ fn stamp(path: &Path) -> Option<Stamp> {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct RuntimeFacts {
     tun: bool,
+    dns_mode: Option<&'static str>,
+    tun_dns_hijack: bool,
     /// A port that accepts HTTP proxy requests (the mixed port, else the HTTP port).
     http: Option<u16>,
     /// A port that accepts SOCKS5 (the mixed port, else the SOCKS port).
@@ -164,6 +168,17 @@ fn parse_runtime_facts(config: &Value) -> RuntimeFacts {
     };
     RuntimeFacts {
         tun: config["tun"]["enable"] == true,
+        dns_mode: Some(if config["dns"]["enable"] != true {
+            "off"
+        } else {
+            match config["dns"]["enhanced-mode"].as_str() {
+                Some("fake-ip") => "fake-ip",
+                Some("redir-host") => "redir-host",
+                _ => "enabled",
+            }
+        }),
+        tun_dns_hijack: config["tun"]["enable"] == true
+            && config["tun"]["dns-hijack"].as_array().is_some_and(|rules| !rules.is_empty()),
         http: port("mixed-port").or_else(|| port("port")),
         socks: port("mixed-port").or_else(|| port("socks-port")),
     }
@@ -241,6 +256,8 @@ fn status(dir: &Path, child: &mut Option<CoreProcess>) -> Result<CoreStatus, Str
         tun_scope: configured_tun_scope(dir),
         system_proxy: system_proxy::is_owned_cached(dir)?,
         http_port: facts.http,
+        dns_mode: facts.dns_mode.filter(|_| is_running),
+        tun_dns_hijack: is_running && facts.tun_dns_hijack,
     })
 }
 
@@ -1656,6 +1673,19 @@ mod tests {
                 "mode": mode, "routepilot-tun-scope": "selected"
             })).is_err());
         }
+    }
+
+    #[test]
+    fn dns_status_uses_the_generated_configuration() {
+        let facts = parse_runtime_facts(&serde_json::json!({
+            "dns":{"enable":true,"enhanced-mode":"fake-ip"},
+            "tun":{"enable":true,"dns-hijack":["any:53"]}
+        }));
+        assert_eq!(facts.dns_mode, Some("fake-ip"));
+        assert!(facts.tun_dns_hijack);
+        let disabled = parse_runtime_facts(&serde_json::json!({"tun":{"dns-hijack":["any:53"]}}));
+        assert_eq!(disabled.dns_mode, Some("off"));
+        assert!(!disabled.tun_dns_hijack);
     }
 
     #[test]

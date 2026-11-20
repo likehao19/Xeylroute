@@ -1448,8 +1448,13 @@ export function mountDesktopApp(shell: ShellController): void {
     if (profile.managedOrder) mode.value = manual ? 'manual' : 'auto';
     const userLines = new Set(profile.rules);
     const render = () => {
+      if (!manual && profile.manualOrder) {
+        $('orderHint').textContent = '保存后将重新计算自动优先级。';
+        list.replaceChildren();
+        return;
+      }
       $('orderHint').textContent = manual ? '首条匹配生效，默认出口位于末尾。' : profile.managedOrder ? '阻断和直连优先，系统会补充局域网直连。' : '按导入文件中的顺序匹配。';
-      list.innerHTML = rows.map((line,i) => {
+      list.innerHTML = (manual ? rows : expected).map((line,i) => {
         const fallback = line.startsWith('MATCH,');
         const source = fallback ? '默认出口' : profile.sharedRules?.some(r => r.line === line) ? '个人共享' : userLines.has(line) ? (profile.subscriptionScope ? '当前订阅' : '当前配置') : '系统补充';
         return `<div class="sheet-picker-row"><small>${i+1}</small><span class="picker-meta"><strong>${esc(line)}</strong><small>${source}</small></span>
@@ -1476,6 +1481,12 @@ export function mountDesktopApp(shell: ShellController): void {
       };
     }
     render();
+  }
+
+  function conditionLabel(conditions: RuleConditions): string {
+    const app = conditions.program.split(/[\\/]/).at(-1);
+    const target = conditions.suffix ? `${conditions.target} 及子域名` : conditions.target;
+    return [app, target, conditions.port && `端口 ${conditions.port}`].filter(Boolean).join(' · ');
   }
 
   function renderRules(q: string): void {
@@ -1510,7 +1521,7 @@ export function mountDesktopApp(shell: ShellController): void {
     $('splitRulesPane').innerHTML = `
       ${(liveProfile?.sharedRules || []).filter(r => !q || r.line.toLowerCase().includes(q)).map(r => `
         <div class="mac-card flush"><div class="mac-row"><div class="mac-row-left"><div>
-        <span class="mac-row-title">${esc(r.conditions?.program || r.conditions?.target || r.conditions?.port || r.source)}</span>
+        <span class="mac-row-title">${esc(r.conditions ? conditionLabel(r.conditions) : r.source)}</span>
         <span class="mac-row-sub">个人共享 · ${esc(r.line)}</span></div></div>
         <div class="rule-right-cols live-cols"><button class="sf-icon-btn" data-shared-inspect="${esc(r.line)}" aria-label="查看命中连接">${SF_DETAIL}</button>
         <button class="sf-icon-btn" data-shared-edit="${esc(r.source)}" aria-label="编辑共享规则">${SF_EDIT}</button>
@@ -1520,7 +1531,8 @@ export function mountDesktopApp(shell: ShellController): void {
           const isProc = r.type.startsWith('PROCESS');
           const isDomain = r.type.startsWith('DOMAIN');
           const tone = r.exit === 'DIRECT' ? 'green' : r.exit === 'REJECT' ? 'red' : r.exit === 'PASS' ? 'purple' : 'blue';
-          const shortName = isProc ? (r.payload.split(/[\\/]/).at(-1) || r.payload) : r.payload;
+          const conditions = liveProfile?.ruleConditions?.[r.index];
+          const shortName = conditions ? conditionLabel(conditions) : isProc ? (r.payload.split(/[\\/]/).at(-1) || r.payload) : r.payload;
           const iconHtml = isProc
             ? renderProgramIcon(iconByPath.get(normalizedProgramPath(r.payload)), shortName)
             : isDomain
@@ -1983,7 +1995,13 @@ export function mountDesktopApp(shell: ShellController): void {
 
     const localIps = networkDetails?.error ? '读取失败' : (networkDetails?.addresses?.slice(0, 3).join(', ') || '—');
     const sysDns = networkDetails?.error ? '读取失败' : (networkDetails?.dns?.slice(0, 3).join(', ') || '—');
-    $('setExitIpSub').textContent = `出口 ${exitIp || '未检测'} · 本机 ${localIps} · DNS ${sysDns}`;
+    $('setExitIpSub').textContent = `出口 ${exitIp || '未检测'} · 本机 ${localIps}`;
+    $('systemDnsDetails').textContent = `系统 DNS · ${sysDns}`;
+    const dnsMode = liveStatus?.dnsMode;
+    const modeLabel = dnsMode === 'off' ? '关闭' : dnsMode === 'enabled' ? '开启' : dnsMode || '未知';
+    $('coreDnsDetails').textContent = liveStatus?.running
+      ? `内核 DNS · ${modeLabel}${liveStatus.tunDnsHijack ? ' · TUN 接管 DNS' : ''}`
+      : '内核未运行';
     $<HTMLButtonElement>('probeIpBtn').disabled = !liveCore;
 
     if (liveStatus) {

@@ -13,6 +13,8 @@ export type CoreStatus = {
   tun: boolean;
   tunScope: TunScope;
   httpPort?: number | null;
+  dnsMode?: 'off' | 'fake-ip' | 'redir-host' | 'enabled' | null;
+  tunDnsHijack?: boolean;
 };
 
 export type ProfileGroup = {

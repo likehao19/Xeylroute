@@ -10,9 +10,9 @@ import time
 import urllib.request
 
 
-def listener():
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
+def listener(family=socket.AF_INET):
+    sock = socket.socket(family)
+    sock.bind(("::1" if family == socket.AF_INET6 else "127.0.0.1", 0))
     sock.listen()
     return sock
 
@@ -29,7 +29,7 @@ def verify(binary):
         rule = f"AND,((PROCESS-PATH,{python}),(DOMAIN,work.test),(DST-PORT,{target_port})),Work"
         config = {
             "mixed-port": port, "external-controller": f"127.0.0.1:{api_port}", "secret": token,
-            "mode": "rule", "find-process-mode": "always", "log-level": "warning",
+            "mode": "rule", "find-process-mode": "always", "log-level": "warning", "ipv6": True,
             "hosts": {"work.test": "127.0.0.1", "other.test": "127.0.0.1"},
             "proxy-groups": [{"name": "Work", "type": "select", "proxies": ["DIRECT"]}],
             "rules": [rule, "MATCH,DIRECT"],
@@ -55,21 +55,23 @@ def verify(binary):
                 except OSError:
                     time.sleep(.05)
 
-            def check(host, dest_port, use_curl, work):
-                url = f"http://{host}:{dest_port}/"
+            def check(host, dest_port, use_curl, work, server=None):
+                authority = f"[{host}]" if ":" in host else host
+                url = f"http://{authority}:{dest_port}/"
                 if use_curl:
                     cmd = ["curl", "--noproxy", "", "--proxy", f"http://127.0.0.1:{port}", url]
                 else:
                     code = ("import socket,sys; s=socket.create_connection(('127.0.0.1',int(sys.argv[1])));"
                             "s.sendall(('GET '+sys.argv[2]+' HTTP/1.1\\r\\nHost: '+sys.argv[3]+'\\r\\n\\r\\n').encode());s.recv(1)")
-                    cmd = [python, "-c", code, str(port), url, f"{host}:{dest_port}"]
+                    cmd = [python, "-c", code, str(port), url, f"{authority}:{dest_port}"]
                 requester = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 try:
-                    sock = origin if dest_port == target_port else other
+                    sock = server or (origin if dest_port == target_port else other)
                     sock.settimeout(5)
                     with sock.accept()[0]:
                         for _ in range(50):
-                            found = [c for c in api("connections")["connections"] if c["metadata"]["host"] == host
+                            connections = api("connections")["connections"] or []
+                            found = [c for c in connections if host in (c["metadata"]["host"], c["metadata"].get("destinationIP"))
                                      and str(c["metadata"]["destinationPort"]) == str(dest_port)
                                      and (not use_curl or "curl" in c["metadata"].get("processPath", "").lower())]
                             if found:
@@ -101,6 +103,17 @@ def verify(binary):
             config["rules"] = ["MATCH,DIRECT"]
             api("configs?force=true", "PUT", {"payload": json.dumps(config)})
             check("work.test", target_port, False, False)
+            specific = "IP-CIDR,127.0.0.1/32,Work,no-resolve"
+            local = "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve"
+            for first, second, work in [(local, specific, False), (specific, local, True)]:
+                config["rules"] = [first, second, "MATCH,DIRECT"]
+                api("configs?force=true", "PUT", {"payload": json.dumps(config)})
+                check("127.0.0.1", target_port, False, work)
+            with listener(socket.AF_INET6) as ipv6:
+                for prefix, work in [("::1/128", True), ("::/127", True), ("::2/127", False)]:
+                    config["rules"] = [f"IP-CIDR6,{prefix},Work,no-resolve", "MATCH,DIRECT"]
+                    api("configs?force=true", "PUT", {"payload": json.dumps(config)})
+                    check("::1", ipv6.getsockname()[1], False, work, ipv6)
         finally:
             if proc.poll() is None:
                 proc.terminate()

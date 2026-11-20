@@ -50,8 +50,20 @@ impl Conditions {
                 Ok((kind.into(), value))
             }
             _ => {
-                if path.contains(['(', ')']) {
-                    return Err("此程序路径含有内核逻辑规则保留的括号，仅支持单独按路径匹配".into());
+                let mut depth = 0i32;
+                for c in path.chars() {
+                    if c == '(' {
+                        depth += 1;
+                    }
+                    if c == ')' {
+                        depth -= 1;
+                    }
+                    if depth < 0 {
+                        break;
+                    }
+                }
+                if depth != 0 {
+                    return Err("内核组合规则要求程序路径中的括号成对出现".into());
                 }
                 let clauses = parts
                     .iter()
@@ -147,6 +159,20 @@ pub fn decode(kind: &str, payload: &str) -> Option<Conditions> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parentheses_in_a_program_path_roundtrip_in_compound_rules() {
+        let root = if cfg!(windows) { "C:/Apps" } else { "/opt" };
+        let mut conditions = Conditions {
+            program: format!("{root}/Example (x86)/client"),
+            port: "443".into(),
+            ..Default::default()
+        };
+        let (kind, payload) = conditions.compile().unwrap();
+        assert_eq!(decode(&kind, &payload).unwrap().program, conditions.program);
+        conditions.program = format!("{root}/Example )(/client");
+        assert!(conditions.compile().is_err());
+    }
     #[test]
     fn combined_rule_roundtrips_and_rejects_invalid_targets() {
         let c = Conditions {
