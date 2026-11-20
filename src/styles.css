@@ -2659,3 +2659,10 @@
       .control-material { display: none; }
       .platform-macos [data-glass-control]:has(> .control-material .glass) { background: var(--card-surface); }
     }
+
+    .batch-select-all { display: flex; align-items: center; gap: 8px; padding: 0 10px 10px; }
+    .batch-select-all span { margin-left: auto; color: var(--muted); }
+    .batch-rule-list { max-height: min(44vh, 350px); overflow-y: auto; }
+    .batch-rule-list .picker-meta { flex: 1; min-width: 0; }
+    .batch-rule-list small { color: var(--muted); }
+    .sheet-textarea.yaml-editor { min-height: min(35vh, 260px); font: 12px/1.6 var(--font-mono); white-space: pre; tab-size: 2; }

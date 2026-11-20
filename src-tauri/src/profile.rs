@@ -112,8 +112,19 @@ pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BatchAction { Enable, Disable, Delete }
+
+#[derive(Deserialize)]
+pub struct RuleSelection {
+    pub index: usize,
+    pub expected: String,
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Edit {
+    BatchRules { action: BatchAction, rules: Vec<RuleSelection> },
     Mode {
         mode: String,
     },
@@ -681,6 +692,39 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
 
 pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     match mutation {
+        Edit::BatchRules { action, rules } => {
+            use std::collections::HashSet;
+            let saved = profile["rules"].as_array().ok_or("暂无规则")?;
+            let mut indices = HashSet::new();
+            let mut lines = HashSet::new();
+            for item in &rules {
+                matches_rule(saved, item.index, &item.expected)?;
+                if item.expected.starts_with("MATCH,") || !indices.insert(item.index) {
+                    return Err("请选择不同的非默认规则".into());
+                }
+                lines.insert(item.expected.as_str());
+            }
+            if matches!(action, BatchAction::Delete) {
+                let saved = array(profile, "rules")?;
+                let mut index = 0;
+                saved.retain(|_| {
+                    let keep = !indices.contains(&index);
+                    index += 1;
+                    keep
+                });
+                for remaining in saved.iter().filter_map(Value::as_str) {
+                    lines.remove(remaining);
+                }
+                if let Some(map) = profile.get_mut("routepilot-independent-exits").and_then(Value::as_object_mut) {
+                    map.retain(|line, _| !lines.contains(line.as_str()));
+                }
+            }
+            let disabled = array(profile, "routepilot-disabled-rules")?;
+            disabled.retain(|r| !r.as_str().is_some_and(|line| lines.contains(line)));
+            if matches!(action, BatchAction::Disable) {
+                disabled.extend(lines.into_iter().map(|line| json!(line)));
+            }
+        }
         Edit::Mode { mode } => {
             if !["rule", "global", "direct"].contains(&mode.as_str()) {
                 return Err("无效的代理模式。".into());
@@ -1136,6 +1180,33 @@ mod tests {
             assert!(edit_active(&mut profile, Edit::ProviderInterval { name: name.into(), seconds }).is_err());
         }
         assert_eq!(profile, restored);
+    }
+
+    #[test]
+    fn batch_rules_validate_the_entire_selection_before_changing_the_active_scope() {
+        let lines = json!(["DOMAIN,a.test,DIRECT", "DOMAIN,b.test,REJECT", "DOMAIN,c.test,DIRECT", "MATCH,DIRECT"]);
+        let mut config = json!({
+            "rules": lines, "routepilot-active-subscription":"test",
+            "proxy-providers":{"test":{"type":"file"}},
+            "routepilot-subscription-scopes":{"test":{"rules":lines}}
+        });
+        let bulk = |action, rules| serde_json::from_value(json!({"kind":"batchRules","action":action,"rules":rules})).unwrap();
+        let selection = json!([{"index":0,"expected":lines[0]},{"index":2,"expected":lines[2]}]);
+        for bad in [
+            json!([selection[0], {"index":2,"expected":"stale"}]),
+            json!([selection[0], {"index":3,"expected":"MATCH,DIRECT"}]),
+        ] {
+            let before = config.clone();
+            assert!(edit_active(&mut config, bulk("delete", bad)).is_err());
+            assert_eq!(config, before);
+        }
+        edit_active(&mut config, bulk("disable", selection.clone())).unwrap();
+        assert_eq!(runtime_profile(&config)["rules"], json!([lines[1],lines[3]]));
+        edit_active(&mut config, bulk("enable", selection.clone())).unwrap();
+        assert_eq!(summary(&config)["disabledRules"], json!([]));
+        edit_active(&mut config, bulk("delete", selection)).unwrap();
+        assert_eq!(summary(&config)["rules"], json!([lines[1],lines[3]]));
+        assert_eq!(config["rules"], lines);
     }
 
     #[test]

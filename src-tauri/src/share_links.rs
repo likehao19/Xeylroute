@@ -498,6 +498,10 @@ pub fn looks_like_share_links(input: &str) -> bool {
 
 /// Parses one or more share links (plain lines or a Base64-encoded link bundle) into Mihomo proxy objects.
 pub fn parse_share_links(input: &str) -> Result<Vec<Value>, String> {
+    parse_bundle(input, false)
+}
+
+pub fn parse_bundle(input: &str, require_all: bool) -> Result<Vec<Value>, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err("请输入节点分享链接。".into());
@@ -517,6 +521,7 @@ pub fn parse_share_links(input: &str) -> Result<Vec<Value>, String> {
         }
         match parse_single_link(line) {
             Ok(node) => nodes.push(node),
+            Err(err) if require_all => return Err(err),
             Err(err) => last_error = Some(err),
         }
     }

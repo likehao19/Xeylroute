@@ -1,3 +1,5 @@
+import { openProfileEditor, type DocumentMode } from './profile-editor';
+import { openRuleBatch } from './rule-batch';
 import { createSiteCatalog } from './demo-state';
 import {
   flagSvg,
@@ -1365,6 +1367,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   function renderSplit(): void {
     $('splitRulesPane').hidden = splitSub !== 'rules';
+    $('bulkRulesBtn').hidden = splitSub !== 'rules';
     $('splitGroupsPane').hidden = splitSub !== 'groups';
     $('splitProcsPane').hidden = splitSub !== 'procs';
     $('splitPrimaryAddBtn').hidden = splitSub === 'procs';
@@ -1413,6 +1416,16 @@ export function mountDesktopApp(shell: ShellController): void {
       .filter(r => r.type !== 'MATCH')
       .filter(r => !q || [r.type, r.payload, r.exit].join(' ').toLowerCase().includes(q));
 
+    const bulk = $<HTMLButtonElement>('bulkRulesBtn');
+    bulk.disabled = !rules.length;
+    bulk.onclick = () => {
+      const scope = liveProfile?.subscriptionScope ?? '';
+      openRuleBatch(rules.map(r => ({ title: r.payload || r.type, detail: r.line, enabled: r.enabled })), (action, selected) => {
+        void commitProfileEdit({ kind: 'batchRules', action,
+          rules: selected.map(i => ({ index: rules[i].index, expected: rules[i].line })),
+        }, `已${{ enable: '启用', disable: '停用', delete: '删除' }[action]}${selected.length} 条规则`, scope);
+      });
+    };
     const iconByPath = new Map<string, string | null | undefined>();
     for (const p of liveProcesses) iconByPath.set(normalizedProgramPath(p.path), p.icon);
 
@@ -1586,7 +1599,24 @@ export function mountDesktopApp(shell: ShellController): void {
       : `<div style="padding:36px;text-align:center;color:var(--muted)">${liveStatus?.running ? '暂无连接记录，可直接在上方输入域名实测连通' : '代理服务未启动，启动后将实时记录连接'}</div>`;
   }
 
+  function editDocument(mode: DocumentMode, name = ''): void {
+    const previous = new Set(liveProfile?.providers.map(p => p.name));
+    void openProfileEditor(mode, name, async () => {
+      await reloadProfile();
+      for (const provider of liveProfile?.providers || []) {
+        if (mode === 'config' || provider.name === name || !previous.has(provider.name)) {
+          subscriptionNodes.delete(provider.name);
+          await loadSubscriptionMeta(provider.name, true);
+        }
+      }
+      await refreshLiveState(true);
+      renderAllSafe();
+    });
+  }
+
   function renderSubs(): void {
+    $('newYamlBtn').hidden = false;
+    $('editConfigBtn').hidden = !liveStatus?.configured;
     const providers = liveProfile?.providers || [];
     $('subsGridPane').innerHTML = providers.length
       ? providers.map(saved => {
@@ -1611,6 +1641,7 @@ export function mountDesktopApp(shell: ShellController): void {
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex:none">
+                  ${remote || saved.type === 'file' ? `<button type="button" class="sf-icon-btn" data-edit-sub="${esc(saved.name)}" aria-label="编辑订阅" data-tip="编辑订阅">${SF_EDIT}</button>` : ''}
                   <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(saved.name)}" ${changingSubscription ? 'disabled' : ''}>刷新</button>
                   <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(saved.name)}" data-tip="移除订阅">${SF_TRASH}</button>
                 </div>
@@ -1909,7 +1940,8 @@ export function mountDesktopApp(shell: ShellController): void {
       `,
       actionsSplit: true,
       actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetImportFileBtn">从文件导入…</button>
+        <div class="sheet-actions-group"><button type="button" class="glass-btn-soft lg-track" id="sheetImportFileBtn">从文件导入…</button>
+        <button type="button" class="glass-btn-soft" id="sheetNewYaml">新建 YAML…</button></div>
         <div class="sheet-actions-group">
           <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
           <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport">导入</button>
@@ -1917,6 +1949,7 @@ export function mountDesktopApp(shell: ShellController): void {
       `,
     });
     $('sheetCancel').onclick = closeSheet;
+    $('sheetNewYaml').onclick = () => editDocument('new');
     $('sheetImportFileBtn').onclick = () => {
       closeSheet();
       $('subFileInput').click();
@@ -2453,6 +2486,8 @@ export function mountDesktopApp(shell: ShellController): void {
 
   $('nodesImportBtn').addEventListener('click', openImportSheet);
   $('subImportBtn').addEventListener('click', openImportSheet);
+  $('newYamlBtn').onclick = () => editDocument('new');
+  $('editConfigBtn').onclick = () => editDocument('config');
   $('heroProbeBtn').addEventListener('click', () => {
     const active = activeGlobalExit();
     const target = allSelectableNodes().find(n => n.name === active)
@@ -2772,6 +2807,12 @@ export function mountDesktopApp(shell: ShellController): void {
         const proc = liveProcesses.find(p => p.pid === pid);
         if (proc) void openProcessInspector(proc);
       }
+      return;
+    }
+
+    const editSub = target.closest<HTMLElement>('[data-edit-sub]')?.dataset.editSub;
+    if (editSub) {
+      editDocument(liveProfile?.providers.find(p => p.name === editSub)?.type === 'http' ? 'remote' : 'file', editSub);
       return;
     }
 

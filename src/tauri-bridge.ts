@@ -199,6 +199,7 @@ export type ProfileEdit =
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
   | { kind: 'programRules'; targets: string[]; exit: string }
   | { kind: 'clearProgramRules'; targets: string[] }
+  | { kind: 'batchRules'; action: 'enable' | 'disable' | 'delete'; rules: { index: number; expected: string }[] }
   | { kind: 'removeRule'; index: number; expected: string }
   | { kind: 'detachRule'; index: number; expected: string }
   | { kind: 'toggleRule'; index: number; expected: string; enabled: boolean }
@@ -249,7 +250,7 @@ export const tauriApi = {
   startGlobalTun: () => invoke<CoreStatus>('start_global_tun'),
   stopLocalCore: () => invoke<CoreStatus>('stop_local_core'),
   setSystemProxy: (enabled: boolean) => invoke<CoreStatus>('set_system_proxy', { enabled }),
-  importCoreConfig: (content: string) => invoke<CoreStatus>('import_core_config', { content }),
+  importCoreConfig: (content: string, expected?: string) => invoke<CoreStatus>('import_core_config', { content, expected }),
   profileSummary: () => invoke<ProfileSummaryResponse>('configured_profile_summary'),
   editProfile: (edit: ProfileEdit, expectedScope?: string) =>
     invoke<ProfileSummary>('edit_core_profile', { edit, expectedScope: expectedScope ?? '' }),
@@ -260,8 +261,12 @@ export const tauriApi = {
     invoke<SubscriptionCardMetadata>('subscription_card_metadata', { name }),
   importSubscriptionLink: (url: string) => invoke<ProfileSummary>('import_subscription_link', { url }),
   importNodeLinks: (content: string) => invoke<ProfileSummary>('import_node_links', { content }),
-  importSubscriptionFile: (name: string, content: string) =>
-    invoke<ProfileSummary>('import_subscription_file', { name, content }),
+  importSubscriptionFile: (name: string, content: string, options?: { expected?: string; authored?: boolean }) =>
+    invoke<ProfileSummary>('import_subscription_file', { name, content, ...options }),
+  readProfileDocument: (name: string | null, payload = false) =>
+    invoke<string>('read_profile_document', { name, payload }),
+  editSubscriptionUrl: (name: string, expected: string, url: string) =>
+    invoke<ProfileSummary>('edit_subscription_url', { name, expected, url }),
   coreProfileBackup: (restore: boolean) => invoke<void>('core_profile_backup', { restore }),
   mihomoSnapshot: (light: boolean) => invoke<MihomoSnapshot>('mihomo_snapshot', { light }),
   mihomoDelay: (name: string, provider: string | null, download: boolean, target: string, timeoutMs: number) =>

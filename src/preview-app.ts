@@ -1,3 +1,4 @@
+import { openRuleBatch } from './rule-batch';
 import {
   createSiteCatalog,
   DEFAULT_DEMO_STATE,
@@ -340,6 +341,7 @@ export function mountPreviewApp(shell: ShellController): void {
 
   function renderSplit(): void {
     $('splitRulesPane').hidden = splitSub !== 'rules';
+    $('bulkRulesBtn').hidden = splitSub !== 'rules';
     $('splitGroupsPane').hidden = splitSub !== 'groups';
     $('splitProcsPane').hidden = splitSub !== 'procs';
     $('splitPrimaryAddBtn').hidden = splitSub === 'procs';
@@ -359,6 +361,14 @@ export function mountPreviewApp(shell: ShellController): void {
     const filteredRules = state.rules.filter(r =>
       !q || [r.label, r.value, groupById(r.group)?.name || ''].join(' ').toLowerCase().includes(q)
     );
+    const bulk = $<HTMLButtonElement>('bulkRulesBtn');
+    bulk.disabled = !filteredRules.length;
+    bulk.onclick = () => openRuleBatch(filteredRules.map(r => ({ title: r.label, detail: r.value, enabled: r.on })), (action, selected) => {
+      const ids = new Set(selected.map(i => filteredRules[i].id));
+      if (action === 'delete') state.rules = state.rules.filter(r => !ids.has(r.id));
+      else state.rules.forEach(r => { if (ids.has(r.id)) r.on = action === 'enable'; });
+      renderAll();
+    });
     $('splitRulesPane').innerHTML = `
       <div class="mac-card flush">
         ${filteredRules.map(r => {

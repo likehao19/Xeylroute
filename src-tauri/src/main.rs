@@ -556,7 +556,7 @@ async fn stop_local_core(app: AppHandle) -> Result<CoreStatus, String> {
 }
 
 #[tauri::command]
-async fn import_core_config(app: AppHandle, content: String) -> Result<CoreStatus, String> {
+async fn import_core_config(app: AppHandle, content: String, expected: Option<String>) -> Result<CoreStatus, String> {
     if content.len() > 4 * 1024 * 1024 {
         return Err("配置文件不能超过 4 MiB。".into());
     }
@@ -571,6 +571,11 @@ async fn import_core_config(app: AppHandle, content: String) -> Result<CoreStatu
         let mut process = state.0.lock().map_err(|err| err.to_string())?;
         if running(&mut process)? {
             return Err("请停止代理服务后再替换完整配置。".into());
+        }
+        if let Some(expected) = expected {
+            if serde_yaml_ng::to_string(&configured_profile(&dir)?).map_err(|e| e.to_string())? != expected {
+                return Err("配置已更改，请重新打开编辑器。".into());
+            }
         }
         validate_with_core(&dir, &config)?;
         system_proxy::restore(&dir)?;
@@ -989,14 +994,90 @@ async fn import_node_links(app: AppHandle, content: String) -> Result<Value, Str
     .map_err(|err| err.to_string())?
 }
 
+fn provider_text(dir: &Path, provider: &Value) -> Result<String, String> {
+    use std::io::Read;
+    let path = subscription_cache_path(dir, provider).ok_or("本地没有订阅文件，请先刷新订阅。")?;
+    // Only expose provider payloads. Imported configurations can point a provider at any file.
+    let owned = ["routepilot-providers", "proxies"].iter()
+        .filter_map(|folder| dir.join(folder).canonicalize().ok())
+        .any(|root| path.starts_with(root));
+    if !owned { return Err("此文件由外部配置管理，请在完整配置中编辑。".into()); }
+    let mut content = String::new();
+    fs::File::open(path).map_err(|e| e.to_string())?.take(4 * 1024 * 1024 + 1)
+        .read_to_string(&mut content).map_err(|e| e.to_string())?;
+    if content.len() > 4 * 1024 * 1024 { return Err("订阅文件超过 4 MiB。".into()); }
+    Ok(content)
+}
+
+fn editable_provider_yaml(content: String) -> Result<String, String> {
+    if let Ok(yaml) = serde_yaml_ng::from_str::<Value>(&content) {
+        if yaml["proxies"].is_array() { return Ok(content); }
+        if yaml.is_array() {
+            return serde_yaml_ng::to_string(&serde_json::json!({"proxies":yaml})).map_err(|e| e.to_string());
+        }
+    }
+    let nodes = share_links::parse_bundle(&content, true)
+        .map_err(|_| "无法将此订阅转换为节点 YAML，请导入含 proxies 的文件。")?;
+    serde_yaml_ng::to_string(&serde_json::json!({"proxies":nodes})).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn read_profile_document(app: AppHandle, name: Option<String>, payload: bool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        require_core_access(&app)?;
+        let dir = core_dir(&app)?;
+        let config = configured_profile(&dir)?;
+        let Some(name) = name else {
+            return serde_yaml_ng::to_string(&config).map_err(|e| e.to_string());
+        };
+        let provider = &config["proxy-providers"][&name];
+        match provider["type"].as_str() {
+            Some("file") => provider_text(&dir, provider),
+            Some("http") if payload => provider_text(&dir, provider).and_then(editable_provider_yaml),
+            Some("http") => provider["url"].as_str().map(str::to_owned).ok_or("订阅地址缺失".into()),
+            _ => Err("找不到可编辑的订阅。".into()),
+        }
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn edit_subscription_url(app: AppHandle, name: String, expected: String, url: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || update_profile(&app, true, |config, _, _| {
+        let provider = &mut config["proxy-providers"][&name];
+        if provider["type"] != "http" || provider["url"].as_str() != Some(expected.as_str()) {
+            return Err("订阅已更改，请重新打开编辑器。".into());
+        }
+        let url = reqwest::Url::parse(url.trim()).map_err(|_| "订阅地址无效")?;
+        if url.scheme() != "https" || url.host_str().is_none() || !url.username().is_empty() || url.password().is_some() {
+            return Err("请输入有效的 HTTPS 订阅地址。".into());
+        }
+        provider["url"] = Value::String(url.to_string());
+        Ok(())
+    })).await.map_err(|e| e.to_string())?
+}
+
+fn yaml_provider_nodes(content: &str) -> Result<Value, String> {
+    let yaml: Value = serde_yaml_ng::from_str(content).map_err(|e| format!("YAML 格式错误：{e}"))?;
+    let nodes = yaml["proxies"].as_array().ok_or("请在 proxies 下填写节点列表。")?;
+    let mut names = std::collections::HashSet::new();
+    for node in nodes {
+        let name = node["name"].as_str().filter(|s| !s.trim().is_empty()).ok_or("节点缺少名称。")?;
+        if node["type"].as_str().is_none_or(str::is_empty) || !names.insert(name) {
+            return Err("节点须有协议类型，且名称不能重复。".into());
+        }
+    }
+    Ok(serde_json::json!({"proxies": nodes}))
+}
+
 #[tauri::command]
 async fn import_subscription_file(
     app: AppHandle,
     name: String,
     content: String,
+    expected: Option<String>,
+    authored: Option<bool>,
 ) -> Result<Value, String> {
-    let content = content.trim_start_matches('\u{feff}').trim().to_owned();
-    if content.is_empty() || content.len() > 4 * 1024 * 1024 || content.contains('\0') {
+    if content.trim().is_empty() || content.len() > 4 * 1024 * 1024 || content.contains('\0') {
         return Err("请选择有效的订阅文件（最大 4 MiB）。".into());
     }
     if name.is_empty() || name.len() > 255 || name.contains([',', '\n', '\r', '/', '\\']) {
@@ -1004,8 +1085,21 @@ async fn import_subscription_file(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let mut created = None;
+        let mut replaced = None;
         let result = update_profile(&app, true, |config, dir, first| {
-            if config["proxy-providers"]
+            let editing = expected.is_some();
+            let authoring = authored.unwrap_or(false) || editing;
+            if let Some(previous) = &expected {
+                let provider = &config["proxy-providers"][&name];
+                if provider["type"] != "file" || provider_text(dir, provider)? != *previous {
+                    return Err("订阅文件已更改，请重新打开编辑器。".into());
+                }
+                if previous == &content { return Ok(()); }
+            }
+            if authoring {
+                validate_with_core(dir, &yaml_provider_nodes(&content)?)?;
+            }
+            if !authoring && config["proxy-providers"]
                 .as_object()
                 .into_iter()
                 .flat_map(|items| items.values())
@@ -1023,6 +1117,11 @@ async fn import_subscription_file(
             let path = dir.join(&relative);
             fs::write(&path, &content).map_err(|err| err.to_string())?;
             created = Some(path);
+            if editing {
+                replaced = subscription_cache_path(dir, &config["proxy-providers"][&name]);
+                config["proxy-providers"][&name]["path"] = Value::String(relative);
+                return Ok(());
+            }
             profile::import_subscription_file(config, &name, &relative, first)?;
             profile::select_subscription(config, None)
         });
@@ -1030,11 +1129,39 @@ async fn import_subscription_file(
             if let Some(path) = created {
                 let _ = fs::remove_file(path);
             }
+        } else if let Some(old) = replaced {
+            // A backup or a second provider may still point at the previous revision.
+            let state = app.state::<Core>();
+            if let Ok(_guard) = state.0.lock() {
+                if let Ok(dir) = core_dir(&app) { prune_provider_revision(&dir, &old); }
+            };
         }
         result
     })
     .await
     .map_err(|err| err.to_string())?
+}
+
+fn prune_provider_revision(dir: &Path, old: &Path) {
+    let Some(stem) = old.file_stem().and_then(|s| s.to_str()) else { return };
+    if stem.len() != 32 || !stem.bytes().all(|b| b.is_ascii_hexdigit())
+        || old.extension().is_none_or(|ext| ext != "yaml")
+        || old.parent() != dir.join("routepilot-providers").canonicalize().ok().as_deref() {
+        return;
+    }
+    for filename in ["mihomo.json", "mihomo.backup.json"] {
+        let contents = match fs::read(dir.join(filename)) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return,
+        };
+        let Ok(config) = serde_json::from_slice::<Value>(&contents) else { return };
+        if config["proxy-providers"].as_object().into_iter().flat_map(|m| m.values())
+            .any(|p| subscription_cache_path(dir, p).as_deref() == Some(old)) {
+            return;
+        }
+    }
+    let _ = fs::remove_file(old);
 }
 
 #[tauri::command]
@@ -1442,6 +1569,8 @@ fn main() {
             import_subscription_link,
             import_node_links,
             import_subscription_file,
+            read_profile_document,
+            edit_subscription_url,
             connection_log::connection_log_rows,
             processes::list_running_processes,
             processes::list_process_threads,
@@ -1544,6 +1673,17 @@ rules:
         assert_eq!(sanitized["dns"]["enable"], true);
         let json_str = serde_json::to_string(&sanitized).unwrap();
         assert_eq!(validate_config(&json_str).unwrap(), vec![7890]);
+    }
+
+    #[test]
+    fn editable_provider_keeps_yaml_comments_and_rejects_invalid_or_partial_data() {
+        let text = "# private\nproxies:\n  - {name: Proxy, type: socks5, server: 127.0.0.1, port: 1080}\n";
+        assert_eq!(super::editable_provider_yaml(text.into()).unwrap(), text);
+        assert_eq!(super::yaml_provider_nodes(text).unwrap()["proxies"][0]["port"], 1080);
+        for invalid in ["proxies: [", "rules: []", "proxies: [{type: ss}]", "proxies: [{name: a,type: ss},{name: a,type: ss}]"] {
+            assert!(super::yaml_provider_nodes(invalid).is_err());
+        }
+        assert!(super::editable_provider_yaml("trojan://abc@localhost:443#Test\nunknown://broken".into()).is_err());
     }
 
     #[test]

@@ -165,6 +165,7 @@
             <button type="button" class="glass-btn-primary compact" id="nodesImportBtn" hidden>导入节点或订阅</button>
           </div>
           <div class="page-actions" data-page-actions="split" hidden>
+            <button type="button" class="glass-btn-soft compact" id="bulkRulesBtn" hidden>批量管理</button>
             <button type="button" class="glass-btn-primary compact lg-track" id="splitPrimaryAddBtn">+ 添加规则</button>
             <button type="button" class="glass-btn-soft lg-track" id="refreshProcsBtn" hidden>刷新程序</button>
           </div>
@@ -176,6 +177,7 @@
             <button type="submit" form="simForm" class="glass-btn-primary compact lg-track" id="simSubmitBtn">测试走向</button>
           </div>
           <div class="page-actions" data-page-actions="subs" hidden>
+            <button type="button" class="glass-btn-soft compact" id="newYamlBtn" hidden>新建 YAML</button>
             <button type="button" class="glass-btn-primary compact" id="subImportBtn">导入订阅或节点…</button>
           </div>
           <div class="page-actions" data-page-actions="settings" hidden>
@@ -425,6 +427,7 @@
         <section class="view" id="view-subs">
           <div class="section-head">
             <span class="section-label">订阅来源</span>
+            <button type="button" class="section-link" id="editConfigBtn" hidden>编辑完整配置…</button>
           </div>
           <input type="file" id="subFileInput" accept=".yaml,.yml,.txt,.conf,.b64,.base64,.json" hidden>
           <div class="grid-2col" id="subsGridPane"></div>
