@@ -36,11 +36,11 @@ def verify(app):
             reserved.bind(("127.0.0.1", 0))
             api_port = reserved.getsockname()[1]
         config = {
-            "mode": "rule", "log-level": "info", "ipv6": False,
+            "mode": "rule", "log-level": "info", "ipv6": False, "find-process-mode": "always",
             "external-controller": f"127.0.0.1:{api_port}", "secret": secrets.token_hex(32),
             "tun": {"enable": True, "device": device, "stack": "mixed", "auto-route": True,
                     "auto-detect-interface": True, "route-address": [prefix]},
-            "rules": [f"IP-CIDR,{prefix},REJECT,no-resolve", "MATCH,DIRECT"],
+            "rules": ["PROCESS-NAME,curl.exe,REJECT", f"IP-CIDR,{prefix},REJECT,no-resolve", "MATCH,DIRECT"],
         }
         payload = json.dumps(config).encode()
         worker = subprocess.Popen([app, "--routepilot-tun-worker", str(listener.getsockname()[1]),
@@ -68,13 +68,19 @@ def verify(app):
                         client.recv(1)
                 except OSError:
                     pass  # REJECT can reset the socket at connect, write or read.
+                subprocess.run(["curl.exe", "--noproxy", "*", "--max-time", "3",
+                                f"http://{address}:18081/"], capture_output=True, timeout=6)
                 for _ in range(50):
-                    if any(f"{address}:18080" in line and "REJECT" in line
-                           for line in log.read_text(encoding="utf-8", errors="replace").splitlines()):
+                    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+                    selected = any(f"{address}:18081" in line and "processname" in line.lower()
+                                   and "REJECT" in line for line in lines)
+                    other = any(f"{address}:18080" in line and "ipcidr" in line.lower()
+                                and "REJECT" in line for line in lines)
+                    if selected and other:
                         break
                     time.sleep(.1)
                 else:
-                    raise AssertionError("No REJECT decision for the test socket")
+                    raise AssertionError("Missing TUN decisions for curl or Python")
             if worker.wait(timeout=12) != 0:
                 raise AssertionError("The TUN worker failed to stop")
             for _ in range(5):
@@ -93,7 +99,8 @@ def verify(app):
                 except subprocess.TimeoutExpired:
                     worker.kill()
                     worker.wait(timeout=5)
-    print("Windows installed the TUN route, the test socket hit REJECT, and shutdown removed the route.")
+    print("Both selected curl and unselected Python entered TUN. Only curl matched the program rule."
+          " Windows removed the test route after shutdown.")
 
 
 if __name__ == "__main__":

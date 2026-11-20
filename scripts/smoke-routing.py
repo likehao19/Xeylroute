@@ -1,5 +1,6 @@
 """Verify routing decisions with real local HTTP clients and an isolated bundled Mihomo."""
 import json
+from contextlib import ExitStack
 from pathlib import Path
 import secrets
 import socket
@@ -97,6 +98,33 @@ def verify(binary):
             config["rules"] = [rule.replace(python, observed), "MATCH,DIRECT"]
             api("configs?force=true", "PUT", {"payload": json.dumps(config)})
             check("work.test", target_port, False, True)
+            # Keep two clients from the same executable alive at once. Capture each
+            # local port in its own client to correlate the controller row to a PID.
+            def check_instances(count):
+                with ExitStack() as stack:
+                    sources = {}
+                    for _ in range(count):
+                        code = ("import socket,sys; s=socket.create_connection(('127.0.0.1',int(sys.argv[1])));"
+                                "print(s.getsockname()[1],flush=True);"
+                                "s.sendall(('GET '+sys.argv[2]+' HTTP/1.0\\r\\n\\r\\n').encode());s.recv(1)")
+                        child = stack.enter_context(subprocess.Popen(
+                            [python, "-c", code, str(port), f"http://work.test:{target_port}/"],
+                            stdout=subprocess.PIPE, text=True))
+                        stack.callback(child.kill)
+                        sources[child.stdout.readline().strip()] = child.pid
+                        stack.enter_context(origin.accept()[0])
+                    for _ in range(50):
+                        connections = api("connections")["connections"] or []
+                        matches = {str(c["metadata"]["sourcePort"]) for c in connections
+                                   if c["metadata"]["processPath"] == observed and "Work" in c["chains"]}
+                        if sources.keys() <= matches:
+                            print("Executable rule matched PID(s):", *sources.values(), flush=True)
+                            return
+                        time.sleep(.04)
+                    raise AssertionError("Executable rule did not match each identified client")
+
+            check_instances(2)
+            check_instances(1)  # A fresh process still inherits the path rule.
             check("work.test", target_port, True, False)
             check("other.test", target_port, False, False)
             check("work.test", other.getsockname()[1], False, False)

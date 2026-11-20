@@ -1,11 +1,20 @@
 name: Windows network acceptance
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Windows test image
+        type: choice
+        default: windows-2022
+        options:
+          - windows-2022
+          - windows-11-arm
 permissions:
   contents: read
 
 jobs:
   windows:
-    runs-on: windows-2022
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
@@ -16,7 +25,8 @@ jobs:
       - name: Verify live forwarding and application routing
         shell: pwsh
         run: |
-          $core = "src-tauri/binaries/xeylroute-mihomo-x86_64-pc-windows-msvc.exe"
+          $target = ((rustc -vV | Select-String '^host: ').Line -split ' ')[1]
+          $core = "src-tauri/binaries/xeylroute-mihomo-${target}.exe"
           python scripts/smoke-mihomo.py --binary $core
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/smoke-routing.py $core
