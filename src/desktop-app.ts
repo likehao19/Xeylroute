@@ -17,6 +17,7 @@ import {
   buildProxyEnvText,
   type ConnectionLogRow,
   type CoreStatus,
+  type CoreSettings,
   type DelayResult,
   formatBytes,
   formatProcessStartedAt,
@@ -877,7 +878,7 @@ export function mountDesktopApp(shell: ShellController): void {
       const ready = await ensureLocalCore();
       if (!ready) throw new Error('请先导入订阅或节点链接。');
       if (generation !== probeGeneration) return;
-      const result = await tauriApi.mihomoDelay(node.name, node.policy ? null : node.provider, download);
+      const result = await tauriApi.mihomoDelay(node.name, node.policy ? null : node.provider, download, probeTarget.value, Number(probeTimeout.value));
       if (generation !== probeGeneration) return;
       const previous = liveDelays.get(key);
       if (!download && previous && typeof previous !== 'string') result.mbps = previous.mbps;
@@ -902,7 +903,7 @@ export function mountDesktopApp(shell: ShellController): void {
         ? sites.flatMap(([, items], ci) => items.map((_, si) => () => probeSite(ci, si)))
         : allSelectableNodes().map(node => () => testSingleNode(node, kind === 'download'));
       if (!jobs.length) { notify('暂无可测速目标'); return; }
-      const concurrency = kind === 'download' ? 1 : 8;
+      const concurrency = kind === 'download' ? 1 : Number(probeWorkers.value);
       const label = { delay: '节点延迟', download: '节点带宽', sites: '网站连通性' }[kind];
       notify(`正在测量 ${jobs.length} 个目标的${label}`);
       await runProbeQueue(jobs, concurrency, job => job(), active);
@@ -1652,7 +1653,86 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
+  const coreFields = $<HTMLFieldSetElement>('coreSettingsFields');
+  const providerPeriod = $<HTMLSelectElement>('providerPeriod');
+  const probeTarget = $<HTMLSelectElement>('probeTarget');
+  const probeTimeout = $<HTMLSelectElement>('probeTimeout');
+  const probeWorkers = $<HTMLSelectElement>('probeWorkers');
+  $('desktopNetworkSettings').hidden = false;
+  for (const control of [probeTarget, probeTimeout, probeWorkers]) {
+    const key = `xeylroute-${control.id}`;
+    const saved = localStorage.getItem(key);
+    if (Array.from(control.options).some(option => option.value === saved)) control.value = saved!;
+    control.addEventListener('change', () => localStorage.setItem(key, control.value));
+  }
+
+  $('showCoreLog').addEventListener('click', () => {
+    openSheet({
+      title: '内核日志', subtitle: '最近 200 行，最多 64 KB', size: 'wide',
+      bodyHtml: '<pre id="coreLogText" class="core-log-text selectable" tabindex="0"></pre>',
+      actionsHtml: '<button type="button" class="glass-btn-soft" id="refreshCoreLog">刷新</button><button type="button" class="glass-btn-primary compact" id="closeCoreLog">完成</button>',
+    });
+    const log = $('coreLogText');
+    const refresh = $<HTMLButtonElement>('refreshCoreLog');
+    const read = async () => {
+      refresh.disabled = true;
+      try {
+        log.textContent = (await tauriApi.coreLogTail()) || '暂无内核日志';
+        log.scrollTop = log.scrollHeight;
+      } catch (err) {
+        log.textContent = cleanError(err);
+      } finally {
+        refresh.disabled = false;
+      }
+    };
+    refresh.onclick = read;
+    $('closeCoreLog').onclick = closeSheet;
+    void read();
+  });
+
+  let savingCoreSetting = false;
+  coreFields.addEventListener('change', async event => {
+    const control = event.target;
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement) || !liveProfile) return;
+    const key = control.dataset.coreOption as keyof CoreSettings | undefined;
+    const edit: ProfileEdit = key
+      ? { kind: 'coreSetting', key, value: control instanceof HTMLInputElement ? control.checked : control.value }
+      : { kind: 'providerInterval', name: selectedSubscription, seconds: Number(providerPeriod.value) };
+    savingCoreSetting = true;
+    coreFields.disabled = true;
+    try {
+      if (profileBusy) notify('正在保存其他配置，请稍后重试', true);
+      else await commitProfileEdit(edit, '设置已保存');
+    } finally {
+      savingCoreSetting = false;
+      renderSettings();
+    }
+  });
+
   function renderSettings(): void {
+    const settings = liveProfile?.coreSettings;
+    coreFields.disabled = savingCoreSetting || !settings || changingSubscription || networkUpdating || batchTesting;
+    if (!savingCoreSetting && settings) {
+      $<HTMLInputElement>('coreIpv6').checked = settings.ipv6;
+      $<HTMLInputElement>('coreConcurrent').checked = settings['tcp-concurrent'];
+      $<HTMLInputElement>('coreUnified').checked = settings['unified-delay'];
+      $<HTMLSelectElement>('coreLogLevel').value = settings['log-level'];
+      const provider = liveProfile?.providers.find(p => p.name === selectedSubscription && p.type === 'http');
+      $('providerPeriodRow').hidden = !provider;
+      if (provider) {
+        const seconds = String(provider.interval ?? 0);
+        const previous = providerPeriod.querySelector('option[data-imported]');
+        if (previous && previous.getAttribute('value') !== seconds) previous.remove();
+        if (!Array.from(providerPeriod.options).some(o => o.value === seconds)) {
+          const option = new Option(`${seconds} 秒`, seconds);
+          option.dataset.imported = '';
+          providerPeriod.add(option);
+        }
+        providerPeriod.value = seconds;
+        $('providerPeriodHint').textContent = `内核运行时自动更新 · ${provider.name}`;
+      }
+    }
+    $<HTMLFieldSetElement>('probeSettingsFields').disabled = batchTesting || liveTesting.size > 0;
     const scope = liveProfile?.tunScope || liveStatus?.tunScope || 'all';
     const scopeHost = $('setTunScopeHost');
     if (scopeHost.dataset.scope !== scope) {

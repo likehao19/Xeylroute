@@ -304,7 +304,19 @@ pub async fn mihomo_delay(
     name: String,
     provider: Option<String>,
     download: Option<bool>,
+    target: Option<String>,
+    timeout_ms: Option<u32>,
 ) -> Result<Value, String> {
+    let url = match target.as_deref().unwrap_or("google") {
+        "google" => "https://www.gstatic.com/generate_204",
+        "cloudflare" => "https://cp.cloudflare.com/generate_204",
+        "microsoft" => "https://www.msftconnecttest.com/connecttest.txt",
+        _ => return Err("不支持的延迟测试服务".into()),
+    };
+    let timeout = match timeout_ms.unwrap_or(5000) {
+        ms @ (2000 | 5000 | 7000) => ms.to_string(),
+        _ => return Err("不支持的延迟测试超时".into()),
+    };
     let core = take(&state)?;
     let route = match provider.as_deref() {
         Some(provider) => vec!["providers", "proxies", provider, &name, "healthcheck"],
@@ -314,10 +326,7 @@ pub async fn mihomo_delay(
         .request(
             reqwest::Method::GET,
             &route,
-            &[
-                ("timeout", "5000"),
-                ("url", "https://www.gstatic.com/generate_204"),
-            ],
+            &[("timeout", timeout.as_str()), ("url", url)],
             None,
         )
         .await

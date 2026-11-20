@@ -2666,3 +2666,19 @@
     .mac-window:has(#view-connect.active) .sidebar-live-top,
     .mac-window:has(#view-connect.active) .sidebar-wave-bg { display: none; }
     .mac-window:has(#view-connect.active) .sidebar-core-foot { margin-top: 0; border-top: 0; padding-top: 0; }
+
+    .settings-fields { min-width: 0; margin: 0 0 18px; }
+    .settings-fields .mac-row > div { min-width: 0; }
+    .settings-fields .mac-row + .mac-row::before { left: 14px; }
+    .settings-fields .mac-row-sub { white-space: normal; }
+    .settings-log-actions { display: flex; align-items: center; gap: 6px; }
+    .core-log-text {
+      margin: 0; max-height: 45vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+      font: 11.5px/1.5 var(--font-mono);
+    }
+    .settings-select {
+      flex: none; min-height: 28px; padding: 2px 9px; border: 1px solid var(--popup-border);
+      border-radius: 8px; background-color: var(--window-bg); color: var(--ink);
+    }
+    .platform-macos .settings-select { border-radius: 99px; }
+    .settings-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

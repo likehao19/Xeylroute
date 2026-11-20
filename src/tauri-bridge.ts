@@ -42,7 +42,15 @@ export type ProfileNode = {
   type?: string;
 };
 
+export type CoreSettings = {
+  ipv6: boolean;
+  'tcp-concurrent': boolean;
+  'unified-delay': boolean;
+  'log-level': string;
+};
+
 export type ProfileSummary = {
+  coreSettings: CoreSettings;
   subscriptionScope?: string | null;
   subscriptionScopeInitialized?: boolean;
   http?: number | null;
@@ -185,6 +193,8 @@ export type TrayState = {
 
 export type ProfileEdit =
   | { kind: 'mode'; mode: RoutingMode }
+  | { kind: 'coreSetting'; key: keyof CoreSettings; value: string | boolean }
+  | { kind: 'providerInterval'; name: string; seconds: number }
   | { kind: 'ports'; http: number; socks: number; mixed: number }
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
   | { kind: 'programRules'; targets: string[]; exit: string }
@@ -232,6 +242,7 @@ export function listenWindowVisibility(handler: (visible: boolean) => void): Pro
 }
 
 export const tauriApi = {
+  coreLogTail: () => invoke<string>('core_log_tail'),
   coreStatus: () => invoke<CoreStatus>('core_status'),
   startLocalCore: () => invoke<CoreStatus>('start_local_core'),
   startGlobalTun: () => invoke<CoreStatus>('start_global_tun'),
@@ -252,8 +263,8 @@ export const tauriApi = {
     invoke<ProfileSummary>('import_subscription_file', { name, content }),
   coreProfileBackup: (restore: boolean) => invoke<void>('core_profile_backup', { restore }),
   mihomoSnapshot: (light: boolean) => invoke<MihomoSnapshot>('mihomo_snapshot', { light }),
-  mihomoDelay: (name: string, provider: string | null, download: boolean) =>
-    invoke<DelayResult>('mihomo_delay', { name, provider, download }),
+  mihomoDelay: (name: string, provider: string | null, download: boolean, target: string, timeoutMs: number) =>
+    invoke<DelayResult>('mihomo_delay', { name, provider, download, target, timeoutMs }),
   mihomoSelect: (name: string) => invoke<void>('mihomo_select', { name }),
   mihomoSelectGroup: (group: string, name: string) =>
     invoke<void>('mihomo_select_group', { group, name }),

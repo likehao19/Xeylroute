@@ -598,6 +598,32 @@ fn configured_profile(dir: &Path) -> Result<Value, String> {
     serde_json::from_str(&content).map_err(|err| err.to_string())
 }
 
+fn log_tail(mut reader: impl std::io::Read + std::io::Seek) -> std::io::Result<String> {
+    use std::io::{Read, SeekFrom};
+    const LIMIT: u64 = 64 * 1024;
+    let end = reader.seek(SeekFrom::End(0))?;
+    let start = end.saturating_sub(LIMIT);
+    reader.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::new();
+    reader.take(LIMIT).read_to_end(&mut bytes)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let mut lines: Vec<_> = text.lines().rev().take(200).collect();
+    lines.reverse();
+    Ok(lines.join("\n"))
+}
+
+#[tauri::command]
+async fn core_log_tail(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = core_dir(&app)?.join("mihomo.log");
+        match fs::File::open(path) {
+            Ok(file) => log_tail(file).map_err(|err| err.to_string()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+            Err(err) => Err(err.to_string()),
+        }
+    }).await.map_err(|err| err.to_string())?
+}
+
 #[tauri::command]
 async fn configured_profile_summary(app: AppHandle) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -857,13 +883,17 @@ fn update_profile(
             let temporary = dir.join("mihomo.json.tmp");
             fs::write(&temporary, prepared).map_err(|err| err.to_string())?;
             let mode_changed = config.get("mode") != original.get("mode");
-            let mode_only = mode_changed && {
+            // Mihomo supports PATCH for these fields. Unified delay and providers need a reload.
+            let patch_key = ["mode", "ipv6", "tcp-concurrent", "log-level"].into_iter().find(|&key| {
+                if config.get(key) == original.get(key) {
+                    return false;
+                }
                 let mut previous = original.clone();
-                previous["mode"] = config["mode"].clone();
+                previous[key] = config[key].clone();
                 previous == config
-            };
+            });
             return tauri::async_runtime::block_on(async {
-                let _lock = if mode_only {
+                let _lock = if patch_key.is_some() {
                     None
                 } else {
                     Some(controller.probe_lock.lock().await)
@@ -871,18 +901,14 @@ fn update_profile(
                 let get = controller
                     .request(reqwest::Method::GET, &["configs"], &[], None)
                     .await?;
-                let reload = |raw: &Value, apply_mode: bool| {
-                    if mode_only {
-                        let mode = if apply_mode {
-                            &raw["mode"]
-                        } else {
-                            &get["mode"]
-                        };
+                let reload = |raw: &Value, restoring: bool| {
+                    if let Some(key) = patch_key {
+                        let value = if restoring { &get[key] } else { &raw[key] };
                         return Ok(controller.request(
                             reqwest::Method::PATCH,
                             &["configs"],
                             &[],
-                            Some(serde_json::json!({"mode":mode})),
+                            Some(serde_json::json!({(key):value})),
                         ));
                     }
                     let mut runtime =
@@ -899,7 +925,7 @@ fn update_profile(
                             runtime[key] = value.clone();
                         }
                     }
-                    if !apply_mode {
+                    if restoring || !mode_changed {
                         runtime["mode"] = get["mode"].clone();
                     }
                     controller.add_probe_listener(&mut runtime).map(|()| {
@@ -911,12 +937,12 @@ fn update_profile(
                         )
                     })
                 };
-                if let Err(error) = reload(&config, mode_changed)?.await {
+                if let Err(error) = reload(&config, false)?.await {
                     let _ = fs::remove_file(&temporary);
                     return Err(format!("内核未能应用配置：{error}"));
                 }
                 if let Err(error) = fs::rename(&temporary, dir.join("mihomo.json")) {
-                    let recovery = reload(&original, false)?.await;
+                    let recovery = reload(&original, true)?.await;
                     return Err(match recovery {
                         Ok(_) => format!("保存失败，已恢复原配置：{error}"),
                         Err(err) => format!("保存失败且内核回滚失败：{error} / {err}"),
@@ -1407,6 +1433,7 @@ fn main() {
             set_system_proxy,
             import_core_config,
             configured_profile_summary,
+            core_log_tail,
             subscription_nodes,
             subscription_card_metadata,
             edit_core_profile,
@@ -1452,7 +1479,18 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{global_tun_config, parse_runtime_facts, sanitize_imported_config, subscription_usage, validate_config};
+    use super::{global_tun_config, log_tail, parse_runtime_facts, sanitize_imported_config, subscription_usage, validate_config};
+
+    #[test]
+    fn tail_limits_large_logs_by_bytes_and_lines() {
+        use std::io::Cursor;
+        let lines = (0..300).map(|i| format!("line {i}\n")).collect::<String>();
+        let tail = log_tail(Cursor::new(lines)).unwrap();
+        assert_eq!(tail.lines().count(), 200);
+        assert!(tail.starts_with("line 100\n"));
+        assert!(tail.ends_with("line 299"));
+        assert_eq!(log_tail(Cursor::new(vec![b'x'; 100_000])).unwrap().len(), 65_536);
+    }
 
     #[test]
     fn selected_scope_never_starts_global_tun() {

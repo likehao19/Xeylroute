@@ -90,6 +90,8 @@ pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
         &mutation,
         Edit::Mode { .. }
             | Edit::Ports { .. }
+            | Edit::CoreSetting { .. }
+            | Edit::ProviderInterval { .. }
             | Edit::Provider { .. }
             | Edit::TunScope { .. }
             | Edit::RemoveNode { .. }
@@ -114,6 +116,14 @@ pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
 pub enum Edit {
     Mode {
         mode: String,
+    },
+    CoreSetting {
+        key: String,
+        value: Value,
+    },
+    ProviderInterval {
+        name: String,
+        seconds: u64,
     },
     Ports {
         http: u16,
@@ -525,6 +535,12 @@ pub fn summary(profile: &Value) -> Value {
         "subscriptionScope": active_subscription(catalog),
         "subscriptionScopeInitialized": catalog.get("routepilot-active-subscription").is_some(),
         "http":profile.get("port"), "socks":profile.get("socks-port"), "mixed":profile.get("mixed-port"), "mode":profile.get("mode"),
+        "coreSettings": {
+            "ipv6": catalog["ipv6"].as_bool().unwrap_or(true),
+            "tcp-concurrent": catalog["tcp-concurrent"].as_bool().unwrap_or(true),
+            "unified-delay": catalog["unified-delay"].as_bool().unwrap_or(true),
+            "log-level": catalog["log-level"].as_str().unwrap_or("info")
+        },
         "rules":profile.get("rules"), "groups":groups, "providers":providers, "exits":exits(profile),
         "disabledRules":profile.get("routepilot-disabled-rules"), "disabledGroups":profile.get("routepilot-disabled-groups"),
         "tunScope": tun_scope(catalog),
@@ -663,6 +679,26 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 return Err("无效的代理模式。".into());
             }
             profile["mode"] = json!(mode);
+        }
+        Edit::CoreSetting { key, value } => {
+            let valid = match key.as_str() {
+                "ipv6" | "tcp-concurrent" | "unified-delay" => value.is_boolean(),
+                "log-level" => matches!(value.as_str(), Some("debug" | "info" | "warning" | "error" | "silent")),
+                _ => false,
+            };
+            if !valid {
+                return Err("不支持的内核设置或取值".into());
+            }
+            profile[key] = value;
+        }
+        Edit::ProviderInterval { name, seconds } => {
+            if seconds != 0 && !(60..=86400).contains(&seconds) {
+                return Err("刷新间隔须为 1 分钟至 24 小时，或选择手动刷新".into());
+            }
+            let provider = profile["proxy-providers"].get_mut(&name)
+                .filter(|provider| provider["type"] == "http")
+                .ok_or("请选择远程订阅")?;
+            provider["interval"] = json!(seconds);
         }
         Edit::Ports { http, socks, mixed } => {
             profile["port"] = json!(http);
@@ -1042,6 +1078,39 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_preferences_survive_scoping_and_profile_round_trip() {
+        let mut profile = json!({"proxy-providers": {
+            "one": {"type":"http","url":"https://example.org/one","interval":1234,"header":{"X":["a"]}},
+            "two": {"type":"file","path":"two.yaml"}
+        }});
+        let original_provider = profile["proxy-providers"]["one"].clone();
+        select_subscription(&mut profile, Some("one".into())).unwrap();
+        assert_eq!(summary(&profile)["coreSettings"]["unified-delay"], true);
+        for key in ["ipv6", "tcp-concurrent", "unified-delay", "log-level"] {
+            let value = if key == "log-level" { json!("warning") } else { json!(false) };
+            edit_active(&mut profile, Edit::CoreSetting { key: key.into(), value }).unwrap();
+        }
+        edit_active(&mut profile, Edit::ProviderInterval { name: "one".into(), seconds: 0 }).unwrap();
+        let mut expected = original_provider;
+        expected["interval"] = json!(0);
+        assert_eq!(profile["proxy-providers"]["one"], expected);
+        select_subscription(&mut profile, Some("two".into())).unwrap();
+        let restored: Value = serde_json::from_str(&profile.to_string()).unwrap();
+        let runtime = crate::runtime_config(&restored, true);
+        for key in ["ipv6", "tcp-concurrent", "unified-delay", "log-level"] {
+            assert_eq!(runtime[key], restored[key]);
+            assert_eq!(summary(&restored)["coreSettings"][key], restored[key]);
+        }
+        for (key, value) in [("allow-lan", json!(true)), ("ipv6", json!("yes")), ("log-level", json!("all"))] {
+            assert!(edit_active(&mut profile, Edit::CoreSetting { key: key.into(), value }).is_err());
+        }
+        for (name, seconds) in [("one", 1), ("two", 3600), ("missing", 3600)] {
+            assert!(edit_active(&mut profile, Edit::ProviderInterval { name: name.into(), seconds }).is_err());
+        }
+        assert_eq!(profile, restored);
+    }
 
     #[test]
     fn subscription_scopes_keep_distinct_rules_groups_and_automatic_exits() {

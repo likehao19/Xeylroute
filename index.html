@@ -501,6 +501,50 @@
             </div>
           </div>
 
+          <div id="desktopNetworkSettings" hidden>
+            <p class="section-label" id="coreSettingsLabel">内核与订阅</p>
+            <fieldset aria-labelledby="coreSettingsLabel" id="coreSettingsFields" class="mac-card flush settings-fields" disabled>
+                <div class="mac-row">
+                  <div><label for="coreIpv6" class="mac-row-title">IPv6 出站</label><span class="mac-row-sub">允许内核使用 IPv6 地址建立出站连接。</span></div>
+                  <label class="mac-switch lg"><input type="checkbox" id="coreIpv6" data-core-option="ipv6"><i></i></label>
+                </div>
+                <div class="mac-row">
+                  <div><label for="coreConcurrent" class="mac-row-title">TCP 并发连接</label><span class="mac-row-sub">域名解析出多个 IP 时，同时尝试连接并使用先成功的地址。</span></div>
+                  <label class="mac-switch lg"><input type="checkbox" id="coreConcurrent" data-core-option="tcp-concurrent"><i></i></label>
+                </div>
+                <div class="mac-row">
+                  <div><label for="coreUnified" class="mac-row-title">统一延迟测试</label><span class="mac-row-sub">复用已建立的连接测量延迟，减少协议握手对结果的影响。</span></div>
+                  <label class="mac-switch lg"><input type="checkbox" id="coreUnified" data-core-option="unified-delay"><i></i></label>
+                </div>
+                <div class="mac-row">
+                  <div><label for="coreLogLevel" class="mac-row-title">内核日志级别</label><span class="mac-row-sub">日常使用可选「信息」，排查故障时可切换为「调试」。</span></div>
+                  <div class="settings-log-actions">
+                    <button type="button" id="showCoreLog" class="glass-btn-soft">查看日志</button>
+                    <select id="coreLogLevel" class="settings-select" data-core-option="log-level"><option value="debug">调试</option><option value="info" selected>信息</option><option value="warning">警告</option><option value="error">错误</option><option value="silent">静默</option></select>
+                  </div>
+                </div>
+                <div class="mac-row" id="providerPeriodRow" hidden>
+                  <div><label for="providerPeriod" class="mac-row-title">当前订阅的自动更新</label><span class="mac-row-sub" id="providerPeriodHint">内核运行时按此周期刷新当前远程订阅。</span></div>
+                  <select id="providerPeriod" class="settings-select"><option value="0">仅手动</option><option value="900">15 分钟</option><option value="3600">1 小时</option><option value="21600">6 小时</option><option value="43200">12 小时</option><option value="86400">24 小时</option></select>
+                </div>
+            </fieldset>
+            <p class="section-label" id="probeSettingsLabel">手动测速</p>
+            <fieldset aria-labelledby="probeSettingsLabel" id="probeSettingsFields" class="mac-card flush settings-fields">
+                <div class="mac-row">
+                  <div><label for="probeTarget" class="mac-row-title">延迟测试服务</label><span class="mac-row-sub">用于手动测量节点延迟。自动优选组沿用配置中的健康检查地址。</span></div>
+                  <select id="probeTarget" class="settings-select"><option value="google">Google</option><option value="cloudflare">Cloudflare</option><option value="microsoft">Microsoft</option></select>
+                </div>
+                <div class="mac-row">
+                  <div><label for="probeTimeout" class="mac-row-title">延迟超时</label><span class="mac-row-sub">单个节点等待响应的最长时间。</span></div>
+                  <select id="probeTimeout" class="settings-select"><option value="2000">2 秒</option><option value="5000" selected>5 秒</option><option value="7000">7 秒</option></select>
+                </div>
+                <div class="mac-row">
+                  <div><label for="probeWorkers" class="mac-row-title">批量测速并发数</label><span class="mac-row-sub">延迟和网站测速可并行；带宽测试逐个下载，避免争抢带宽。</span></div>
+                  <select id="probeWorkers" class="settings-select"><option value="2">2 个</option><option value="4">4 个</option><option value="8" selected>8 个</option><option value="16">16 个</option></select>
+                </div>
+            </fieldset>
+          </div>
+
           <p class="section-label">端口监听与网络详情</p>
           <div class="mac-card flush" style="margin-bottom:18px">
             <div class="mac-row">
