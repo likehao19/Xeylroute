@@ -255,6 +255,22 @@ impl ConnectionSnapshot {
     }
 }
 
+#[tauri::command]
+pub async fn active_routes(state: tauri::State<'_, LiveController>) -> Result<Vec<Value>, String> {
+    let core = take(&state)?;
+    let data = core.request(reqwest::Method::GET, &["connections"], &[], None).await?;
+    let rows = data["connections"].as_array().ok_or("无效的活动连接响应")?;
+    Ok(rows.iter().filter(|row| {
+        !row["chains"].as_array().is_some_and(|chain| chain.iter().any(|n| n.as_str() == Some(PROBE_GROUP)))
+    }).map(|row| {
+        let meta = &row["metadata"];
+        let field = |key: &str| meta[key].as_str().unwrap_or("");
+        json!({"program": field("processPath"), "process": field("process"), "host":field("host"),
+            "ip":field("destinationIP"), "port":meta["destinationPort"], "network":field("network"),
+            "inbound":field("type"), "rule":row["rule"], "payload":row["rulePayload"], "chains":row["chains"]})
+    }).collect())
+}
+
 /// `light` skips the proxy and provider tables. They change only when a group reselects or a
 /// subscription refreshes, so the interface asks for them on a slower cadence than traffic.
 #[tauri::command]

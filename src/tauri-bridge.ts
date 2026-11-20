@@ -148,6 +148,11 @@ export type WebsiteProbeResult = {
   status: number;
 };
 
+export type ActiveRoute = {
+  program: string; process: string; host: string; ip: string; port: string | number; network: string;
+  inbound: string; rule: string; payload: string; chains: string[];
+};
+
 export type ConnectionLogRow = {
   time: string;
   app: string;
@@ -252,6 +257,7 @@ export function listenWindowVisibility(handler: (visible: boolean) => void): Pro
 }
 
 export const tauriApi = {
+  activeRoutes: () => invoke<ActiveRoute[]>('active_routes'),
   chooseProgramPath: () => invoke<string | null>('choose_program_path'),
   coreLogTail: () => invoke<string>('core_log_tail'),
   coreStatus: () => invoke<CoreStatus>('core_status'),

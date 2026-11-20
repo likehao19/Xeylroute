@@ -17,6 +17,7 @@ import { runProbeQueue } from './probe-queue.mjs';
 import type { ShellController } from './shell';
 import {
   buildProxyEnvText,
+  type ActiveRoute,
   type ConnectionLogRow,
   type CoreStatus,
   type CoreSettings,
@@ -1511,6 +1512,7 @@ export function mountDesktopApp(shell: ShellController): void {
                   <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
                   <i></i>
                 </label>
+                <button type="button" class="sf-icon-btn" data-inspect-rule="${r.index}" aria-label="查看命中连接" data-tip="查看命中连接">${SF_DETAIL}</button>
                 <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" data-tip="${editable ? '编辑规则' : '编辑完整配置'}">${SF_EDIT}</button>
                 <button type="button" class="sf-icon-btn danger" data-del-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" data-tip="删除规则">${SF_TRASH}</button>
               </div>
@@ -1629,23 +1631,73 @@ export function mountDesktopApp(shell: ShellController): void {
     `;
   }
 
+  function inspectRoutes(line?: string): void {
+    const names: Record<string,string> = { DOMAIN:'Domain','DOMAIN-SUFFIX':'DomainSuffix',
+      'PROCESS-PATH':'ProcessPath', 'IP-CIDR':'IPCIDR', 'IP-CIDR6':'IPCIDR', 'DST-PORT':'DstPort', AND:'AND', MATCH:'Match' };
+    const signature = (rule: string): string => {
+      const parts = rule.split(',');
+      if (['no-resolve','src'].includes(parts.at(-1) || '')) parts.pop();
+      parts.pop();
+      const kind = parts.shift() || '';
+      let payload = parts.join(',');
+      if (kind === 'AND') {
+        payload = payload.replace(/\),\(/g, ') && (').replace(/\(([A-Z-]+),/g, (_, k: string) => '(' + (names[k] || k) + ',');
+      }
+      return (names[kind] || kind) + '/' + payload;
+    };
+    const key = line ? signature(line) : null;
+    const ambiguous = key && (liveProfile?.effectiveRules || []).filter(r => signature(r) === key).length !== 1;
+    openSheet({ title: line ? '查看命中连接' : '活动连接', size:'wide',
+      bodyHtml: `${line ? '<p class="mac-row-sub">' + esc(line) + '</p>' : ''}<div class="sheet-picker" id="activeRouteRows" aria-live="polite"></div>`,
+      actionsHtml:'<button class="glass-btn-soft" id="routesRefresh">刷新</button><button class="glass-btn-primary" id="routesClose">完成</button>' });
+    const list = $('activeRouteRows');
+    const refresh = $<HTMLButtonElement>('routesRefresh');
+    let shown: ActiveRoute[] = [];
+    const load = async () => {
+      refresh.disabled = true; list.textContent = '正在读取活动连接…';
+      try {
+        const rows = await tauriApi.activeRoutes();
+        if (!list.isConnected) return;
+        shown = key ? rows.filter(row => row.rule + '/' + row.payload === key) : rows;
+        list.innerHTML = shown.map((r,i) => {
+          const destination = r.host || r.ip || '未知目标';
+          const details = [r.program || r.process || '未识别进程', r.host ? '域名 ' + r.host : '未识别域名', r.ip && '目标 IP ' + r.ip,
+            r.inbound, r.network, r.rule + ' ' + r.payload, ambiguous && '同条件规则无法唯一归属',
+            r.chains?.length && '实际出口 ' + r.chains.slice().reverse().join(' → ')].filter(Boolean).map(esc).join(' · ');
+          return `<div class="sheet-picker-row"><div class="picker-meta"><strong>${esc(destination)} · ${esc(String(r.port))}</strong><small>${details}</small></div>
+            <button class="glass-btn-soft" data-create-route="${i}">据此建规则</button></div>`;
+        }).join('') || '当前没有符合条件的活动连接。可在目标软件中新建连接后刷新。';
+      } catch(e) { if (list.isConnected) list.textContent = cleanError(e); }
+      finally { refresh.disabled = false; }
+    };
+    list.onclick = e => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-create-route]');
+      if (!btn) return;
+      const row = shown[Number(btn.dataset.createRoute)];
+      openRuleEditor(undefined, {program:row.program, target:row.host || row.ip, port:String(row.port || '')});
+    };
+    refresh.onclick = () => void load();
+    $('routesClose').onclick = closeSheet;
+    void load();
+  }
+
   function renderLogs(): void {
     $<HTMLButtonElement>('clearLogsBtn').disabled = !liveLogs.length;
     $('logsListCard').innerHTML = liveLogs.length
-      ? liveLogs.map(row => {
+      ? liveLogs.map((row,i) => {
           const tone = row.failed ? 'red' : row.exit === 'DIRECT' ? 'green' : row.exit === 'REJECT' ? 'red' : 'blue';
           return `
             <div class="mac-row">
               <div class="mac-row-left">
                 <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);width:66px;flex:none">${esc(row.time.slice(-8))}</span>
                 <div style="min-width:0">
-                  <span class="mac-row-title">${esc(row.app || '系统 / 进程')} <span style="color:var(--muted);font-weight:400">→</span> <span style="font-family:var(--font-mono)">${esc(row.target)}</span></span>
+                  <span class="mac-row-title">${esc(row.app || '未识别进程')} <span style="color:var(--muted);font-weight:400">→</span> <span style="font-family:var(--font-mono)">${esc(row.target)}</span></span>
                   <span class="mac-row-sub">${esc(row.decision || '—')}</span>
                 </div>
               </div>
               <div style="display:flex;gap:7px;flex:none">
                 <span class="pill">${esc(row.protocol)}</span>
-                <span class="pill ${tone}">${esc(row.exit)}</span>
+                <span class="pill ${tone}">${esc(row.exit)}</span><button class="section-link" data-log-rule="${i}">据此建规则</button>
               </div>
             </div>
           `;
@@ -2503,6 +2555,7 @@ export function mountDesktopApp(shell: ShellController): void {
       notify(cleanError(err), true);
     }
   });
+  $('activeRoutesBtn').onclick = () => inspectRoutes();
   $('clearLogsBtn').addEventListener('click', () => void refreshConnectionLogs(true));
 
   $('subFileInput').addEventListener('change', e => {
@@ -2710,6 +2763,17 @@ export function mountDesktopApp(shell: ShellController): void {
       return;
     }
 
+    const inspect = target.closest<HTMLElement>('[data-inspect-rule]');
+    if (inspect) { inspectRoutes(liveProfile?.rules?.[Number(inspect.dataset.inspectRule)]); return; }
+    const fromLog = target.closest<HTMLElement>('[data-log-rule]');
+    if (fromLog) {
+      const row = liveLogs[Number(fromLog.dataset.logRule)];
+      if (!row) return;
+      const address = row.target.match(/^(.*):(\d+)$/);
+      const paths = new Set(liveProcesses.filter(p => p.exe === row.app || p.path === row.app).map(p => p.path));
+      openRuleEditor(undefined,{target:address?.[1] || row.target,port:address?.[2] || '',program:paths.size === 1 ? [...paths][0] : ''});
+      return;
+    }
     const editRuleBtn = target.closest<HTMLElement>('[data-edit-rule-idx]');
     if (editRuleBtn?.dataset.editRuleIdx) {
       openRuleEditor(Number(editRuleBtn.dataset.editRuleIdx));
