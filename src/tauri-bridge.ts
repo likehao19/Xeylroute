@@ -49,7 +49,10 @@ export type CoreSettings = {
   'log-level': string;
 };
 
+export type RuleConditions = { program: string; target: string; suffix: boolean; port: string };
+
 export type ProfileSummary = {
+  ruleConditions?: (RuleConditions | null)[];
   coreSettings: CoreSettings;
   subscriptionScope?: string | null;
   subscriptionScopeInitialized?: boolean;
@@ -197,6 +200,7 @@ export type ProfileEdit =
   | { kind: 'providerInterval'; name: string; seconds: number }
   | { kind: 'ports'; http: number; socks: number; mixed: number }
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
+  | { kind: 'matchRule'; index?: number; expected?: string; conditions: RuleConditions; exit: string }
   | { kind: 'programRules'; targets: string[]; exit: string }
   | { kind: 'clearProgramRules'; targets: string[] }
   | { kind: 'batchRules'; action: 'enable' | 'disable' | 'delete'; rules: { index: number; expected: string }[] }
@@ -244,6 +248,7 @@ export function listenWindowVisibility(handler: (visible: boolean) => void): Pro
 }
 
 export const tauriApi = {
+  chooseProgramPath: () => invoke<string | null>('choose_program_path'),
   coreLogTail: () => invoke<string>('core_log_tail'),
   coreStatus: () => invoke<CoreStatus>('core_status'),
   startLocalCore: () => invoke<CoreStatus>('start_local_core'),

@@ -124,6 +124,7 @@ pub struct RuleSelection {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Edit {
+    MatchRule { index: Option<usize>, expected: Option<String>, conditions: crate::rule_conditions::Conditions, exit: String },
     BatchRules { action: BatchAction, rules: Vec<RuleSelection> },
     Mode {
         mode: String,
@@ -559,6 +560,11 @@ pub fn summary(profile: &Value) -> Value {
             "unified-delay": catalog["unified-delay"].as_bool().unwrap_or(true),
             "log-level": catalog["log-level"].as_str().unwrap_or("info")
         },
+        "ruleConditions":entries(profile, "rules").map(|r| {
+            let (prefix, _) = r.as_str()?.rsplit_once(',')?;
+            let (kind,target) = prefix.split_once(',')?;
+            crate::rule_conditions::decode(kind,target)
+        }).collect::<Vec<_>>(),
         "rules":profile.get("rules"), "groups":groups, "providers":providers, "exits":exits(profile),
         "disabledRules":profile.get("routepilot-disabled-rules"), "disabledGroups":profile.get("routepilot-disabled-groups"),
         "tunScope": tun_scope(catalog),
@@ -692,6 +698,10 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
 
 pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     match mutation {
+        Edit::MatchRule { index, expected, conditions, exit } => {
+            let (category, target) = conditions.compile()?;
+            return edit(profile, Edit::Rule { index, expected, category, target, exit });
+        }
         Edit::BatchRules { action, rules } => {
             use std::collections::HashSet;
             let saved = profile["rules"].as_array().ok_or("暂无规则")?;
@@ -767,14 +777,8 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 return Err("请选择可用的出口".into());
             }
             let valid = match category.as_str() {
-                "DOMAIN" | "DOMAIN-SUFFIX" => {
-                    clean(&target)
-                        && target.len() <= 253
-                        && target.contains('.')
-                        && target
-                            .bytes()
-                            .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-')
-                }
+                "DOMAIN" | "DOMAIN-SUFFIX" | "IP-CIDR" | "IP-CIDR6" | "DST-PORT" | "AND" =>
+                    crate::rule_conditions::decode(&category, &target).is_some(),
                 "PROCESS-PATH" => clean(&target) && std::path::Path::new(&target).is_absolute(),
                 "MATCH" => target.is_empty(),
                 _ => false,

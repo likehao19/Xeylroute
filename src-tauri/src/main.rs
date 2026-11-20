@@ -4,6 +4,7 @@ mod connection_log;
 mod mihomo_api;
 mod processes;
 mod profile;
+mod rule_conditions;
 mod program_files;
 mod runtime_tuning;
 mod share_links;
@@ -627,6 +628,25 @@ async fn core_log_tail(app: AppHandle) -> Result<String, String> {
             Err(err) => Err(err.to_string()),
         }
     }).await.map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+async fn choose_program_path() -> Result<Option<String>, String> {
+    let Some(file) = rfd::AsyncFileDialog::new().set_title("选择可执行文件").pick_file().await else {
+        return Ok(None);
+    };
+    let path = file.path();
+    #[cfg(target_os = "macos")]
+    if path.extension().is_some_and(|e| e == "app") {
+        let output = std::process::Command::new("/usr/bin/plutil")
+            .args(["-extract", "CFBundleExecutable", "raw", "-o", "-"])
+            .arg(path.join("Contents/Info.plist")).output().map_err(|e| e.to_string())?;
+        let name = String::from_utf8_lossy(&output.stdout);
+        let executable = path.join("Contents/MacOS").join(name.trim());
+        if !output.status.success() || !executable.is_file() { return Err("无法读取应用主程序路径".into()); }
+        return Ok(Some(executable.to_string_lossy().into_owned()));
+    }
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -1559,6 +1579,7 @@ fn main() {
             stop_local_core,
             set_system_proxy,
             import_core_config,
+            choose_program_path,
             configured_profile_summary,
             core_log_tail,
             subscription_nodes,

@@ -2709,3 +2709,7 @@
     .modal-sheet:has(.doc-editor) .sheet-actions { padding: 11px 16px; border-top: 1px solid var(--inset-divider); }
     .sub-refresh-result { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
     .sub-refresh-result.failed { color: var(--red); }
+
+.rule-input-row { display: flex; gap: 8px; align-items: center; }
+.rule-input-row .sheet-input { flex: 1; min-width: 0; }
+.rule-input-row button { flex-shrink: 0; }

@@ -32,6 +32,7 @@ import {
   type NetworkDetails,
   platformLabel,
   type ProfileEdit,
+  type RuleConditions,
   type ProfileGroup,
   type ProfileNode,
   type ProfileSummary,
@@ -1412,7 +1413,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const rules = (liveProfile?.rules || [])
       .map((line, index) => {
         const [type, ...rest] = line.split(',');
-        const payload = type === 'MATCH' ? '' : (rest[0] || '');
+        const payload = type === 'MATCH' ? '' : (rest.slice(0,-1).join(',') || '');
         const exit = liveProfile?.ruleExits?.[index] || rest[rest.length - 1] || '';
         const enabled = !disabledRules.has(line);
         return { line, index, type, payload, exit, enabled, active: enabled && !disabledGroups.has(exit) };
@@ -1445,7 +1446,7 @@ export function mountDesktopApp(shell: ShellController): void {
             : isDomain
               ? renderSiteIcon(r.payload, shortName, 'blue')
               : `<span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>`;
-          const editable = /^(?:DOMAIN|DOMAIN-SUFFIX|PROCESS-PATH),[^,]+,[^,]+$/.test(r.line);
+          const editable = Boolean(liveProfile?.ruleConditions?.[r.index]);
           return `
             <div class="mac-row">
               <div class="mac-row-left">
@@ -1461,7 +1462,7 @@ export function mountDesktopApp(shell: ShellController): void {
                   <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
                   <i></i>
                 </label>
-                <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" ${editable ? '' : 'disabled'} data-tip="编辑规则">${SF_EDIT}</button>
+                <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" data-tip="${editable ? '编辑规则' : '编辑完整配置'}">${SF_EDIT}</button>
                 <button type="button" class="sf-icon-btn danger" data-del-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" data-tip="删除规则">${SF_TRASH}</button>
               </div>
             </div>
@@ -2024,231 +2025,84 @@ export function mountDesktopApp(shell: ShellController): void {
     input.focus();
   }
 
-  function openAddRuleSheet(): void {
-    let selectedKind: 'DOMAIN' | 'DOMAIN-SUFFIX' | 'PROCESS-PATH' = 'DOMAIN';
-    let selectedExit = 'DIRECT';
-    const selectedPaths = new Set<string>();
-    let pickerLoaded = false;
-
+  function openRuleEditor(index?: number, seed?: Partial<RuleConditions>): void {
+    const profile = liveProfile;
+    if (!profile) return;
+    const original = index === undefined ? undefined : profile.rules?.[index];
+    const existing = index === undefined ? seed : profile.ruleConditions?.[index];
+    if (original && !existing) { editDocument('config'); return; }
+    const scope = profile.subscriptionScope ?? '';
+    const initial = { program: '', target: '', port: '', suffix: false, ...existing };
+    let exit = index === undefined ? 'DIRECT' : profile.ruleExits?.[index] || 'DIRECT';
     openSheet({
-      title: '添加分流规则',
-      subtitle: '按域名或运行中的软件匹配并指定分流出口',
-      iconHtml: `<span class="sq md purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v2a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-2M12 14.5v1"/></svg></span>`,
+      title: original ? '编辑分流规则' : '添加分流规则',
       size: 'wide',
       bodyHtml: `
-        <div class="sheet-field">
-          <span class="sheet-field-label">目标类型</span>
-          <div class="sub-seg full" id="arKindSeg">
-            <button type="button" class="active" data-ar-kind="DOMAIN">精确域名</button>
-            <button type="button" data-ar-kind="DOMAIN-SUFFIX">域名后缀</button>
-            <button type="button" data-ar-kind="PROCESS-PATH">运行中的软件</button>
-          </div>
+        <div class="sheet-field"><label for="ruleProgram">软件</label>
+          <div class="rule-input-row"><input id="ruleProgram" class="sheet-input" placeholder="任意软件" value="${esc(initial.program)}" list="runningExecutables">
+          <button class="glass-btn-soft" id="ruleBrowse" type="button">浏览…</button></div>
+          <datalist id="runningExecutables"></datalist>
+          <select class="sheet-input" id="ruleRunning" aria-label="选择运行中的程序"><option value="">选择运行中的程序…</option></select>
         </div>
-        <div class="sheet-field" id="arDomainWrap">
-          <label for="arTarget">目标域名</label>
-          <input type="text" class="sheet-input" id="arTarget" placeholder="例如 github.com">
-        </div>
-        <div class="sheet-field" id="arProcWrap" hidden>
-          <label for="arProcSearch">选择运行中的软件</label>
-          <input type="search" class="sheet-input" id="arProcSearch" placeholder="搜索软件名称或路径…">
-          <div class="sheet-picker" id="arProcPicker">正在加载软件列表…</div>
-        </div>
-        <div class="sheet-field">
-          <span class="sheet-field-label">分组或出口</span>
-          <div class="sheet-popup-full" id="arExitHost"></div>
-        </div>
-        <p class="sheet-error" id="arError"></p>
-      `,
-      actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="arSubmit">保存规则</button>
-      `,
+        <div class="sheet-field"><label for="ruleTarget">目标网站或 IP</label>
+          <input class="sheet-input" id="ruleTarget" placeholder="任意目标，支持域名、网址、IP 或网段" value="${esc(initial.target)}">
+          <label><input type="checkbox" id="ruleSuffix" ${initial.suffix ? 'checked' : ''}> 包含子域名</label>
+          <small id="ruleHostPreview"></small></div>
+        <div class="sheet-field"><label for="rulePort">目标端口</label>
+          <input class="sheet-input" id="rulePort" placeholder="任意端口，例如 443 或 8000-8080" value="${esc(initial.port)}"></div>
+        <div class="sheet-field"><span class="sheet-field-label">匹配时使用</span><div class="sheet-popup-full" id="ruleExit"></div></div>
+        <p class="sheet-error" id="ruleError" role="alert"></p>`,
+      actionsHtml: '<button class="glass-btn-soft" id="ruleCancel">取消</button><button class="glass-btn-primary" id="ruleSave">保存规则</button>',
     });
-
-    $('sheetCancel').onclick = closeSheet;
-    const targetInput = $<HTMLInputElement>('arTarget');
-    const domainWrap = $('arDomainWrap');
-    const procWrap = $('arProcWrap');
-    const procSearch = $<HTMLInputElement>('arProcSearch');
-    const procPicker = $('arProcPicker');
-    const errEl = $('arError');
-
-    const renderExitBtn = () => {
-      $('arExitHost').innerHTML = macPopupBtnHtml({
-        id: 'arExitPopupBtn',
-        value: selectedExit,
-        label: exitDisplayLabel(selectedExit),
-        popupKind: 'sheet-custom',
-      });
-      $('arExitPopupBtn').onclick = ev => {
-        ev.stopPropagation();
-        const items = buildExitPopupItems().filter(i => i.sep || i.value !== 'GLOBAL');
-        openMacMenu($('arExitPopupBtn'), items, selectedExit, nextVal => {
-          selectedExit = nextVal;
-          renderExitBtn();
-        });
+    const program = $<HTMLInputElement>('ruleProgram');
+    const target = $<HTMLInputElement>('ruleTarget');
+    const suffix = $<HTMLInputElement>('ruleSuffix');
+    const running = $<HTMLSelectElement>('ruleRunning');
+    const error = $('ruleError');
+    function fillPrograms(): void {
+      if (!running.isConnected) return;
+      const paths = new Map(liveProcesses.filter(p => p.path).map(p => [p.path, p.name]));
+      const options = [...paths].sort((a,b) => a[1].localeCompare(b[1])).map(([path,name]) => `<option value="${esc(path)}">${esc(name)} · ${esc(path)}</option>`).join('');
+      running.innerHTML = '<option value="">选择运行中的程序…</option>' + options;
+      $('runningExecutables').innerHTML = options;
+    }
+    fillPrograms();
+    if (!liveProcesses.length) void refreshProcesses(false).then(fillPrograms);
+    running.onchange = () => { if (running.value) program.value = running.value; };
+    $('ruleBrowse').onclick = async () => {
+      try { const path = await tauriApi.chooseProgramPath(); if (path) program.value = path; }
+      catch (e) { error.textContent = cleanError(e); }
+    };
+    const describe = () => {
+      let host = target.value.trim();
+      let url = false;
+      if (/^https?:\/\//i.test(host)) {
+        try { host = new URL(host).hostname; url = true; } catch { host = ''; }
+      }
+      suffix.disabled = !host || host.includes(':') || host.includes('/') || /^[0-9.]+$/.test(host);
+      $('ruleHostPreview').textContent = url ? `匹配 ${host}${suffix.checked && !suffix.disabled ? ' 及其子域名' : ''} 的所有路径，端口以端口栏为准` : '';
+    };
+    target.oninput = describe; suffix.onchange = describe; describe();
+    const renderExit = () => {
+      $('ruleExit').innerHTML = macPopupBtnHtml({ id: 'ruleExitButton', value: exit, label: exitDisplayLabel(exit), popupKind: 'sheet-custom' });
+      $('ruleExitButton').onclick = e => {
+        e.stopPropagation();
+        openMacMenu($('ruleExitButton'), buildExitPopupItems(), exit, value => { exit = value; renderExit(); });
       };
     };
-    renderExitBtn();
-
-    const renderPicker = () => {
-      const q = procSearch.value.trim().toLowerCase();
-      const matched = liveApps.filter(a => !q || [a.name, ...a.paths].some(v => v.toLowerCase().includes(q)));
-      procPicker.innerHTML = matched.map((a, idx) => {
-        const checked = a.paths.every(p => selectedPaths.has(p));
-        return `
-          <label class="sheet-picker-row">
-            <span class="mac-check"><input type="checkbox" class="ar-app-chk" data-app-idx="${idx}" ${checked ? 'checked' : ''}></span>
-            ${renderProgramIcon(a.icon, a.name)}
-            <span class="picker-meta">
-              <strong>${esc(a.name)}</strong>
-              <small title="${esc(a.paths.join('\n'))}">${a.paths.length > 1 ? `${a.paths.length} 个可执行文件` : esc(a.exe)}</small>
-            </span>
-          </label>
-        `;
-      }).join('') || `<div style="padding:18px;text-align:center;color:var(--muted);font-size:12px">没有匹配的运行软件</div>`;
-      procPicker.querySelectorAll<HTMLInputElement>('.ar-app-chk').forEach(chk => {
-        chk.onchange = () => {
-          const app = matched[Number(chk.dataset.appIdx)];
-          if (!app) return;
-          for (const p of app.paths) {
-            if (chk.checked) selectedPaths.add(p);
-            else selectedPaths.delete(p);
-          }
-        };
-      });
-    };
-
-    procSearch.oninput = renderPicker;
-    $('arKindSeg').onclick = async ev => {
-      const b = (ev.target as HTMLElement).closest<HTMLElement>('[data-ar-kind]');
-      if (!b?.dataset.arKind) return;
-      selectedKind = b.dataset.arKind as typeof selectedKind;
-      $('arKindSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-      const isProc = selectedKind === 'PROCESS-PATH';
-      domainWrap.hidden = isProc;
-      procWrap.hidden = !isProc;
-      if (!isProc) {
-        targetInput.placeholder = selectedKind === 'DOMAIN-SUFFIX' ? '例如 github.com（匹配所有子域名）' : '例如 api.github.com';
-        targetInput.focus();
-      } else if (!pickerLoaded) {
-        pickerLoaded = true;
-        if (!liveApps.length) await refreshProcesses(false);
-        renderPicker();
-      }
-    };
-
-    const submitRule = async () => {
-      errEl.textContent = '';
-      const submitBtn = $<HTMLButtonElement>('arSubmit');
-      submitBtn.disabled = true;
+    renderExit();
+    $('ruleCancel').onclick = closeSheet;
+    const save = $<HTMLButtonElement>('ruleSave');
+    save.onclick = async () => {
+      if (save.disabled) return;
+      save.disabled = true;
       try {
-        let edit: ProfileEdit;
-        if (selectedKind === 'PROCESS-PATH') {
-          if (!selectedPaths.size) throw new Error('请至少勾选一个软件。');
-          edit = { kind: 'programRules', targets: [...selectedPaths], exit: selectedExit };
-        } else {
-          const targetVal = targetInput.value.trim();
-          if (!targetVal) throw new Error('请输入目标域名。');
-          edit = { kind: 'rule', category: selectedKind, target: targetVal, exit: selectedExit };
-        }
-        const profile = await tauriApi.editProfile(edit, liveProfile?.subscriptionScope ?? '');
-        applyProfile(profile);
-        closeSheet();
-        renderAllSafe();
-        notify('分流规则已保存');
-        void refreshLiveState(true);
-      } catch (err) {
-        errEl.textContent = cleanError(err);
-      } finally {
-        submitBtn.disabled = false;
-      }
-    };
-    $('arSubmit').onclick = () => void submitRule();
-    targetInput.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); void submitRule(); } };
-    targetInput.focus();
-  }
-
-  function openEditRuleSheet(index: number): void {
-    const line = liveProfile?.rules?.[index];
-    if (!line) return;
-    const [rawKind, target, rawExit] = line.split(',');
-    let selectedKind = (['DOMAIN', 'DOMAIN-SUFFIX', 'PROCESS-PATH'].includes(rawKind) ? rawKind : 'DOMAIN');
-    let selectedExit = rawExit || 'DIRECT';
-
-    openSheet({
-      title: '编辑分流规则',
-      subtitle: '修改匹配规则类型、目标或指向出口',
-      iconHtml: `<span class="sq md purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>`,
-      bodyHtml: `
-        <div class="sheet-field">
-          <span class="sheet-field-label">规则类型</span>
-          <div class="sub-seg full" id="erKindSeg">
-            <button type="button" class="${selectedKind === 'DOMAIN' ? 'active' : ''}" data-er-kind="DOMAIN">精确域名</button>
-            <button type="button" class="${selectedKind === 'DOMAIN-SUFFIX' ? 'active' : ''}" data-er-kind="DOMAIN-SUFFIX">域名后缀</button>
-            <button type="button" class="${selectedKind === 'PROCESS-PATH' ? 'active' : ''}" data-er-kind="PROCESS-PATH">程序路径</button>
-          </div>
-        </div>
-        <div class="sheet-field">
-          <label for="erTarget">目标</label>
-          <input type="text" class="sheet-input" id="erTarget" value="${esc(target)}" required>
-        </div>
-        <div class="sheet-field">
-          <span class="sheet-field-label">出口或分组</span>
-          <div class="sheet-popup-full" id="erExitHost"></div>
-        </div>
-        <p class="sheet-error" id="erError"></p>
-      `,
-      actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="erSubmit">保存修改</button>
-      `,
-    });
-    $('sheetCancel').onclick = closeSheet;
-    $('erKindSeg').onclick = ev => {
-      const b = (ev.target as HTMLElement).closest<HTMLElement>('[data-er-kind]');
-      if (!b?.dataset.erKind) return;
-      selectedKind = b.dataset.erKind;
-      $('erKindSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-    };
-
-    const renderExitBtn = () => {
-      $('erExitHost').innerHTML = macPopupBtnHtml({
-        id: 'erExitPopupBtn',
-        value: selectedExit,
-        label: exitDisplayLabel(selectedExit),
-        popupKind: 'sheet-custom',
-      });
-      $('erExitPopupBtn').onclick = ev => {
-        ev.stopPropagation();
-        openMacMenu($('erExitPopupBtn'), buildExitPopupItems(), selectedExit, nextVal => {
-          selectedExit = nextVal;
-          renderExitBtn();
-        });
-      };
-    };
-    renderExitBtn();
-
-    $('erSubmit').onclick = async () => {
-      const errEl = $('erError');
-      errEl.textContent = '';
-      try {
-        const profile = await tauriApi.editProfile({
-          kind: 'rule',
-          index,
-          expected: line,
-          category: selectedKind,
-          target: $<HTMLInputElement>('erTarget').value.trim(),
-          exit: selectedExit,
-        }, liveProfile?.subscriptionScope ?? '');
-        applyProfile(profile);
-        closeSheet();
-        renderAllSafe();
-        notify('规则已更新');
-        void refreshLiveState(true);
-      } catch (err) {
-        errEl.textContent = cleanError(err);
-      }
+        const conditions = { program: program.value.trim(), target: target.value.trim(), suffix: !suffix.disabled && suffix.checked, port: $<HTMLInputElement>('rulePort').value.trim() };
+        const updated = await tauriApi.editProfile({ kind: 'matchRule', conditions, exit, index, expected: original }, scope);
+        if (save.isConnected) closeSheet();
+        applyProfile(updated); renderAllSafe(); void refreshLiveState(true);
+      } catch (e) { error.textContent = cleanError(e); }
+      finally { save.disabled = false; }
     };
   }
 
@@ -2582,7 +2436,7 @@ export function mountDesktopApp(shell: ShellController): void {
   $('splitPrimaryAddBtn').addEventListener('click', () => {
     if (!liveProfile) return;
     if (splitSub === 'groups') openGroupSheet();
-    else openAddRuleSheet();
+    else openRuleEditor();
   });
 
   $('simForm').addEventListener('submit', async e => {
@@ -2808,7 +2662,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
     const editRuleBtn = target.closest<HTMLElement>('[data-edit-rule-idx]');
     if (editRuleBtn?.dataset.editRuleIdx) {
-      openEditRuleSheet(Number(editRuleBtn.dataset.editRuleIdx));
+      openRuleEditor(Number(editRuleBtn.dataset.editRuleIdx));
       return;
     }
 
