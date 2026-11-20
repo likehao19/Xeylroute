@@ -17,6 +17,7 @@
         "transparent": true,
         "windowEffects": {
           "effects": [
+            "liquidGlassRegular",
             "sidebar"
           ]
         }

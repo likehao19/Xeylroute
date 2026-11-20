@@ -36,7 +36,7 @@ export function mountPreviewApp(shell: ShellController): void {
   } catch {
     state = structuredClone(DEFAULT_DEMO_STATE);
   }
-  shell.setTheme(state.theme === 'light' ? 'light' : 'dark');
+  state.theme = shell.getTheme();
 
   let nodesSub: 'groups' | 'sites' = 'groups';
   let splitSub: 'rules' | 'groups' | 'procs' = 'rules';

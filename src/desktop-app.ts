@@ -119,6 +119,8 @@ export function mountDesktopApp(shell: ShellController): void {
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
     root.classList.toggle('vibrant', platform === 'macos');
+    const actionHost = $(platform === 'macos' ? 'toolbarActions' : 'nodeActionRow');
+    actionHost.append($('nodeTestActions'));
   }
   const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
   applyPlatformClass(ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : 'linux');

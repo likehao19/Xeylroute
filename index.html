@@ -170,7 +170,7 @@
 
         <div class="toolbar-drag-spacer" id="toolbarDragSpacer" data-tauri-drag-region></div>
 
-        <div class="toolbar-right">
+        <div class="toolbar-right" id="toolbarActions">
           <div class="glass-capsule lg-track win-controls" id="winControls" aria-label="窗口控制">
             <button type="button" id="winMinBtn" data-tip="最小化" aria-label="最小化">
               <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 7h8"/></svg>
@@ -341,10 +341,12 @@
               <button type="button" class="active" data-nodes-sub="groups">节点列表</button>
               <button type="button" data-nodes-sub="sites">常用网站测速</button>
             </div>
-            <div class="node-actions">
+            <div class="node-actions" id="nodeActionRow">
               <span class="pill" id="nodesScopePill" hidden></span>
-              <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
-              <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
+              <div id="nodeTestActions">
+                <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
+                <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
+              </div>
             </div>
           </div>
 
@@ -436,6 +438,44 @@
              VIEW 6: 网络与设置
              =============================================================== -->
         <section class="view" id="view-settings">
+          <p class="section-label">外观</p>
+          <div class="mac-card flush appearance-card">
+            <div class="mac-row">
+              <span class="mac-row-title" id="appearanceLabel">外观模式</span>
+              <div class="appearance-picker" id="settingsThemeSeg" role="group" aria-labelledby="appearanceLabel">
+                <button type="button" class="appearance-opt" data-set-theme="light">
+                  <span class="appearance-thumb" aria-hidden="true"><i class="light-t"></i></span><span>浅色</span>
+                </button>
+                <button type="button" class="appearance-opt" data-set-theme="dark">
+                  <span class="appearance-thumb" aria-hidden="true"><i class="dark-t"></i></span><span>深色</span>
+                </button>
+                <button type="button" class="appearance-opt" data-set-theme="auto">
+                  <span class="appearance-thumb" aria-hidden="true"><i class="light-t"></i><i class="dark-t"></i></span><span>自动</span>
+                </button>
+              </div>
+            </div>
+            <div class="mac-row" id="glassSettingsRow">
+              <div>
+                <label for="glassTint" class="mac-row-title">Liquid Glass</label>
+                <span class="mac-row-sub" id="glassHint">窗口透明度</span>
+              </div>
+              <div class="glass-adjustment">
+                <div class="glass-sample" role="img" aria-label="山谷风景上的玻璃工具栏，随下方滑块实时变化">
+                  <div class="sample-tools" aria-hidden="true">
+                    <span><svg viewBox="0 0 32 16"><path d="m7 3-5 5 5 5m17-10 5 5-5 5"/></svg></span>
+                    <span><svg viewBox="0 0 18 18"><rect x="2" y="2" width="10" height="10" rx="2"/><rect x="6" y="6" width="10" height="10" rx="2"/></svg></span>
+                    <span><svg viewBox="0 0 18 18"><circle cx="7.5" cy="7.5" r="4.5"/><path d="m11 11 4 4"/></svg>搜索节点</span>
+                  </div>
+                </div>
+                <div class="glass-adjustment-track">
+                  <svg aria-hidden="true" viewBox="0 0 22 18"><rect x="2" y="2" width="13" height="10" rx="3"/><rect x="6" y="6" width="14" height="10" rx="3"/></svg>
+                  <input type="range" id="glassTint" min="0" max="100" step="1" value="50" aria-describedby="glassHint">
+                  <svg aria-hidden="true" viewBox="0 0 22 18"><rect x="2" y="2" width="13" height="10" rx="3"/><rect x="6" y="6" width="14" height="10" rx="3" fill="currentColor"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <p class="section-label">网络与流量接管</p>
           <div class="mac-card flush" style="margin-bottom:18px">
             <div class="mac-row">
@@ -502,29 +542,6 @@
                 </div>
               </div>
               <button type="button" class="glass-btn-soft" id="coreControlBtn">启动内核</button>
-            </div>
-          </div>
-
-          <p class="section-label">外观</p>
-          <div class="mac-card flush">
-            <div class="mac-row">
-              <div class="mac-row-left">
-                <span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg></span>
-                <div>
-                  <span class="mac-row-title">外观模式</span>
-                  <span class="mac-row-sub">选择浅色或深色外观</span>
-                </div>
-              </div>
-              <div class="appearance-picker" id="settingsThemeSeg">
-                <button type="button" class="appearance-opt active" data-set-theme="dark">
-                  <div class="appearance-thumb dark-t"><span style="width:14px"></span><span style="flex:1"></span></div>
-                  <span>深色</span>
-                </button>
-                <button type="button" class="appearance-opt" data-set-theme="light">
-                  <div class="appearance-thumb light-t"><span style="width:14px"></span><span style="flex:1"></span></div>
-                  <span>浅色</span>
-                </button>
-              </div>
             </div>
           </div>
 

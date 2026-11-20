@@ -48,7 +48,7 @@ export function createSiteCatalog(isLive: boolean): DemoSiteCategory[] {
 }
 
 export type DemoState = {
-  theme: 'dark' | 'light';
+  theme: import('./shell').ThemeChoice;
   connected: boolean;
   elapsed: number;
   mode: 'rule' | 'global' | 'direct';

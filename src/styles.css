@@ -11,8 +11,9 @@
       /* Quiet tonal falloff behind the stage, so translucent surfaces have something to pick up */
       --window-depth: radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.055) 0%, transparent 58%), radial-gradient(90% 80% at 100% 100%, rgba(0, 0, 0, 0.26) 0%, transparent 62%);
       /* Tints laid over the operating system's own window material (macOS) */
-      --stage-vibrant: rgba(22, 22, 25, 0.60);
-      --sidebar-vibrant: linear-gradient(180deg, rgba(74, 74, 82, 0.34) 0%, rgba(46, 46, 52, 0.42) 100%);
+      --glass-clarity: .55;
+      --stage-vibrant: rgb(22 22 25 / calc(1 - .72 * var(--glass-clarity)));
+      --sidebar-vibrant: linear-gradient(160deg, rgb(64 64 72 / calc(1 - .85 * var(--glass-clarity))), rgb(42 42 49 / calc(1 - .94 * var(--glass-clarity))));
       --focus-ring: rgba(64, 156, 255, 0.92);
 
       /* Component-Level Frosted Glass Micro-Grain */
@@ -112,8 +113,8 @@
       --window-bg: #ebedf0;
       --stage-fade: rgba(235, 237, 240, 0.78);
       --window-depth: radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.70) 0%, transparent 58%), radial-gradient(90% 80% at 100% 100%, rgba(0, 0, 0, 0.045) 0%, transparent 62%);
-      --stage-vibrant: rgba(240, 241, 244, 0.58);
-      --sidebar-vibrant: linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(250, 250, 252, 0.32) 100%);
+      --stage-vibrant: rgb(240 241 244 / calc(1 - .72 * var(--glass-clarity)));
+      --sidebar-vibrant: linear-gradient(160deg, rgb(255 255 255 / calc(1 - .85 * var(--glass-clarity))), rgb(244 245 248 / calc(1 - .94 * var(--glass-clarity))));
       --focus-ring: rgba(0, 122, 255, 0.78);
 
       --frost-noise-opacity: 0.028;
@@ -1694,36 +1695,31 @@
       font-weight: 550;
     }
     .appearance-thumb {
-      position: relative;
-      width: 62px;
-      height: 40px;
-      border-radius: 8px;
-      padding: 10px 5px 5px;
-      display: flex;
-      gap: 4px;
-      box-shadow: 0 0 0 0.5px var(--card-hairline), 0 2px 6px rgba(0, 0, 0, 0.16);
-      transition: box-shadow 0.16s ease, transform 0.14s ease;
+      position: relative; display: block; width: 68px; height: 44px; border-radius: 6px;
+      overflow: hidden; box-shadow: 0 0 0 1px var(--card-hairline), 0 2px 4px rgb(0 0 0 / 12%);
     }
-    .appearance-thumb::before {
-      content: "";
-      position: absolute;
-      top: 4px;
-      left: 5px;
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: #ff5f57;
-      box-shadow: 4.5px 0 0 #febc2e, 9px 0 0 #28c840;
+    .appearance-thumb i {
+      position: absolute; inset: 0; --pane: #f5f6f8; --bar: #157ae4;
+      background: linear-gradient(145deg,#c2e4f6 12%,#65b7ed 26%,#89d8f3 27%,#3885d2 49%,#bfd8f1 70%,#276393);
     }
-    .appearance-opt:hover .appearance-thumb { transform: translateY(-1px); }
+    .appearance-thumb .dark-t {
+      --pane: #252633; --bar: #3e47bc;
+      background: linear-gradient(145deg,#6772be 12%,#272f80 26%,#596bbc 27%,#161d59 49%,#4e5ca8 70%,#141731);
+    }
+    .appearance-thumb i + i { clip-path: inset(0 0 0 50%); }
+    .appearance-thumb i::before {
+      content: ""; position: absolute; left: -4px; top: 7px; width: 55%; height: 10px;
+      border: 2px solid var(--pane); border-radius: 4px; background: var(--bar); box-shadow: 0 1px 3px #0003;
+    }
+    .appearance-thumb i::after {
+      content: ""; position: absolute; right: -3px; bottom: -4px; width: 76%; height: 55%; border-radius: 6px;
+      background: radial-gradient(circle at 9px 8px,#ff625b 2px,transparent 2.5px),
+        radial-gradient(circle at 16px 8px,#ffbf32 2px,transparent 2.5px),
+        radial-gradient(circle at 23px 8px,#30c645 2px,transparent 2.5px), var(--pane);
+      box-shadow: 0 0 0 1px #0002, 0 -1px 4px #0002;
+    }
     .appearance-opt.active { color: var(--ink); }
-    .appearance-opt.active .appearance-thumb {
-      box-shadow: 0 0 0 2px var(--accent), 0 4px 12px rgba(10, 132, 255, 0.28);
-    }
-    .appearance-thumb.dark-t { background: linear-gradient(145deg, #27272c 0%, #17171a 100%); }
-    .appearance-thumb.dark-t span { background: rgba(255, 255, 255, 0.14); border-radius: 3px; box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.22); }
-    .appearance-thumb.light-t { background: linear-gradient(145deg, #eceef2 0%, #dfe2e8 100%); }
-    .appearance-thumb.light-t span { background: rgba(255, 255, 255, 0.88); border-radius: 3px; box-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.10), inset 0 0.5px 0 #ffffff; }
+    .appearance-opt.active .appearance-thumb { outline: 3px solid var(--accent); outline-offset: 2px; }
 
     /* Port Labeled Chip Inputs */
     .port-group {
@@ -2527,36 +2523,89 @@
     #subsGridPane > :only-child { grid-column: 1 / -1; }
     .modal-backdrop[inert] { visibility: hidden; }
 
+    #nodeTestActions { display: flex; align-items: center; gap: 8px; }
+    #toolbarActions > #nodeTestActions, #glassSettingsRow { display: none; }
+    .detail-stage:has(#view-nodes.active) #toolbarActions > #nodeTestActions,
+    :root:not(.tauri-native) #glassSettingsRow, .platform-macos #glassSettingsRow { display: flex; }
+    .appearance-card { margin-bottom: 18px; }
+    .appearance-card .mac-row { align-items: flex-start; padding: 14px 16px; }
+    .appearance-card .mac-row:hover { background: transparent; }
+    .appearance-card .mac-row + .mac-row::before { left: 16px; right: 16px; }
+    .glass-adjustment { width: clamp(244px, 40cqw, 360px); max-width: 100%; }
+    /* Yosemite photo by Ted Wakabayashi, public domain. */
+    .glass-sample {
+      position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 12px;
+      background: #718b9f url('/appearance/valley.webp') center / cover;
+      box-shadow: inset 0 0 0 1px rgb(0 0 0 / 8%);
+    }
+    .sample-tools { display: flex; gap: 6px; padding: 9px; pointer-events: none; }
+    .sample-tools span {
+      height: 32px; padding-inline: 10px; display: flex; align-items: center; gap: 5px;
+      border-radius: 20px; color: var(--ink); font-size: 12px; font-weight: 550;
+      background: rgb(33 35 42 / calc(1 - .63 * var(--glass-clarity, .5)));
+      border: 1px solid rgb(255 255 255 / 48%); box-shadow: 0 1px 3px #0003, inset 0 1px #fff4;
+    }
+    :root[data-theme="light"] .sample-tools span { background: rgb(250 251 252 / calc(1 - .63 * var(--glass-clarity, .5))); }
+    .sample-tools span:last-child { flex: 1; min-width: 0; }
+    .sample-tools svg, .glass-adjustment-track svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linejoin: round; stroke-linecap: round; }
+    .sample-tools span:first-child svg { width: 30px; }
+    @media (prefers-reduced-transparency: no-preference) {
+      #view-settings.active .sample-tools span { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+    }
+    .glass-adjustment-track { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--muted); }
+    #glassTint { min-width: 0; flex: 1; margin: 0; accent-color: var(--accent); }
+    @media (forced-colors: none) {
+      #glassTint { appearance: none; height: 22px; background: transparent; }
+      #glassTint::-webkit-slider-runnable-track {
+        height: 5px; border-radius: 5px;
+        background: linear-gradient(to right, var(--accent) calc((1 - var(--glass-clarity)) * 100%), var(--card-hairline) 0);
+      }
+      #glassTint::-webkit-slider-thumb {
+        appearance: none; width: 21px; height: 16px; margin-top: -5.5px;
+        border-radius: 10px; background: #fff; box-shadow: 0 1px 4px #0003, 0 0 0 .5px #0001;
+      }
+      #glassTint:disabled { opacity: .55; }
+    }
+    #glassTint:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 4px; }
     :root.platform-macos {
       --card-shadow: 0 0 0 1px var(--card-hairline), 0 1px 3px rgb(0 0 0 / 5%);
       --lg-accent-shadow: 0 1px 2px rgb(0 0 0 / 12%);
-      --sheet-fill: #303033;
+      --sheet-fill: rgb(48 48 53 / calc(1 - .16 * var(--glass-clarity)));
     }
-    :root.platform-macos[data-theme="light"] { --sheet-fill: #f6f6f8; }
-    .platform-macos .glass-toolbar { position: relative; flex: none; height: 55px; }
-    .platform-macos .glass-toolbar::before { content: none; }
-    .platform-macos .view { padding-top: 6px; }
-    .platform-macos .glass-toolbar :is(.glass-capsule,.online-pill) { background: transparent; box-shadow: none; }
-    .platform-macos .online-pill { padding-inline: 6px; color: var(--muted); }
+    :root.platform-macos[data-theme="light"] {
+      --sheet-fill: rgb(249 249 251 / calc(1 - .18 * var(--glass-clarity)));
+    }
+    .platform-macos .glass-toolbar { height: 56px; }
+    .platform-macos .glass-toolbar::before { inset-block-end: -5px; }
+    .platform-macos .view { padding-top: 64px; }
+    .platform-macos .glass-toolbar .glass-capsule button { min-width: 34px; }
+    .platform-macos .online-pill { color: var(--ink-2); }
     .platform-macos .stage-title { font-size: 19px; font-weight: 650; }
     .platform-macos :is(.mac-card,.telemetry-capsule,.group-drawer) { border-radius: 12px; }
     .platform-macos .cp-node { border-radius: 8px; }
     .platform-macos :is(.glass-btn-primary,.glass-btn-soft) { border-radius: 7px; }
     .platform-macos .sub-card-clickable.active-sub { box-shadow: inset 3px 0 var(--accent), var(--card-shadow); }
     .platform-macos .modal-backdrop {
-      align-items: flex-start; padding: clamp(30px, 6vh, 54px) 16px 16px;
+      align-items: center; padding: 24px;
       backdrop-filter: none; -webkit-backdrop-filter: none;
     }
     .platform-macos .modal-sheet {
-      max-height: 100%; border-radius: 12px; background: var(--sheet-fill);
+      max-height: 100%; border-radius: 16px; background: var(--sheet-fill);
       backdrop-filter: none; -webkit-backdrop-filter: none;
-      transform: translateY(-8px);
+      transform: translateY(3px) scale(.985);
     }
     .platform-macos .modal-backdrop.open .modal-sheet { transform: none; }
+    @media (prefers-reduced-transparency: no-preference) {
+      .platform-macos .modal-backdrop.open .modal-sheet {
+        -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      }
+    }
     .platform-macos .modal-sheet::before, .platform-macos .modal-sheet::after { content: none; }
     .platform-macos .sheet-head { padding: 20px 20px 6px; border: 0; }
     .platform-macos .sheet-body { padding-inline: 20px; }
     .platform-macos .sheet-actions { padding: 4px 20px 18px; border: 0; }
+    .platform-macos .sheet-actions #sheetImportFileBtn { background: transparent; box-shadow: none; color: var(--accent); }
+    .platform-macos .sheet-actions #sheetImportFileBtn:hover { background: var(--node-hover); }
     .platform-macos .sheet-actions button { min-height: 28px; border-radius: 6px; }
     .platform-macos .sheet-textarea { background: var(--card-surface); border-radius: 6px; font-family: var(--font-ui); }
 

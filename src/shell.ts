@@ -13,13 +13,14 @@ const VIEW_TITLES: Record<ViewId, string> = {
   settings: '网络与设置',
 };
 
+export type ThemeChoice = 'light' | 'dark' | 'auto';
 const THEME_KEY = 'xeylroute-theme';
 
 export type ShellController = {
   getView(): ViewId;
   getSearch(): string;
-  getTheme(): 'dark' | 'light';
-  setTheme(theme: 'dark' | 'light'): void;
+  getTheme(): ThemeChoice;
+  setTheme(theme: ThemeChoice): void;
   switchView(view: ViewId, pushHistory?: boolean): void;
   onViewChange(cb: (view: ViewId) => void): void;
   onSearchChange(cb: (query: string) => void): void;
@@ -28,22 +29,50 @@ export type ShellController = {
 export function initShell(): ShellController {
   let currentView: ViewId = 'connect';
   let globalSearch = '';
-  let theme: 'dark' | 'light' = localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark';
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  let theme: ThemeChoice = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'auto';
+  const systemDark = matchMedia('(prefers-color-scheme: dark)');
   const navHistory: ViewId[] = ['connect'];
   let navIndex = 0;
 
   const viewListeners: ((view: ViewId) => void)[] = [];
   const searchListeners: ((query: string) => void)[] = [];
 
-  function applyTheme(next: 'dark' | 'light'): void {
-    theme = next;
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-    if (isTauri()) void invoke('window_set_theme', { theme }).catch(() => {});
-    document.querySelectorAll<HTMLElement>('#settingsThemeSeg button').forEach(b =>
-      b.classList.toggle('active', b.dataset.setTheme === theme)
-    );
+  function renderTheme(): void {
+    document.documentElement.dataset.theme = theme === 'auto' ? (systemDark.matches ? 'dark' : 'light') : theme;
+    document.querySelectorAll<HTMLButtonElement>('#settingsThemeSeg button').forEach(button => {
+      const selected = button.dataset.setTheme === theme;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
   }
+  function applyTheme(next: ThemeChoice): void {
+    theme = next;
+    localStorage.setItem(THEME_KEY, theme);
+    if (isTauri()) void invoke('window_set_theme', { theme: theme === 'auto' ? null : theme }).catch(() => {});
+    renderTheme();
+  }
+  systemDark.addEventListener('change', () => { if (theme === 'auto') renderTheme(); });
+
+  const glassSlider = $<HTMLInputElement>('glassTint');
+  const glassKey = 'xeylroute-glass-tint';
+  const storedTint = localStorage.getItem(glassKey);
+  if (storedTint?.trim() && Number.isFinite(Number(storedTint))) glassSlider.value = storedTint;
+  let preferredTint = glassSlider.valueAsNumber;
+  const reduceTransparency = matchMedia('(prefers-reduced-transparency: reduce)');
+  function renderGlass(): void {
+    const reduced = reduceTransparency.matches;
+    const tint = reduced ? 100 : preferredTint;
+    glassSlider.value = String(tint);
+    glassSlider.disabled = reduced;
+    glassSlider.setAttribute('aria-valuetext', tint === 0 ? '清透' : tint === 100 ? '浓郁' : `着色 ${tint}%`);
+    document.documentElement.style.setProperty('--glass-clarity', String(1 - tint / 100));
+    $('glassHint').textContent = reduced ? '系统已开启「降低透明度」' : '窗口透明度';
+  }
+  glassSlider.addEventListener('input', () => { preferredTint = glassSlider.valueAsNumber; renderGlass(); });
+  glassSlider.addEventListener('change', () => localStorage.setItem(glassKey, String(preferredTint)));
+  reduceTransparency.addEventListener('change', renderGlass);
+  renderGlass();
 
   function switchView(viewId: ViewId, pushHistory = true): void {
     closeMacMenu();
@@ -122,7 +151,7 @@ export function initShell(): ShellController {
 
   $('settingsThemeSeg').addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme]');
-    if (b?.dataset.setTheme === 'dark' || b?.dataset.setTheme === 'light') {
+    if (b?.dataset.setTheme === 'dark' || b?.dataset.setTheme === 'light' || b?.dataset.setTheme === 'auto') {
       applyTheme(b.dataset.setTheme);
     }
   });
