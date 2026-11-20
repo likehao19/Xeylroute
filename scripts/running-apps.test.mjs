@@ -35,3 +35,19 @@ test('standalone helpers must share both the app directory and executable prefix
   ]);
   assert.deepEqual(apps.map(app => app.instances).sort(), [1, 2, 3]);
 });
+
+test('macOS .app bundle groups main executable with nested Framework helper apps', () => {
+  const chrome = [
+    process(101, '/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/130/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)', 'Google Chrome'),
+    process(102, '/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/130/Helpers/Google Chrome Helper (GPU).app/Contents/MacOS/Google Chrome Helper (GPU)', 'Google Chrome'),
+    process(100, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', 'Google Chrome'),
+  ];
+  const cli = process(200, '/opt/homebrew/bin/node', 'node');
+  const apps = groupRunningApps([...chrome, cli]);
+  assert.equal(apps.length, 2);
+  const grouped = apps.find(item => item.name === 'Google Chrome');
+  assert.equal(grouped.instances, 3);
+  assert.equal(grouped.exe, 'Google Chrome');
+  assert.equal(grouped.paths.length, 3);
+  assert.equal(grouped.paths[0], '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+});

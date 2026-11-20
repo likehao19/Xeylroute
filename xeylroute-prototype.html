@@ -1,0 +1,3718 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xeylroute</title>
+  <link rel="icon" type="image/png" href="./public/app-icon.png">
+  <style>
+    /* =========================================================================
+       macOS 27 Tahoe Liquid Glass — Apple HIG Precision Edition
+       Cross-platform HTML/CSS/JS (Tauri WebView2 / WKWebView / WebKitGTK)
+       ========================================================================= */
+    :root, :root[data-theme="dark"] {
+      color-scheme: dark;
+
+      /* Pure Neutral Apple Graphite Canvas (Zero Colorful/Neon Glow!) */
+      --window-bg: #18181b;
+      --stage-fade: rgba(24, 24, 27, 0.76);
+
+      /* Component-Level Frosted Glass Micro-Grain */
+      --frost-noise-opacity: 0.036;
+
+      /* Floating Smoked Frosted-Glass Sidebar */
+      --sidebar-surface: linear-gradient(180deg, rgba(50, 50, 55, 0.74) 0%, rgba(36, 36, 40, 0.78) 100%);
+      --sidebar-outer: rgba(0, 0, 0, 0.52);
+      --sidebar-shadow: 0 18px 42px -10px rgba(0, 0, 0, 0.55), 0 0 0 0.5px var(--sidebar-outer), inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1px 1px rgba(0, 0, 0, 0.25);
+
+      /* Pure Monochrome Curved Frosted-Glass Capsules (Ref #5 Exact Optical Depth) */
+      --lg-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.175) 0%, rgba(255, 255, 255, 0.068) 50%, rgba(255, 255, 255, 0.105) 100%);
+      --lg-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.235) 0%, rgba(255, 255, 255, 0.105) 50%, rgba(255, 255, 255, 0.145) 100%);
+      --lg-rim-grad: linear-gradient(142deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.10) 36%, rgba(255, 255, 255, 0.03) 64%, rgba(255, 255, 255, 0.24) 100%);
+      --lg-outer: rgba(0, 0, 0, 0.58);
+      --lg-shadow: 0 3px 10px rgba(0, 0, 0, 0.34), 0 10px 24px -8px rgba(0, 0, 0, 0.52), 0 0 0 0.5px var(--lg-outer), inset 0 1px 0.5px rgba(255, 255, 255, 0.30), inset 0 -1px 1.5px rgba(0, 0, 0, 0.28);
+      --lg-specular: rgba(255, 255, 255, 0.20);
+
+      /* Tinted Frosted-Glass Primary Action */
+      --lg-accent-bg: linear-gradient(180deg, rgba(44, 156, 255, 0.90) 0%, rgba(10, 126, 248, 0.78) 54%, rgba(22, 138, 255, 0.84) 100%);
+      --lg-accent-bg-hover: linear-gradient(180deg, rgba(64, 168, 255, 0.95) 0%, rgba(20, 138, 255, 0.86) 54%, rgba(36, 150, 255, 0.90) 100%);
+      --lg-accent-rim: linear-gradient(142deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.14) 42%, rgba(255, 255, 255, 0.30) 100%);
+      --lg-accent-shadow: 0 4px 16px -4px rgba(10, 132, 255, 0.42), 0 0 0 0.5px rgba(0, 0, 0, 0.44), inset 0 1px 0.5px rgba(255, 255, 255, 0.42), inset 0 -1px 1.5px rgba(0, 50, 130, 0.28);
+
+      /* Frosted Smoked-Glass Content Cards (Distinct Tonal Step Over #18181b) */
+      --card-surface: linear-gradient(180deg, rgba(48, 48, 53, 0.68) 0%, rgba(37, 37, 41, 0.72) 100%);
+      --card-surface-hover: rgba(255, 255, 255, 0.055);
+      --card-rim-grad: linear-gradient(144deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 38%, rgba(255, 255, 255, 0.025) 66%, rgba(255, 255, 255, 0.12) 100%);
+      --card-hairline: rgba(255, 255, 255, 0.08);
+      --card-shadow: 0 6px 22px -10px rgba(0, 0, 0, 0.46), 0 0 0 0.5px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.11), inset 0 -1px 1px rgba(0, 0, 0, 0.20);
+      --inset-divider: rgba(255, 255, 255, 0.08);
+
+      /* Recessed Wells, Sliding Frosted Thumb & Inner Frosted Chips */
+      --well-bg: rgba(0, 0, 0, 0.30);
+      --well-stroke: rgba(255, 255, 255, 0.07);
+      --seg-thumb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.11) 100%);
+      --seg-thumb-shadow: 0 2px 6px rgba(0, 0, 0, 0.36), 0 0 0 0.5px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+      --switch-off: rgba(255, 255, 255, 0.17);
+      --switch-on: #30d158;
+      --node-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.032) 100%);
+      --node-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.105) 0%, rgba(255, 255, 255, 0.062) 100%);
+      --node-rim: rgba(255, 255, 255, 0.085);
+      --node-active-bg: linear-gradient(180deg, rgba(10, 132, 255, 0.24) 0%, rgba(10, 132, 255, 0.12) 100%);
+      --node-active-border: rgba(74, 170, 255, 0.56);
+
+      /* Sidebar Nav Active Selection */
+      --nav-active-bg: linear-gradient(180deg, rgba(28, 142, 255, 0.90) 0%, rgba(10, 122, 245, 0.80) 100%);
+      --nav-active-ink: #ffffff;
+      --nav-active-sq: rgba(255, 255, 255, 0.22);
+
+      /* Frosted Pop-Up Button & Translucent Frosted Pop-Up Menu */
+      --popup-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.125) 0%, rgba(255, 255, 255, 0.055) 100%);
+      --popup-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.09) 100%);
+      --popup-border: rgba(255, 255, 255, 0.12);
+      --menu-surface: linear-gradient(180deg, rgba(50, 50, 56, 0.66) 0%, rgba(34, 34, 38, 0.74) 100%);
+      --menu-shadow: 0 22px 52px -8px rgba(0, 0, 0, 0.64), 0 0 0 0.5px rgba(0, 0, 0, 0.62), inset 0 1px 0.5px rgba(255, 255, 255, 0.24);
+
+      /* Calibrated Apple Typography */
+      --ink: #f5f5f7;
+      --ink-2: #d1d1d6;
+      --muted: #8e8e93;
+      --subtle: #636366;
+
+      /* Apple System Semantic Colors */
+      --accent: #0a84ff;
+      --accent-soft: rgba(10, 132, 255, 0.16);
+      --cyan: #64d2ff;
+      --mint: #63e6be;
+      --green: #30d158;
+      --green-soft: rgba(48, 209, 88, 0.15);
+      --orange: #ff9f0a;
+      --orange-soft: rgba(255, 159, 10, 0.15);
+      --red: #ff453a;
+      --red-soft: rgba(255, 69, 58, 0.15);
+      --purple: #bf5af2;
+      --purple-soft: rgba(191, 90, 242, 0.15);
+
+      /* Activity Matrix */
+      --cell-0: rgba(255, 255, 255, 0.055);
+      --cell-1: rgba(10, 132, 255, 0.24);
+      --cell-2: rgba(10, 132, 255, 0.48);
+      --cell-3: rgba(48, 156, 255, 0.76);
+      --cell-4: #64d2ff;
+
+      --modal-surface: linear-gradient(180deg, rgba(50, 50, 56, 0.74) 0%, rgba(34, 34, 38, 0.80) 100%);
+      --tooltip-bg: rgba(46, 46, 52, 0.80);
+      --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI Variable", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+      --font-mono: "SF Mono", "Cascadia Mono", "JetBrains Mono", ui-monospace, Consolas, monospace;
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+
+      /* Pure Neutral Apple Alabaster-Silver Canvas (Zero Colorful Blobs!) */
+      --window-bg: #ebedf0;
+      --stage-fade: rgba(235, 237, 240, 0.78);
+
+      --frost-noise-opacity: 0.028;
+
+      /* Floating Neutral Frosted-Glass Sidebar */
+      --sidebar-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(246, 247, 250, 0.68) 100%);
+      --sidebar-outer: rgba(0, 0, 0, 0.09);
+      --sidebar-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.11), 0 1px 3px rgba(0, 0, 0, 0.05), 0 0 0 0.5px var(--sidebar-outer), inset 0 1.25px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 1.5px rgba(0, 0, 0, 0.04);
+
+      /* Pure Monochrome Curved Frosted-Glass Capsules (Ref #3 Crisp Tactile Glass!) */
+      --lg-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(244, 245, 248, 0.66) 52%, rgba(255, 255, 255, 0.82) 100%);
+      --lg-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 251, 253, 0.82) 52%, rgba(255, 255, 255, 0.94) 100%);
+      --lg-rim-grad: linear-gradient(142deg, rgba(255, 255, 255, 1) 0%, rgba(0, 0, 0, 0.065) 38%, rgba(0, 0, 0, 0.03) 64%, rgba(255, 255, 255, 0.95) 100%);
+      --lg-outer: rgba(0, 0, 0, 0.11);
+      --lg-shadow: 0 2px 6px rgba(0, 0, 0, 0.065), 0 10px 22px -8px rgba(0, 0, 0, 0.11), 0 0 0 0.5px var(--lg-outer), inset 0 1.5px 0.5px rgba(255, 255, 255, 1), inset 0 -1px 1.5px rgba(0, 0, 0, 0.06);
+      --lg-specular: rgba(255, 255, 255, 0.72);
+
+      /* Tinted Frosted-Glass Primary Action */
+      --lg-accent-bg: linear-gradient(180deg, rgba(32, 146, 255, 0.94) 0%, rgba(0, 114, 245, 0.84) 54%, rgba(16, 130, 255, 0.90) 100%);
+      --lg-accent-bg-hover: linear-gradient(180deg, rgba(48, 158, 255, 0.98) 0%, rgba(10, 124, 255, 0.92) 54%, rgba(26, 140, 255, 0.95) 100%);
+      --lg-accent-rim: linear-gradient(142deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.18) 44%, rgba(255, 255, 255, 0.40) 100%);
+      --lg-accent-shadow: 0 4px 14px -4px rgba(0, 122, 255, 0.36), 0 0 0 0.5px rgba(0, 86, 200, 0.24), inset 0 1.25px 0.5px rgba(255, 255, 255, 0.52), inset 0 -1px 1.5px rgba(0, 54, 140, 0.18);
+
+      /* Frosted Pearl-White Content Cards (Clear Elevation Over #ebedf0) */
+      --card-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(250, 251, 253, 0.74) 100%);
+      --card-surface-hover: rgba(255, 255, 255, 0.62);
+      --card-rim-grad: linear-gradient(144deg, rgba(255, 255, 255, 1) 0%, rgba(0, 0, 0, 0.045) 40%, rgba(0, 0, 0, 0.025) 66%, rgba(255, 255, 255, 0.94) 100%);
+      --card-hairline: rgba(0, 0, 0, 0.075);
+      --card-shadow: 0 2px 5px rgba(0, 0, 0, 0.035), 0 10px 24px -12px rgba(0, 0, 0, 0.09), 0 0 0 0.5px rgba(0, 0, 0, 0.075), inset 0 1.25px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 1px rgba(0, 0, 0, 0.03);
+      --inset-divider: rgba(0, 0, 0, 0.07);
+
+      --well-bg: rgba(0, 0, 0, 0.055);
+      --well-stroke: rgba(0, 0, 0, 0.06);
+      --seg-thumb-bg: linear-gradient(180deg, #ffffff 0%, rgba(248, 249, 252, 0.92) 100%);
+      --seg-thumb-shadow: 0 1.5px 4px rgba(0, 0, 0, 0.10), 0 0 0 0.5px rgba(0, 0, 0, 0.07), inset 0 1px 0 #ffffff;
+      --switch-off: rgba(0, 0, 0, 0.15);
+      --switch-on: #34c759;
+      --node-bg: linear-gradient(180deg, rgba(246, 247, 250, 0.78) 0%, rgba(238, 240, 244, 0.66) 100%);
+      --node-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(244, 246, 249, 0.84) 100%);
+      --node-rim: rgba(255, 255, 255, 0.85);
+      --node-active-bg: linear-gradient(180deg, rgba(0, 122, 255, 0.12) 0%, rgba(0, 122, 255, 0.06) 100%);
+      --node-active-border: rgba(0, 122, 255, 0.42);
+
+      /* Crisp Neutral-Tint Sidebar Active Selection */
+      --nav-active-bg: rgba(0, 122, 255, 0.13);
+      --nav-active-ink: #0066dc;
+      --nav-active-sq: none;
+
+      --popup-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(244, 245, 248, 0.78) 100%);
+      --popup-bg-hover: linear-gradient(180deg, #ffffff 0%, rgba(248, 249, 252, 0.92) 100%);
+      --popup-border: rgba(0, 0, 0, 0.10);
+      --menu-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(248, 249, 252, 0.66) 100%);
+      --menu-shadow: 0 18px 44px -8px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.12), inset 0 1.25px 0 rgba(255, 255, 255, 0.98);
+
+      --ink: #1d1d1f;
+      --ink-2: #3a3a3c;
+      --muted: #66666b;
+      --subtle: #8a8a90;
+
+      --accent: #007aff;
+      --accent-soft: rgba(0, 122, 255, 0.12);
+      --cyan: #0088cc;
+      --mint: #009c7b;
+      --green: #1f8a3b;
+      --green-soft: rgba(52, 199, 89, 0.15);
+      --orange: #c26200;
+      --orange-soft: rgba(255, 149, 0, 0.15);
+      --red: #cf1424;
+      --red-soft: rgba(255, 59, 48, 0.13);
+      --purple: #843ca6;
+      --purple-soft: rgba(175, 82, 222, 0.13);
+
+      --cell-0: rgba(0, 0, 0, 0.055);
+      --cell-1: rgba(0, 122, 255, 0.22);
+      --cell-2: rgba(0, 122, 255, 0.44);
+      --cell-3: rgba(0, 122, 255, 0.70);
+      --cell-4: #007aff;
+
+      --modal-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.80) 0%, rgba(248, 249, 252, 0.72) 100%);
+      --tooltip-bg: rgba(255, 255, 255, 0.84);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--window-bg);
+      color: var(--ink);
+      font: 13px/1.46 var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      user-select: none;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: 0.34; cursor: not-allowed; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+    /* Authentic macOS Subtle Overlay Scrollbars */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(142, 142, 147, 0.24);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(142, 142, 147, 0.48);
+      border: 1.5px solid transparent;
+      background-clip: content-box;
+    }
+
+    /* =========================================================================
+       Optical Fresnel Prismatic Specular Rim + Pointer-Tracking Caustic Sheen
+       ========================================================================= */
+    .sidebar::before,
+    .glass-capsule::before,
+    .glass-circle::before,
+    .online-pill::before,
+    .glass-btn-soft::before,
+    .glass-btn-primary::before,
+    .mac-menu-popover::before,
+    .toast::before,
+    .modal-sheet::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1.2px;
+      background: var(--lg-rim-grad);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .mac-card::before,
+    .telemetry-capsule::before,
+    .group-drawer::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: var(--card-rim-grad);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .glass-btn-primary::before { background: var(--lg-accent-rim); }
+
+    /* Pointer-tracking dynamic caustic specular reflection on Liquid Glass pills */
+    .lg-track {
+      --mx: 50%;
+      --my: 0%;
+      --sp: 0;
+    }
+    .lg-track::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(96px circle at var(--mx) var(--my), var(--lg-specular) 0%, transparent 72%);
+      opacity: var(--sp);
+      transition: opacity 0.22s ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .lg-track:hover { --sp: 1; }
+
+    /* Component-Level Frosted Glass Micro-Grain (Tactile Sandblasted Glass Feel) */
+    .sidebar::after,
+    .mac-card::after,
+    .telemetry-capsule::after,
+    .group-drawer::after,
+    .mac-menu-popover::after,
+    .modal-sheet::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 2;
+      opacity: var(--frost-noise-opacity);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 120px 120px;
+      mix-blend-mode: overlay;
+    }
+
+    /* =========================================================================
+       Window Shell + Floating Neutral Frosted-Glass Sidebar
+       ========================================================================= */
+    .mac-window {
+      position: relative;
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      background: var(--window-bg);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      position: relative;
+      z-index: 5;
+      width: 226px;
+      flex-shrink: 0;
+      margin: 10px 0 10px 10px;
+      border-radius: 18px;
+      background: var(--sidebar-surface);
+      box-shadow: var(--sidebar-shadow);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 10px 10px;
+      gap: 9px;
+      transition: width 0.26s cubic-bezier(0.32, 0.72, 0, 1), margin 0.26s cubic-bezier(0.32, 0.72, 0, 1), padding 0.26s ease, opacity 0.2s ease;
+      overflow: hidden;
+    }
+    .mac-window.sidebar-collapsed .sidebar {
+      width: 0;
+      margin: 10px 0 10px 0;
+      padding: 12px 0 10px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Authentic macOS Traffic Lights with Hover × / − / ⤢ Reveal */
+    .sidebar-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1px 4px 2px;
+      min-height: 22px;
+    }
+    .traffic-lights {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px;
+    }
+    .tl {
+      position: relative;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.22);
+      display: inline-grid;
+      place-items: center;
+      cursor: default;
+    }
+    .tl.red { background: #ff5f57; }
+    .tl.yellow { background: #febc2e; }
+    .tl.green { background: #28c840; }
+    .tl svg {
+      width: 8px;
+      height: 8px;
+      opacity: 0;
+      color: rgba(0, 0, 0, 0.62);
+      stroke-width: 2.3;
+      transition: opacity 0.12s ease;
+    }
+    .traffic-lights:hover .tl svg { opacity: 1; }
+
+    .sidebar-toggle-btn {
+      width: 26px;
+      height: 24px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      display: inline-grid;
+      place-items: center;
+      transition: background 0.14s ease, color 0.14s ease;
+    }
+    .sidebar-toggle-btn:hover { background: var(--node-hover); color: var(--ink); }
+    .sidebar-toggle-btn svg { width: 15px; height: 15px; stroke-width: 1.75; }
+
+    /* Brand / Core Profile Header (Inspired by Ref #5 macOS Account Row) */
+    .sidebar-brand-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 4px 6px 5px;
+      border-radius: 10px;
+    }
+    .sidebar-brand-row img {
+      width: 28px;
+      height: 28px;
+      border-radius: 7.5px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.24), inset 0 0.5px 0 rgba(255, 255, 255, 0.3);
+      flex: none;
+    }
+    .sidebar-brand-text { min-width: 0; }
+    .sidebar-brand-text strong {
+      display: block;
+      font-size: 13.5px;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+    .sidebar-brand-text span {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Recessed macOS Search Capsule with ⌘K Keycap */
+    .glass-search {
+      position: relative;
+      display: flex;
+      align-items: center;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--well-bg);
+      box-shadow: inset 0 0 0 0.5px var(--well-stroke), inset 0 1px 2px rgba(0, 0, 0, 0.12);
+      padding: 0 8px 0 10px;
+      gap: 6px;
+      transition: background 0.16s ease, box-shadow 0.16s ease;
+    }
+    .glass-search:focus-within {
+      background: var(--card-surface-hover);
+      box-shadow: 0 0 0 2.5px var(--accent-soft), inset 0 0 0 0.5px var(--accent);
+    }
+    .glass-search svg { width: 13px; height: 13px; color: var(--muted); flex: none; }
+    .glass-search input {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      outline: none;
+      font-size: 12px;
+      color: var(--ink);
+    }
+    .glass-search input::placeholder { color: var(--muted); }
+    .kbd-hint {
+      font-family: var(--font-ui);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--subtle);
+      background: var(--node-bg);
+      border: 0.5px solid var(--card-hairline);
+      border-radius: 5px;
+      padding: 1px 5px;
+      line-height: 1.4;
+      flex: none;
+      letter-spacing: 0.02em;
+    }
+    .glass-search:focus-within .kbd-hint { opacity: 0; }
+    .search-clear-btn {
+      width: 16px;
+      height: 16px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--subtle);
+      color: var(--window-bg);
+      display: none;
+      place-items: center;
+      padding: 0;
+      flex: none;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .glass-search.has-value .search-clear-btn { display: inline-grid; }
+    .glass-search.has-value .kbd-hint { display: none; }
+
+    /* Authentic macOS Segmented Control with Spring-Sliding Glass Thumb */
+    .mode-pill {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      height: 29px;
+      padding: 2.5px;
+      border-radius: 999px;
+      background: var(--well-bg);
+      box-shadow: inset 0 0 0 0.5px var(--well-stroke);
+    }
+    .mode-pill-thumb {
+      position: absolute;
+      top: 2.5px;
+      left: 2.5px;
+      width: calc((100% - 5px) / 3);
+      height: calc(100% - 5px);
+      border-radius: 999px;
+      background: var(--seg-thumb-bg);
+      box-shadow: var(--seg-thumb-shadow);
+      transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+      pointer-events: none;
+    }
+    .mode-pill[data-idx="1"] .mode-pill-thumb { transform: translateX(100%); }
+    .mode-pill[data-idx="2"] .mode-pill-thumb { transform: translateX(200%); }
+    .mode-pill button {
+      position: relative;
+      z-index: 1;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      transition: color 0.16s ease;
+    }
+    .mode-pill button:hover:not(.active) { color: var(--ink-2); }
+    .mode-pill button.active { color: var(--ink); }
+
+    /* Quiet Neutral Quick Takeover Tiles (No Stacked Neon Blue Clutter) */
+    .quick-tiles {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .qtile {
+      padding: 8px 9px;
+      border-radius: 12px;
+      background: var(--node-bg);
+      box-shadow: inset 0 0 0 0.5px var(--card-hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      cursor: pointer;
+      transition: background 0.16s ease, box-shadow 0.16s ease;
+    }
+    .qtile:hover { background: var(--node-hover); }
+    .qtile:has(input:checked) {
+      background: var(--card-surface-hover);
+      box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.11);
+    }
+    :root[data-theme="light"] .qtile:has(input:checked) {
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    }
+    .qtile-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .qtile-top svg { width: 14px; height: 14px; color: var(--muted); transition: color 0.16s ease; }
+    .qtile:has(input:checked) .qtile-top svg { color: var(--green); }
+    .qtile span.qlabel { font-size: 11.5px; font-weight: 600; color: var(--muted); transition: color 0.16s ease; }
+    .qtile:has(input:checked) span.qlabel { color: var(--ink); }
+
+    /* =========================================================================
+       macOS 26/27 Tahoe Liquid Glass Elongated Pill Switch
+       - Pill-shaped thumb morphs into translucent glass on press (:active)!
+       ========================================================================= */
+    .mac-switch {
+      position: relative;
+      display: inline-flex;
+      width: 32px;
+      height: 18px;
+      flex: none;
+    }
+    .mac-switch.lg { width: 38px; height: 21px; }
+    .mac-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
+    .mac-switch i {
+      width: 100%;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--switch-off);
+      box-shadow: inset 0 0.5px 1.5px rgba(0, 0, 0, 0.22);
+      padding: 2px;
+      display: flex;
+      align-items: center;
+      transition: background 0.22s ease;
+    }
+    .mac-switch i::after {
+      content: "";
+      width: 17px;
+      height: 14px;
+      border-radius: 999px;
+      background: #ffffff;
+      box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.24), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+      transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), background 0.16s ease, box-shadow 0.16s ease;
+    }
+    .mac-switch.lg i::after { width: 21px; height: 17px; }
+    .mac-switch input:checked + i { background: var(--switch-on); }
+    .mac-switch.blue input:checked + i { background: var(--accent); }
+    .mac-switch input:checked + i::after { transform: translateX(11px); }
+    .mac-switch.lg input:checked + i::after { transform: translateX(13px); }
+
+    /* Signature macOS 26/27 Liquid Glass thumb morph while pressed */
+    .mac-switch:active i::after {
+      background: rgba(255, 255, 255, 0.36);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.82), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+      transform: scale(1.12, 1.06);
+    }
+    .mac-switch:active input:checked + i::after {
+      transform: translateX(11px) scale(1.12, 1.06);
+    }
+    .mac-switch.lg:active input:checked + i::after {
+      transform: translateX(13px) scale(1.12, 1.06);
+    }
+
+    /* Authentic macOS Rounded Checkbox (Replaces Raw Browser Checkboxes!) */
+    .mac-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      color: var(--ink-2);
+      cursor: pointer;
+    }
+    .mac-check input {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      border-radius: 4.5px;
+      background: var(--well-bg);
+      box-shadow: inset 0 0 0 1px var(--popup-border);
+      display: inline-grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 0.14s ease, box-shadow 0.14s ease;
+    }
+    .mac-check input:checked {
+      background: var(--accent);
+      box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.35), 0 1px 3px rgba(10, 132, 255, 0.32);
+    }
+    .mac-check input:checked::after {
+      content: "";
+      width: 8px;
+      height: 5px;
+      border-left: 1.8px solid #fff;
+      border-bottom: 1.8px solid #fff;
+      transform: rotate(-45deg) translate(0.5px, -0.5px);
+    }
+
+    /* Navigation List with Authentic macOS Settings Grouping */
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2.5px;
+      flex: 1;
+      overflow-y: auto;
+      padding-top: 4px;
+    }
+    .nav-section-title {
+      padding: 8px 9px 3px;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--subtle);
+    }
+    .nav-section-title:first-child { padding-top: 2px; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      height: 34px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+    .nav-item:hover:not(.active) { background: var(--node-hover); }
+    .nav-item.active {
+      background: var(--nav-active-bg);
+      color: var(--nav-active-ink);
+      font-weight: 600;
+      box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.24);
+    }
+    :root[data-theme="light"] .nav-item.active { box-shadow: none; }
+    .nav-badge {
+      margin-left: auto;
+      padding: 1px 6.5px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      background: var(--node-bg);
+      color: var(--muted);
+    }
+    .nav-item.active .nav-badge {
+      background: rgba(255, 255, 255, 0.20);
+      color: var(--nav-active-ink);
+    }
+    :root[data-theme="light"] .nav-item.active .nav-badge {
+      background: rgba(0, 122, 255, 0.14);
+      color: var(--accent);
+    }
+
+    /* Satin Apple Squircle Icons (Clean SF Pro Silhouette) */
+    .sq {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: inline-grid;
+      place-items: center;
+      color: #ffffff;
+      flex: none;
+      box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.34);
+    }
+    .sq.md { width: 28px; height: 28px; border-radius: 7px; }
+    .sq svg { width: 13px; height: 13px; stroke-width: 1.9; }
+    .sq.md svg { width: 15px; height: 15px; }
+    .sq.blue { background: linear-gradient(180deg, #329cff 0%, #007aff 100%); }
+    .sq.cyan { background: linear-gradient(180deg, #56ccf2 0%, #0ea5e9 100%); }
+    .sq.purple { background: linear-gradient(180deg, #c972ff 0%, #9b42e8 100%); }
+    .sq.green { background: linear-gradient(180deg, #4cd964 0%, #24b445 100%); }
+    .sq.orange { background: linear-gradient(180deg, #ffb340 0%, #f5820d 100%); }
+    .sq.gray { background: linear-gradient(180deg, #8e8e93 0%, #636366 100%); }
+    .sq.indigo { background: linear-gradient(180deg, #7c83ff 0%, #4f46e5 100%); }
+    .sq.red { background: linear-gradient(180deg, #ff6961 0%, #e02d22 100%); }
+    :root[data-theme="dark"] .nav-item.active .sq {
+      background: var(--nav-active-sq);
+      box-shadow: none;
+    }
+
+    /* Bottom Sidebar Live Speed Pod */
+    .sidebar-live-card {
+      position: relative;
+      padding: 9px 10px 8px;
+      border-radius: 12px;
+      background: var(--node-bg);
+      box-shadow: inset 0 0 0 0.5px var(--card-hairline);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sidebar-live-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      position: relative;
+      z-index: 1;
+    }
+    .sidebar-speeds {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.44;
+    }
+    .sidebar-speeds .up { color: var(--mint); }
+    .sidebar-speeds .down { color: var(--ink); }
+    .sidebar-wave-bg {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 21px;
+      height: 30px;
+      pointer-events: none;
+      opacity: 0.45;
+    }
+    .sidebar-core-foot {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 5px;
+      border-top: 0.5px solid var(--inset-divider);
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: var(--muted);
+    }
+
+    /* =========================================================================
+       Main Detail Stage + True Floating Liquid Glass Toolbar (Progressive Blur)
+       ========================================================================= */
+    .detail-stage {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .glass-toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      padding: 6px 18px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .glass-toolbar::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 -14px 0;
+      z-index: -1;
+      pointer-events: none;
+      background: linear-gradient(180deg, var(--stage-fade) 0%, transparent 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      -webkit-mask-image: linear-gradient(to bottom, #000 44%, transparent 100%);
+      mask-image: linear-gradient(to bottom, #000 44%, transparent 100%);
+    }
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      pointer-events: auto;
+    }
+
+    /* Iconic Ref #5 Liquid Glass Floating Capsule (< | > and Action Group) */
+    .glass-capsule {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--lg-bg);
+      box-shadow: var(--lg-shadow);
+      backdrop-filter: blur(30px) saturate(225%) brightness(1.08);
+      -webkit-backdrop-filter: blur(30px) saturate(225%) brightness(1.08);
+      overflow: hidden;
+    }
+    .glass-capsule button {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      padding: 0 12px;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 12.5px;
+      font-weight: 550;
+      transition: background 0.14s ease, transform 0.12s ease;
+    }
+    .glass-capsule button:hover:not(:disabled) { background: rgba(142, 142, 147, 0.14); }
+    .glass-capsule button:active:not(:disabled) { transform: scale(0.94); }
+    .glass-capsule .cap-sep { width: 0.5px; height: 15px; background: var(--inset-divider); }
+    .glass-capsule svg { width: 15px; height: 15px; stroke-width: 1.9; }
+
+    /* Circular Single-Icon Liquid Glass Button (Ref #5 '?' geometry) */
+    .glass-circle {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: var(--lg-bg);
+      box-shadow: var(--lg-shadow);
+      backdrop-filter: blur(30px) saturate(195%) brightness(1.06);
+      -webkit-backdrop-filter: blur(30px) saturate(195%) brightness(1.06);
+      color: var(--ink);
+      display: inline-grid;
+      place-items: center;
+      overflow: hidden;
+      transition: background 0.14s ease, transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .glass-circle:hover { background: var(--lg-bg-hover); }
+    .glass-circle:active { transform: scale(0.93); }
+    .glass-circle svg { width: 15px; height: 15px; stroke-width: 1.85; position: relative; z-index: 1; }
+
+    /* Collapsed-sidebar reveal button (MUST come after .glass-circle!) */
+    .toolbar-sidebar-btn { display: none; }
+    .mac-window.sidebar-collapsed .toolbar-sidebar-btn { display: inline-grid; }
+
+    .stage-title {
+      margin: 0 2px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .online-pill {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 29px;
+      padding: 0 11px;
+      border-radius: 999px;
+      background: var(--lg-bg);
+      box-shadow: var(--lg-shadow);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      font-size: 12px;
+      font-weight: 550;
+      color: var(--ink-2);
+      overflow: hidden;
+    }
+    .online-pill .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(48, 209, 88, 0.72);
+    }
+    .online-pill.warn .dot { background: var(--orange); box-shadow: 0 0 8px rgba(255, 159, 10, 0.6); }
+    .online-pill.off .dot { background: var(--subtle); box-shadow: none; }
+
+    /* Tinted Liquid Glass Prominent Action Button */
+    .glass-btn-primary {
+      position: relative;
+      height: 34px;
+      padding: 0 15px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--lg-accent-bg);
+      box-shadow: var(--lg-accent-shadow);
+      backdrop-filter: blur(22px) saturate(185%);
+      -webkit-backdrop-filter: blur(22px) saturate(185%);
+      color: #ffffff;
+      font-size: 12.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      transition: background 0.16s ease, transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease;
+    }
+    .glass-btn-primary:hover { background: var(--lg-accent-bg-hover); }
+    .glass-btn-primary:active { transform: scale(0.96); }
+    .glass-btn-primary.compact { height: 30px; padding: 0 13px; font-size: 12px; }
+    .glass-btn-primary.off-state {
+      background: var(--lg-bg);
+      color: var(--ink);
+      box-shadow: var(--lg-shadow);
+    }
+    .glass-btn-primary.off-state::before { background: var(--lg-rim-grad); }
+
+    .glass-btn-soft {
+      position: relative;
+      height: 28px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--lg-bg);
+      box-shadow: var(--lg-shadow);
+      backdrop-filter: blur(20px) saturate(175%);
+      -webkit-backdrop-filter: blur(20px) saturate(175%);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 550;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      overflow: hidden;
+      transition: background 0.14s ease, transform 0.14s ease;
+    }
+    .glass-btn-soft:hover { background: var(--lg-bg-hover); }
+    .glass-btn-soft:active { transform: scale(0.96); }
+
+    /* Quiet SF Icon Action Button (e.g. subtle trash button -> turns red only on hover!) */
+    .sf-icon-btn {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      display: inline-grid;
+      place-items: center;
+      transition: background 0.14s ease, color 0.14s ease, transform 0.12s ease;
+    }
+    .sf-icon-btn:hover { background: var(--node-hover); color: var(--ink); }
+    .sf-icon-btn.danger:hover { background: var(--red-soft); color: var(--red); }
+    .sf-icon-btn:active { transform: scale(0.92); }
+    .sf-icon-btn svg { width: 14px; height: 14px; stroke-width: 1.8; }
+
+    /* =========================================================================
+       Scrollable Views Container + macOS 27 Grouped Cards
+       ========================================================================= */
+    .views-host {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0 18px 10px;
+    }
+    .view {
+      display: none;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding-top: 58px;
+    }
+    .view.active {
+      display: block;
+      animation: macViewIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes macViewIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 5px 7px;
+      min-height: 17px;
+    }
+    .section-label {
+      margin: 0 5px 7px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      color: var(--muted);
+    }
+    .section-head .section-label { margin: 0; }
+    .section-link {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 550;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      transition: opacity 0.14s ease;
+    }
+    .section-link:hover { opacity: 0.78; }
+
+    /* Optical Frosted Liquid Glass Card */
+    .mac-card {
+      position: relative;
+      background: var(--card-surface);
+      border: 0;
+      border-radius: 15px;
+      box-shadow: var(--card-shadow);
+      padding: 14px 15px;
+      backdrop-filter: blur(30px) saturate(200%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
+    }
+    .mac-card.flush { padding: 0; overflow: hidden; }
+
+    /* Ref #4 Minimalist Monochrome Horizontal Telemetry Bar */
+    .telemetry-capsule {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      align-items: center;
+      background: var(--card-surface);
+      border: 0;
+      border-radius: 14px;
+      box-shadow: var(--card-shadow);
+      backdrop-filter: blur(30px) saturate(200%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
+      padding: 9px 6px;
+      margin-bottom: 14px;
+    }
+    .t-cell {
+      text-align: center;
+      padding: 0 8px;
+      position: relative;
+    }
+    .t-cell + .t-cell::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 0.5px;
+      background: var(--inset-divider);
+    }
+    .t-cell strong {
+      display: block;
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+    .t-cell span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* =========================================================================
+       Authentic macOS Pop-Up Button (⌃⌄ Double Chevron) + Liquid Glass Menu
+       ========================================================================= */
+    .mac-popup-btn {
+      height: 27px;
+      min-width: 128px;
+      max-width: 168px;
+      padding: 0 8px 0 10px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--popup-bg);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), inset 0 0 0 0.5px var(--popup-border), inset 0 0.5px 0 rgba(255, 255, 255, 0.28);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink);
+      transition: background 0.12s ease, box-shadow 0.12s ease, transform 0.1s ease;
+    }
+    .mac-popup-btn:hover { background: var(--popup-bg-hover); }
+    .mac-popup-btn[aria-expanded="true"] {
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.45);
+    }
+    .mac-popup-btn:active { transform: scale(0.975); }
+    .mac-popup-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+    .mac-popup-dot.cyan { background: var(--cyan); }
+    .mac-popup-dot.purple { background: var(--purple); }
+    .mac-popup-dot.green { background: var(--green); }
+    .mac-popup-dot.red { background: var(--red); }
+    .mac-popup-label {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mac-popup-chevrons {
+      width: 13px;
+      height: 13px;
+      color: var(--muted);
+      flex: none;
+    }
+
+    /* Floating macOS 27 Liquid Glass Pop-Up Menu */
+    .mac-menu-popover {
+      position: fixed;
+      z-index: 200;
+      min-width: 192px;
+      max-width: 268px;
+      max-height: 368px;
+      overflow-y: auto;
+      padding: 5px;
+      border-radius: 13px;
+      background: var(--menu-surface);
+      box-shadow: var(--menu-shadow);
+      backdrop-filter: blur(42px) saturate(210%);
+      -webkit-backdrop-filter: blur(42px) saturate(210%);
+      display: none;
+      flex-direction: column;
+      gap: 1px;
+      transform-origin: top center;
+    }
+    .mac-menu-popover.open {
+      display: flex;
+      animation: macMenuPop 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes macMenuPop {
+      from { opacity: 0; transform: scale(0.95) translateY(-3px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .mac-menu-item {
+      width: 100%;
+      min-height: 27px;
+      padding: 4px 9px 4px 7px;
+      border: 0;
+      border-radius: 7.5px;
+      background: transparent;
+      color: var(--ink);
+      font-size: 12.5px;
+      font-weight: 450;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      text-align: left;
+      transition: background 0.08s ease, color 0.08s ease;
+    }
+    .mac-menu-item:hover {
+      background: var(--accent);
+      color: #ffffff;
+    }
+    .mac-menu-item:hover .mac-menu-meta { color: rgba(255, 255, 255, 0.78); }
+    .mac-menu-check {
+      width: 13px;
+      height: 13px;
+      flex: none;
+      display: inline-grid;
+      place-items: center;
+      opacity: 0;
+    }
+    .mac-menu-item.selected .mac-menu-check { opacity: 1; }
+    .mac-menu-item-text {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mac-menu-meta {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--muted);
+      flex: none;
+    }
+    .mac-menu-sep {
+      height: 0.5px;
+      background: var(--inset-divider);
+      margin: 4px 8px;
+    }
+
+    /* Subtle Hairlined Micro Pill (Restrained, Zero Bootstrap Loudness) */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 21px;
+      padding: 0 7.5px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 550;
+      background: var(--node-bg);
+      box-shadow: inset 0 0 0 0.5px var(--card-hairline);
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .pill.blue { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+    .pill.green { background: var(--green-soft); color: var(--green); box-shadow: none; }
+    .pill.orange { background: var(--orange-soft); color: var(--orange); box-shadow: none; }
+    .pill.red { background: var(--red-soft); color: var(--red); box-shadow: none; }
+    .pill.purple { background: var(--purple-soft); color: var(--purple); box-shadow: none; }
+
+    /* =========================================================================
+       View 1: Unified Swiss/Apple Bento Grid (Exact Same Vertical Seam!)
+       ========================================================================= */
+    .connect-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.36fr) minmax(0, 1fr);
+      gap: 14px;
+      margin-bottom: 14px;
+      align-items: stretch;
+    }
+    .connect-col {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .connect-col > .mac-card { flex: 1; display: flex; flex-direction: column; }
+
+    .spotlight-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      border-bottom: 0.5px solid var(--inset-divider);
+    }
+
+    /* Curated Rounded Flag Badges */
+    .flag-box {
+      width: 22px;
+      height: 15.5px;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.22), 0 1px 2px rgba(0, 0, 0, 0.22);
+      display: inline-flex;
+      flex: none;
+    }
+    .flag-box.lg { width: 36px; height: 25px; border-radius: 6px; }
+    .flag-box svg { width: 100%; height: 100%; display: block; }
+
+    /* Clean Borderless Node Pills */
+    .node-pills-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .node-pills-grid.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .cp-node {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 11px 12px;
+      border-radius: 11px;
+      background: var(--node-bg);
+      border: 1px solid transparent;
+      box-shadow: inset 0 0.5px 0 var(--node-rim);
+      cursor: pointer;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.12s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease;
+      text-align: left;
+    }
+    .cp-node:hover:not(.selected) { background: var(--node-hover); }
+    .cp-node:active { transform: scale(0.98); }
+    .cp-node.selected {
+      background: var(--node-active-bg);
+      border-color: var(--node-active-border);
+      box-shadow: 0 3px 12px -6px rgba(10, 132, 255, 0.42), inset 0 0.5px 0 rgba(255, 255, 255, 0.16);
+    }
+    .cp-node-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+    .cp-node-title {
+      font-size: 13px;
+      font-weight: 580;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cp-node-sub {
+      display: block;
+      font-size: 10.5px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cp-node-ms {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--green);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .cp-node-ms small { font-size: 9.5px; font-weight: 500; opacity: 0.72; margin-left: 1px; }
+    .cp-node-ms.mid { color: var(--cyan); }
+    .cp-node-ms.slow { color: var(--orange); }
+    .node-card-foot {
+      margin-top: auto;
+      padding-top: 11px;
+      border-top: 0.5px solid var(--inset-divider);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+
+    /* macOS 27 Grouped List Rows (Ref #5 exact inset divider & spacing) */
+    .mac-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9.5px 14px;
+      position: relative;
+      transition: background 0.1s ease;
+    }
+    .mac-row:hover { background: var(--card-surface-hover); }
+    .mac-row + .mac-row::before {
+      content: "";
+      position: absolute;
+      left: 53px;
+      right: 14px;
+      top: 0;
+      height: 0.5px;
+      background: var(--inset-divider);
+    }
+    .mac-row-left { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .mac-row-title { font-size: 13px; font-weight: 550; color: var(--ink); display: block; line-height: 1.3; }
+    .mac-row-sub {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mini-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      display: inline-block;
+      flex: none;
+    }
+    .mini-dot.off { background: var(--subtle); }
+    .mini-dot.red { background: var(--red); }
+
+    /* Bottom Telemetry: Same Exact 1.36fr / 1fr Column Axis as Above! */
+    .telemetry-bottom {
+      display: grid;
+      grid-template-columns: minmax(0, 1.36fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+    .telemetry-bottom > .mac-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 228px;
+    }
+    .chart-shell {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      flex: 1;
+      min-height: 132px;
+      margin: 6px 0 8px;
+    }
+    .chart-stage {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+    #mainChartSvg { width: 100%; height: 100%; display: block; cursor: crosshair; }
+    .chart-yaxis {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 2px 0 4px;
+      width: 46px;
+      flex: none;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--subtle);
+      font-variant-numeric: tabular-nums;
+    }
+    .chart-hover-v {
+      position: absolute;
+      top: 4px;
+      bottom: 6px;
+      width: 1px;
+      border-left: 1px dashed var(--muted);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s ease;
+    }
+    .chart-dot {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      margin: -4px 0 0 -4px;
+      border-radius: 50%;
+      border: 1.5px solid #ffffff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s ease;
+    }
+    .chart-dot.down { background: var(--accent); }
+    .chart-dot.up { background: var(--mint); width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; }
+    .chart-tooltip {
+      position: absolute;
+      top: 2px;
+      padding: 5px 9px;
+      border-radius: 9px;
+      background: var(--tooltip-bg);
+      box-shadow: var(--lg-shadow);
+      backdrop-filter: blur(22px) saturate(185%);
+      -webkit-backdrop-filter: blur(22px) saturate(185%);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-2px);
+      transition: opacity 0.12s ease, transform 0.12s ease;
+      white-space: nowrap;
+      z-index: 4;
+    }
+    .chart-tooltip.show { opacity: 1; transform: translateY(0); }
+    .telemetry-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+      border-top: 0.5px solid var(--inset-divider);
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      gap: 4px;
+      margin: 9px 0 7px;
+    }
+    .hm-cell {
+      aspect-ratio: 1;
+      border-radius: 3.5px;
+      background: var(--cell-0);
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .hm-cell:hover {
+      transform: scale(1.24);
+      box-shadow: 0 0 0 1.5px var(--ink);
+      z-index: 2;
+    }
+    .hm-cell.l1 { background: var(--cell-1); }
+    .hm-cell.l2 { background: var(--cell-2); }
+    .hm-cell.l3 { background: var(--cell-3); }
+    .hm-cell.l4 { background: var(--cell-4); }
+    .heatmap-legend {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-family: var(--font-ui);
+      font-size: 10.5px;
+      color: var(--subtle);
+    }
+    .heatmap-legend i {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    /* Aligned Rule Table Columns */
+    .rule-right-cols {
+      display: grid;
+      grid-template-columns: 74px 104px 36px 26px;
+      align-items: center;
+      justify-items: end;
+      gap: 8px;
+      flex: none;
+    }
+
+    .mac-progress {
+      height: 4.5px;
+      border-radius: 999px;
+      background: var(--well-bg);
+      overflow: hidden;
+    }
+    .mac-progress > span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--cyan) 100%);
+      transition: width 0.3s ease;
+    }
+
+    /* Strategy Group Drawer with Rotating SF Chevron */
+    .group-drawer {
+      position: relative;
+      background: var(--card-surface);
+      border: 0;
+      border-radius: 15px;
+      box-shadow: var(--card-shadow);
+      backdrop-filter: blur(30px) saturate(200%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .group-drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 15px;
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+    .group-drawer-head:hover { background: var(--card-surface-hover); }
+    .drawer-chevron {
+      width: 14px;
+      height: 14px;
+      color: var(--muted);
+      transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .group-drawer.open .drawer-chevron { transform: rotate(90deg); }
+    .group-drawer-body {
+      padding: 12px 14px 14px;
+      border-top: 0.5px solid var(--inset-divider);
+    }
+
+    /* Segmented Sub-tabs */
+    .sub-seg {
+      display: inline-flex;
+      padding: 2.5px;
+      border-radius: 999px;
+      background: var(--well-bg);
+      box-shadow: inset 0 0 0 0.5px var(--well-stroke);
+      gap: 2px;
+    }
+    .sub-seg button {
+      height: 26px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.16s ease;
+    }
+    .sub-seg button:hover:not(.active) { color: var(--ink-2); }
+    .sub-seg button.active {
+      background: var(--seg-thumb-bg);
+      color: var(--ink);
+      box-shadow: var(--seg-thumb-shadow);
+    }
+
+    /* macOS System Settings -> Appearance Mini-Window Preview Swatches */
+    .appearance-picker {
+      display: flex;
+      gap: 10px;
+    }
+    .appearance-opt {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 550;
+    }
+    .appearance-thumb {
+      position: relative;
+      width: 62px;
+      height: 40px;
+      border-radius: 8px;
+      padding: 10px 5px 5px;
+      display: flex;
+      gap: 4px;
+      box-shadow: 0 0 0 0.5px var(--card-hairline), 0 2px 6px rgba(0, 0, 0, 0.16);
+      transition: box-shadow 0.16s ease, transform 0.14s ease;
+    }
+    .appearance-thumb::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 5px;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #ff5f57;
+      box-shadow: 4.5px 0 0 #febc2e, 9px 0 0 #28c840;
+    }
+    .appearance-opt:hover .appearance-thumb { transform: translateY(-1px); }
+    .appearance-opt.active { color: var(--ink); }
+    .appearance-opt.active .appearance-thumb {
+      box-shadow: 0 0 0 2px var(--accent), 0 4px 12px rgba(10, 132, 255, 0.28);
+    }
+    .appearance-thumb.dark-t { background: linear-gradient(145deg, #27272c 0%, #17171a 100%); }
+    .appearance-thumb.dark-t span { background: rgba(255, 255, 255, 0.14); border-radius: 3px; box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.22); }
+    .appearance-thumb.light-t { background: linear-gradient(145deg, #eceef2 0%, #dfe2e8 100%); }
+    .appearance-thumb.light-t span { background: rgba(255, 255, 255, 0.88); border-radius: 3px; box-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.10), inset 0 0.5px 0 #ffffff; }
+
+    /* Port Labeled Chip Inputs */
+    .port-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .port-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+      padding: 0 7px;
+      border-radius: 8px;
+      background: var(--well-bg);
+      box-shadow: inset 0 0 0 0.5px var(--well-stroke);
+    }
+    .port-chip:focus-within {
+      box-shadow: 0 0 0 2px var(--accent-soft), inset 0 0 0 0.5px var(--accent);
+    }
+    .port-chip small {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.01em;
+    }
+    .port-chip input {
+      width: 44px;
+      border: 0;
+      background: transparent;
+      outline: none;
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 550;
+      color: var(--ink);
+    }
+
+    /* Native macOS Tooltip on data-tip */
+    [data-tip] { position: relative; }
+    .mac-tooltip {
+      position: fixed;
+      z-index: 260;
+      padding: 4px 9px;
+      border-radius: 7px;
+      background: var(--tooltip-bg);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28), 0 0 0 0.5px var(--lg-outer);
+      backdrop-filter: blur(24px) saturate(190%);
+      -webkit-backdrop-filter: blur(24px) saturate(190%);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink);
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, 4px);
+      transition: opacity 0.14s ease, transform 0.14s ease;
+      white-space: nowrap;
+    }
+    .mac-tooltip.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /* Floating Liquid Glass Toast */
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 20px;
+      padding: 9px 15px;
+      border-radius: 999px;
+      background: var(--lg-bg-hover);
+      box-shadow: var(--lg-shadow);
+      backdrop-filter: blur(32px) saturate(200%);
+      -webkit-backdrop-filter: blur(32px) saturate(200%);
+      color: var(--ink);
+      font-size: 12.5px;
+      font-weight: 550;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+      pointer-events: none;
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 220;
+    }
+    .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+
+    /* Authentic macOS Spring Sheet Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 180;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+    .modal-sheet {
+      position: relative;
+      width: min(440px, 90vw);
+      background: var(--modal-surface);
+      backdrop-filter: blur(42px) saturate(210%);
+      -webkit-backdrop-filter: blur(42px) saturate(210%);
+      border-radius: 20px;
+      box-shadow: 0 32px 72px rgba(0, 0, 0, 0.48), 0 0 0 0.5px var(--lg-outer);
+      padding: 20px 22px;
+      transform: scale(0.94) translateY(8px);
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .modal-backdrop.open .modal-sheet { transform: scale(1) translateY(0); }
+    .modal-sheet h3 { margin: 0 0 14px; font-size: 15.5px; font-weight: 680; letter-spacing: -0.015em; }
+    .sheet-field { display: grid; gap: 6px; margin-bottom: 13px; }
+    .sheet-field label { font-size: 12px; font-weight: 550; color: var(--muted); }
+    .sheet-input {
+      height: 31px;
+      padding: 0 11px;
+      border-radius: 9px;
+      border: 0;
+      box-shadow: inset 0 0 0 0.5px var(--popup-border);
+      background: var(--well-bg);
+      color: var(--ink);
+      outline: none;
+      transition: box-shadow 0.14s ease, background 0.14s ease;
+    }
+    .sheet-input:focus {
+      background: var(--card-surface-hover);
+      box-shadow: 0 0 0 2.5px var(--accent-soft), inset 0 0 0 0.5px var(--accent);
+    }
+    .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="mac-window" id="macWindow">
+    <!-- ===================================================================
+         LEFT FLOATING LIQUID GLASS SIDEBAR (macOS 27 Tahoe)
+         =================================================================== -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="traffic-lights" aria-label="窗口控制">
+          <span class="tl red" title="关闭"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M3.2 3.2 8.8 8.8M8.8 3.2 3.2 8.8"/></svg></span>
+          <span class="tl yellow" title="最小化"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M2.8 6h6.4"/></svg></span>
+          <span class="tl green" title="全屏"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M3.4 8.6 8.6 3.4M5.4 3.4h3.2v3.2M6.6 8.6H3.4V5.4"/></svg></span>
+        </div>
+        <button type="button" class="sidebar-toggle-btn" id="sidebarCollapseBtn" data-tip="隐藏边栏 (⌘S)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Brand & Core Status Row (Ref #5 Account Block Proportion) -->
+      <div class="sidebar-brand-row">
+        <img src="./public/app-icon.png" alt="">
+        <div class="sidebar-brand-text">
+          <strong>Xeylroute</strong>
+          <span id="sidebarBrandSub">规则模式 · 系统代理</span>
+        </div>
+      </div>
+
+      <!-- Recessed Search Capsule + ⌘K Keycap -->
+      <div class="glass-search" id="searchWrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7.5"/><path d="m20 20-3.8-3.8"/>
+        </svg>
+        <input type="search" id="globalSearchInput" placeholder="搜索节点、规则或应用" aria-label="全局搜索">
+        <kbd class="kbd-hint">⌘K</kbd>
+        <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="清空搜索">×</button>
+      </div>
+
+      <!-- Authentic Spring-Sliding Segmented Mode Control -->
+      <div class="mode-pill" id="modePill" data-idx="0" role="radiogroup" aria-label="代理模式">
+        <span class="mode-pill-thumb" aria-hidden="true"></span>
+        <button type="button" class="active" data-mode="rule">规则</button>
+        <button type="button" data-mode="global">全局</button>
+        <button type="button" data-mode="direct">直连</button>
+      </div>
+
+      <!-- Quiet Neutral Takeover Tiles with Liquid Glass Elongated Switches -->
+      <div class="quick-tiles">
+        <label class="qtile">
+          <div class="qtile-top">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+            <span class="mac-switch"><input type="checkbox" id="sideSysProxy" checked><i></i></span>
+          </div>
+          <span class="qlabel">系统代理</span>
+        </label>
+
+        <label class="qtile">
+          <div class="qtile-top">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M12 3 4 7v5c0 5 3.5 8.5 8 9.8 4.5-1.3 8-4.8 8-9.8V7l-8-4Z"/></svg>
+            <span class="mac-switch"><input type="checkbox" id="sideTunToggle"><i></i></span>
+          </div>
+          <span class="qlabel">虚拟网卡</span>
+        </label>
+      </div>
+
+      <!-- Grouped macOS 27 System Settings Navigation -->
+      <nav class="nav-list" id="sidebarNav">
+        <div class="nav-section-title">代理与路由</div>
+        <button type="button" class="nav-item active" data-view="connect">
+          <span class="sq blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+          <span>连接</span>
+        </button>
+
+        <button type="button" class="nav-item" data-view="nodes">
+          <span class="sq cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="5" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M10.7 7.2 7.2 15.8M13.3 7.2l3.5 8.6M8.5 18h7"/></svg></span>
+          <span>代理组与节点</span>
+          <span class="nav-badge" id="navNodeBadge">12</span>
+        </button>
+
+        <button type="button" class="nav-item" data-view="split">
+          <span class="sq purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v2a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-2M12 14.5v1"/></svg></span>
+          <span>分流与程序</span>
+          <span class="nav-badge" id="navRuleBadge">7</span>
+        </button>
+
+        <div class="nav-section-title">管理与诊断</div>
+
+        <button type="button" class="nav-item" data-view="logs">
+          <span class="sq green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+          <span>连接记录</span>
+        </button>
+
+        <button type="button" class="nav-item" data-view="subs">
+          <span class="sq orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 12.5 12 17.5 21 12.5"/><polyline points="3 17 12 22 21 17"/></svg></span>
+          <span>订阅管理</span>
+          <span class="nav-badge" id="navSubBadge">2</span>
+        </button>
+
+        <button type="button" class="nav-item" data-view="settings">
+          <span class="sq gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span>网络与设置</span>
+        </button>
+      </nav>
+
+      <!-- Bottom Live Telemetry Pod -->
+      <div class="sidebar-live-card">
+        <div class="sidebar-live-top">
+          <span style="font-size:11.5px;font-weight:600;color:var(--muted)">实时流量</span>
+          <div class="sidebar-speeds">
+            <div class="up" id="sideUpRate">1.3 MB/s ↑</div>
+            <div class="down" id="sideDownRate">12.8 MB/s ↓</div>
+          </div>
+        </div>
+        <svg class="sidebar-wave-bg" viewBox="0 0 200 32" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="sideWaveGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(10,132,255,0.34)"/>
+              <stop offset="100%" stop-color="rgba(10,132,255,0)"/>
+            </linearGradient>
+          </defs>
+          <path id="sideWavePath" fill="url(#sideWaveGrad)" d="M0 32 Q55 29 92 22 T140 8 T182 24 L200 32 Z"/>
+        </svg>
+        <div class="sidebar-core-foot">
+          <span>Mihomo v1.19.34</span>
+          <span id="sideMemText">36.2 MB</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================================================================
+         MAIN DETAIL STAGE + FLOATING PROGRESSIVE-BLUR TOOLBAR
+         =================================================================== -->
+    <div class="detail-stage">
+      <header class="glass-toolbar">
+        <div class="toolbar-left">
+          <button type="button" class="glass-circle lg-track toolbar-sidebar-btn" id="sidebarExpandBtn" data-tip="显示边栏 (⌘S)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+          </button>
+
+          <!-- Ref #5 Iconic < | > Liquid Glass Pill -->
+          <div class="glass-capsule lg-track">
+            <button type="button" id="navBackBtn" data-tip="返回" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="cap-sep"></span>
+            <button type="button" id="navForwardBtn" data-tip="前进" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+
+          <h1 class="stage-title" id="stageTitle">连接</h1>
+
+          <div class="online-pill lg-track" id="topOnlinePill">
+            <span class="dot"></span>
+            <span id="topStatusText">已连接 · 新加坡 01</span>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <!-- Balanced Liquid Glass Capsule (測速 | 导入) + Circular Theme Button -->
+          <div class="glass-capsule lg-track">
+            <button type="button" id="topSpeedBtn" data-tip="全部节点延迟与速度测速">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 13 3.5-3.5"/></svg>
+              <span>测速</span>
+            </button>
+            <span class="cap-sep"></span>
+            <button type="button" id="topImportBtn" data-tip="导入订阅或分享链接">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              <span>导入</span>
+            </button>
+          </div>
+
+          <button type="button" class="glass-circle lg-track" id="topThemeBtn" data-tip="切换深色 / 浅色外观">
+            <svg id="themeSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          </button>
+
+          <button type="button" class="glass-btn-primary lg-track" id="topPowerBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+            <span id="topPowerLabel">断开</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="views-host">
+        <!-- ===============================================================
+             VIEW 1: 连接 (Overview Cockpit)
+             =============================================================== -->
+        <section class="view active" id="view-connect">
+          <!-- Ref #4 Restrained Monochrome Horizontal Telemetry Strip -->
+          <div class="telemetry-capsule">
+            <div class="t-cell">
+              <strong id="kpiDown">12.8 MB/s</strong>
+              <span><i class="mini-dot" style="background:var(--accent)"></i> 实时下载</span>
+            </div>
+            <div class="t-cell">
+              <strong id="kpiUp">1.3 MB/s</strong>
+              <span><i class="mini-dot" style="background:var(--mint)"></i> 实时上传</span>
+            </div>
+            <div class="t-cell">
+              <strong id="kpiTimer">02:46:18</strong>
+              <span>会话时长</span>
+            </div>
+            <div class="t-cell">
+              <strong id="kpiTotal">246.4 MB</strong>
+              <span>已接管流量</span>
+            </div>
+            <div class="t-cell">
+              <strong id="kpiRules">7 条</strong>
+              <span>生效分流规则</span>
+            </div>
+          </div>
+
+          <!-- Pixel-Aligned 2-Column macOS Grouped Sections -->
+          <div class="connect-grid">
+            <!-- Left Column: Current Route + Quick Node Matrix -->
+            <div class="connect-col">
+              <div class="section-head">
+                <span class="section-label">共享出口</span>
+                <button type="button" class="section-link" id="goAllNodesBtn">全部 12 个节点 ›</button>
+              </div>
+              <div class="mac-card">
+                <div class="spotlight-bar">
+                  <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                    <span class="flag-box lg" id="heroFlag"></span>
+                    <div style="min-width:0">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <strong style="font-size:15.5px;font-weight:680;letter-spacing:-0.015em" id="heroNodeName">新加坡 01</strong>
+                        <span class="pill" id="heroNodeProto">Hysteria2</span>
+                        <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11.5px;font-weight:600;color:var(--green)" id="heroNodeDelay"><i class="mini-dot"></i> 38 ms</span>
+                      </div>
+                      <div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="heroNodeMeta">
+                        个人订阅 · IEPL 专线 · 出口 103.214.168.42
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="glass-btn-soft lg-track" id="heroProbeBtn">重测</button>
+                </div>
+
+                <div class="node-pills-grid" id="homeQuickNodes"></div>
+
+                <div class="node-card-foot">
+                  <span id="homeAutoFoot">自动优选推荐：香港 02 · 26 ms</span>
+                  <button type="button" class="section-link" id="pickAutoQuickBtn" data-pick-node="auto">切换 AUTO ›</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: macOS System Settings App Exits + Subscription -->
+            <div class="connect-col" style="gap:12px">
+              <div>
+                <div class="section-head">
+                  <span class="section-label">应用出口</span>
+                  <button type="button" class="section-link" id="goSplitBtn">规则管理 ›</button>
+                </div>
+                <div class="mac-card flush" id="homeAppExits"></div>
+              </div>
+              <div class="mac-card" id="homeSubCard"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Row: Interactive Smooth Bézier Chart + Interactive Activity Matrix -->
+          <div class="telemetry-bottom">
+            <div class="mac-card">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <strong style="font-size:13px;font-weight:650">已接管流量波形</strong>
+                  <span class="pill" id="chartModeBadge">规则模式 · 系统代理</span>
+                </div>
+                <div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">
+                  <span style="display:inline-flex;align-items:center;gap:4px"><i class="mini-dot" style="background:var(--accent)"></i> 下载</span>
+                  <span style="display:inline-flex;align-items:center;gap:4px"><i class="mini-dot" style="background:var(--mint)"></i> 上传</span>
+                </div>
+              </div>
+
+              <div class="chart-shell">
+                <div class="chart-stage" id="chartStage">
+                  <svg id="mainChartSvg" viewBox="0 0 600 130" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="mainDownGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="rgba(10,132,255,0.28)"/>
+                        <stop offset="100%" stop-color="rgba(10,132,255,0)"/>
+                      </linearGradient>
+                      <linearGradient id="mainUpGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="rgba(99,230,190,0.18)"/>
+                        <stop offset="100%" stop-color="rgba(99,230,190,0)"/>
+                      </linearGradient>
+                    </defs>
+                    <g stroke="var(--inset-divider)" stroke-width="0.8">
+                      <line x1="0" y1="16" x2="600" y2="16"/>
+                      <line x1="0" y1="68" x2="600" y2="68"/>
+                      <line x1="0" y1="120" x2="600" y2="120"/>
+                    </g>
+                    <path id="mainDownArea" fill="url(#mainDownGrad)" d=""/>
+                    <path id="mainUpArea" fill="url(#mainUpGrad)" d=""/>
+                    <path id="mainDownLine" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+                    <path id="mainUpLine" fill="none" stroke="var(--mint)" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+                  </svg>
+                  <div class="chart-hover-v" id="chartHoverV"></div>
+                  <div class="chart-dot down" id="chartDotDown"></div>
+                  <div class="chart-dot up" id="chartDotUp"></div>
+                  <div class="chart-tooltip" id="chartTooltip"></div>
+                </div>
+                <div class="chart-yaxis">
+                  <span id="chartTickTop">18 MB/s</span>
+                  <span id="chartTickMid">9 MB/s</span>
+                  <span>0</span>
+                </div>
+              </div>
+
+              <div class="telemetry-foot">
+                <span id="chartAvgFoot">平均下载 10.2 MB/s · 峰值 18.4 MB/s</span>
+                <span id="chartLossFoot">丢包 0.0% · 实时采样</span>
+              </div>
+            </div>
+
+            <!-- Interactive Ref #4 Activity Dot Matrix (16 × 6 = 96 samples) -->
+            <div class="mac-card">
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                  <strong style="font-size:13px;font-weight:650">路由活动热力</strong>
+                  <span style="font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums" id="heatmapReadout">近 96 次连接采样</span>
+                </div>
+                <div class="heatmap-grid" id="activityHeatmap"></div>
+              </div>
+              <div class="telemetry-foot">
+                <span id="homePortFoot">127.0.0.1:7890</span>
+                <span class="heatmap-legend">少 <i style="background:var(--cell-0)"></i><i style="background:var(--cell-1)"></i><i style="background:var(--cell-2)"></i><i style="background:var(--cell-3)"></i><i style="background:var(--cell-4)"></i> 多</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===============================================================
+             VIEW 2: 代理组与节点
+             =============================================================== -->
+        <section class="view" id="view-nodes">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div class="sub-seg" id="nodesSubSeg">
+              <button type="button" class="active" data-nodes-sub="groups">代理组与节点</button>
+              <button type="button" data-nodes-sub="sites">常用网站测速</button>
+            </div>
+            <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
+          </div>
+
+          <div id="nodesGroupsPane"></div>
+          <div id="nodesSitesPane" hidden></div>
+        </section>
+
+        <!-- ===============================================================
+             VIEW 3: 分流与程序
+             =============================================================== -->
+        <section class="view" id="view-split">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+            <div class="sub-seg" id="splitSubSeg">
+              <button type="button" class="active" data-split-sub="rules">分流规则</button>
+              <button type="button" data-split-sub="groups">策略分组</button>
+              <button type="button" data-split-sub="procs">运行中的程序</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12px;color:var(--muted)">未命中规则时</span>
+              <div id="defaultExitSelectHost"></div>
+              <button type="button" class="glass-btn-primary compact lg-track" id="splitPrimaryAddBtn">+ 添加规则</button>
+            </div>
+          </div>
+
+          <div id="splitRulesPane"></div>
+          <div id="splitGroupsPane" hidden></div>
+          <div id="splitProcsPane" hidden></div>
+        </section>
+
+        <!-- ===============================================================
+             VIEW 4: 连接记录 & 路由走向模拟器
+             =============================================================== -->
+        <section class="view" id="view-logs">
+          <form class="mac-card" id="simForm" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <input type="text" class="sheet-input" id="simHostInput" style="width:185px" value="github.com" placeholder="输入测试域名…" required>
+            <div id="simAppSelectHost"></div>
+            <label class="mac-check">
+              <input type="checkbox" id="simSysProxyCheck" checked> 遵循系统代理
+            </label>
+            <label class="mac-check">
+              <input type="checkbox" id="simFailCheck"> 模拟出口故障
+            </label>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button type="submit" class="glass-btn-primary compact lg-track">测试走向</button>
+              <button type="button" class="glass-btn-soft lg-track" id="clearLogsBtn">清空</button>
+            </div>
+          </form>
+
+          <div class="mac-card flush" id="logsListCard"></div>
+        </section>
+
+        <!-- ===============================================================
+             VIEW 5: 订阅管理
+             =============================================================== -->
+        <section class="view" id="view-subs">
+          <form class="mac-card" id="subBarForm" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <input type="text" class="sheet-input" id="subBarInput" style="flex:1" placeholder="粘贴 HTTPS 订阅地址、vless:// / trojan:// / ss:// 节点链接或 Base64…">
+            <button type="submit" class="glass-btn-primary compact lg-track">导入链接</button>
+            <button type="button" class="glass-btn-soft lg-track" id="subFileBtn">本地导入</button>
+            <input type="file" id="subFileInput" accept=".yaml,.yml,.txt,.b64,.json" hidden>
+          </form>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px" id="subsGridPane"></div>
+        </section>
+
+        <!-- ===============================================================
+             VIEW 6: 网络与设置 (Pixel-Faithful macOS 27 System Settings)
+             =============================================================== -->
+        <section class="view" id="view-settings">
+          <p class="section-label">网络与流量接管</p>
+          <div class="mac-card flush" style="margin-bottom:18px">
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18"/></svg></span>
+                <div>
+                  <span class="mac-row-title">系统代理</span>
+                  <span class="mac-row-sub" id="setSysProxySub"><i class="mini-dot"></i> 已启用 · 127.0.0.1:7890</span>
+                </div>
+              </div>
+              <label class="mac-switch lg"><input type="checkbox" id="setSysProxyToggle" checked><i></i></label>
+            </div>
+
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 7v5c0 5 3.5 8.5 8 9.8 4.5-1.3 8-4.8 8-9.8V7l-8-4Z"/></svg></span>
+                <div>
+                  <span class="mac-row-title">虚拟网卡模式 (TUN)</span>
+                  <span class="mac-row-sub" id="setTunSub"><i class="mini-dot off"></i> 停用</span>
+                </div>
+              </div>
+              <label class="mac-switch lg"><input type="checkbox" id="setTunToggle"><i></i></label>
+            </div>
+
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span>
+                <div>
+                  <span class="mac-row-title">TUN 接管范围</span>
+                  <span class="mac-row-sub">仅指定目标模式只在规则模式下对开启 TUN 的组/程序生效</span>
+                </div>
+              </div>
+              <div id="setTunScopeHost"></div>
+            </div>
+
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span>
+                <div>
+                  <span class="mac-row-title">代理故障时恢复直连</span>
+                  <span class="mac-row-sub">节点故障自动回退 DIRECT（显式 REJECT 始终阻断）</span>
+                </div>
+              </div>
+              <label class="mac-switch lg"><input type="checkbox" id="setFallbackToggle" checked><i></i></label>
+            </div>
+          </div>
+
+          <p class="section-label">端口监听与网络详情</p>
+          <div class="mac-card flush" style="margin-bottom:18px">
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M15 15h2"/></svg></span>
+                <div>
+                  <span class="mac-row-title">本地监听端口</span>
+                  <span class="mac-row-sub">绑定 127.0.0.1 · 保存前自动校验端口冲突</span>
+                </div>
+              </div>
+              <div class="port-group">
+                <label class="port-chip"><small>MIX</small><input type="number" id="portMixedInput" value="7890"></label>
+                <label class="port-chip"><small>HTTP</small><input type="number" id="portHttpInput" value="9870"></label>
+                <label class="port-chip"><small>SOCKS</small><input type="number" id="portSocksInput" value="7891"></label>
+                <button type="button" class="glass-btn-soft lg-track" id="savePortsBtn">保存</button>
+              </div>
+            </div>
+
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"/><path d="M2 12h20"/></svg></span>
+                <div>
+                  <span class="mac-row-title">出口 IP 与终端代理变量</span>
+                  <span class="mac-row-sub" id="setExitIpSub">103.214.168.42 (新加坡 01) · 系统 DNS 223.5.5.5, 1.1.1.1</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button type="button" class="glass-btn-soft lg-track" id="copyEnvBtn">复制代理变量</button>
+                <button type="button" class="glass-btn-soft lg-track" id="probeIpBtn">检测 IP</button>
+              </div>
+            </div>
+          </div>
+
+          <p class="section-label">外观</p>
+          <div class="mac-card flush">
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg></span>
+                <div>
+                  <span class="mac-row-title">外观材质</span>
+                  <span class="mac-row-sub">macOS 27 Liquid Glass 深色曜石 / 浅色毛玻璃</span>
+                </div>
+              </div>
+              <div class="appearance-picker" id="settingsThemeSeg">
+                <button type="button" class="appearance-opt active" data-set-theme="dark">
+                  <div class="appearance-thumb dark-t"><span style="width:14px"></span><span style="flex:1"></span></div>
+                  <span>深色</span>
+                </button>
+                <button type="button" class="appearance-opt" data-set-theme="light">
+                  <div class="appearance-thumb light-t"><span style="width:14px"></span><span style="flex:1"></span></div>
+                  <span>浅色</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ref #5 Bottom-Right Utility Pills + Circular Help Button -->
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:16px">
+            <button type="button" class="glass-btn-soft lg-track" id="exportBackupBtn">导出备份</button>
+            <button type="button" class="glass-btn-soft lg-track" id="resetStateBtn">重置示例</button>
+            <button type="button" class="glass-circle lg-track" style="width:28px;height:28px;font-size:12px;font-weight:700" id="helpInfoBtn" data-tip="路由优先级与快捷键说明">?</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Native-Style macOS Liquid Glass Pop-Up Menu -->
+  <div class="mac-menu-popover" id="macMenuPopover" role="menu"></div>
+
+  <!-- Native-Style Floating Tooltip -->
+  <div class="mac-tooltip" id="macTooltip" role="tooltip"></div>
+
+  <!-- Sheet Modal -->
+  <div class="modal-backdrop" id="sheetBackdrop">
+    <div class="modal-sheet" id="sheetContent"></div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const FLAGS = {
+        sg: `<svg viewBox="0 0 28 20"><rect width="28" height="10" fill="#E33242"/><rect y="10" width="28" height="10" fill="#F8F9FA"/><circle cx="7.2" cy="5" r="3.1" fill="#F8F9FA"/><circle cx="8.3" cy="5" r="2.7" fill="#E33242"/><circle cx="8.8" cy="3.6" r="0.6" fill="#F8F9FA"/><circle cx="10.4" cy="4.5" r="0.6" fill="#F8F9FA"/><circle cx="9.8" cy="6.2" r="0.6" fill="#F8F9FA"/><circle cx="7.8" cy="6.2" r="0.6" fill="#F8F9FA"/><circle cx="7.3" cy="4.5" r="0.6" fill="#F8F9FA"/></svg>`,
+        hk: `<svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#D9362C"/><g fill="#F8F9FA" transform="translate(14,10)"><path d="M0-5.2 C1.8-5.2 2.4-2.3 0-0.4 C-1.4-1.8 -1.5-4.1 0-5.2Z"/><path d="M0-5.2 C1.8-5.2 2.4-2.3 0-0.4 C-1.4-1.8 -1.5-4.1 0-5.2Z" transform="rotate(72)"/><path d="M0-5.2 C1.8-5.2 2.4-2.3 0-0.4 C-1.4-1.8 -1.5-4.1 0-5.2Z" transform="rotate(144)"/><path d="M0-5.2 C1.8-5.2 2.4-2.3 0-0.4 C-1.4-1.8 -1.5-4.1 0-5.2Z" transform="rotate(216)"/><path d="M0-5.2 C1.8-5.2 2.4-2.3 0-0.4 C-1.4-1.8 -1.5-4.1 0-5.2Z" transform="rotate(288)"/></g></svg>`,
+        jp: `<svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#F8F9FA"/><circle cx="14" cy="10" r="5.2" fill="#C41E3A"/></svg>`,
+        us: `<svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#F8F9FA"/><g fill="#B82B3A"><rect width="28" height="1.54"/><rect y="3.08" width="28" height="1.54"/><rect y="6.15" width="28" height="1.54"/><rect y="9.23" width="28" height="1.54"/><rect y="12.31" width="28" height="1.54"/><rect y="15.38" width="28" height="1.54"/><rect y="18.46" width="28" height="1.54"/></g><rect width="12" height="10.77" fill="#373E73"/><g fill="#F8F9FA"><circle cx="2.5" cy="2.2" r="0.65"/><circle cx="6" cy="2.2" r="0.65"/><circle cx="9.5" cy="2.2" r="0.65"/><circle cx="4.2" cy="4.2" r="0.65"/><circle cx="7.7" cy="4.2" r="0.65"/><circle cx="2.5" cy="6.2" r="0.65"/><circle cx="6" cy="6.2" r="0.65"/><circle cx="9.5" cy="6.2" r="0.65"/></g></svg>`,
+        de: `<svg viewBox="0 0 28 20"><rect width="28" height="6.67" fill="#1E1E22"/><rect y="6.67" width="28" height="6.67" fill="#D42828"/><rect y="13.33" width="28" height="6.67" fill="#F5C428"/></svg>`,
+        kr: `<svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#F8F9FA"/><circle cx="14" cy="10" r="4.8" fill="#CE3540"/><path d="M9.2 10a4.8 4.8 0 0 0 9.6 0 2.4 2.4 0 0 0-4.8 0 2.4 2.4 0 0 1-4.8 0Z" fill="#1D509C"/></svg>`,
+        gb: `<svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#1A326E"/><path d="M0 0l28 20M28 0L0 20" stroke="#F8F9FA" stroke-width="3.4"/><path d="M0 0l28 20M28 0L0 20" stroke="#C82636" stroke-width="1.8"/><path d="M14 0v20M0 10h28" stroke="#F8F9FA" stroke-width="5.4"/><path d="M14 0v20M0 10h28" stroke="#C82636" stroke-width="3.2"/></svg>`
+      };
+
+      const SF_TRASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`;
+      const SF_REFRESH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>`;
+      const SF_CHEVRON_UD = `<svg class="mac-popup-chevrons" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m5 6 3-3 3 3"/><path d="m5 10 3 3 3-3"/></svg>`;
+      const SF_CHECK = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>`;
+
+      const RUNNING = [
+        { pid: 9432, name: 'Codex', exe: 'Codex.exe', path: 'C:\\Apps\\Codex\\Codex.exe', tone: 'indigo', glyph: '<path d="M12 3 20 7.5v9L12 21 4 16.5v-9L12 3Z"/><path d="M12 12 20 7.5M12 12v9M12 12 4 7.5"/>', app: true, threads: 28 },
+        { pid: 9640, name: 'Claude', exe: 'Claude.exe', path: 'C:\\Apps\\Claude\\Claude.exe', tone: 'orange', glyph: '<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>', app: true, threads: 34 },
+        { pid: 6124, name: 'Chrome', exe: 'chrome.exe', path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', tone: 'blue', glyph: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.2M8.8 13.8 4.8 6.8M15 14l-4 7"/>', app: true, threads: 64 },
+        { pid: 7380, name: 'VS Code', exe: 'Code.exe', path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VS Code\\Code.exe', tone: 'cyan', glyph: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', app: true, threads: 42 },
+        { pid: 8512, name: '微信', exe: 'WeChat.exe', path: 'C:\\Program Files\\Tencent\\WeChat\\WeChat.exe', tone: 'green', glyph: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>', app: true, threads: 51 },
+        { pid: 13280, name: 'Node.js', exe: 'node.exe', path: 'C:\\Program Files\\nodejs\\node.exe', tone: 'gray', glyph: '<path d="m4 17 6-6-6-6M12 19h8"/>', app: false, threads: 12 },
+        { pid: 14308, name: 'Python', exe: 'python.exe', path: 'C:\\Python313\\python.exe', tone: 'purple', glyph: '<path d="m4 17 6-6-6-6M12 19h8"/>', app: false, threads: 8 }
+      ];
+
+      const SITES = [
+        ['搜索与资讯', [{ n: 'Google', h: 'google.com', ms: 34, c: 'blue' }, { n: '维基百科', h: 'wikipedia.org', ms: 48, c: 'gray' }, { n: '知乎', h: 'zhihu.com', ms: 22, c: 'cyan' }]],
+        ['开发与 AI', [{ n: 'GitHub', h: 'github.com', ms: 41, c: 'indigo' }, { n: 'Claude', h: 'claude.ai', ms: 56, c: 'orange' }, { n: 'ChatGPT', h: 'chatgpt.com', ms: 63, c: 'green' }]],
+        ['影音娱乐', [{ n: 'YouTube', h: 'youtube.com', ms: 44, c: 'red' }, { n: 'Spotify', h: 'spotify.com', ms: 49, c: 'green' }, { n: '哔哩哔哩', h: 'bilibili.com', ms: 19, c: 'cyan' }]],
+        ['办公社区', [{ n: 'Notion', h: 'notion.so', ms: 67, c: 'gray' }, { n: 'Slack', h: 'slack.com', ms: 58, c: 'purple' }, { n: '飞书', h: 'feishu.cn', ms: 21, c: 'blue' }]]
+      ];
+
+      const STORAGE_KEY = 'xeylroute-macos27-v2';
+
+      const DEFAULT_STATE = {
+        theme: 'dark',
+        connected: true,
+        elapsed: 2 * 3600 + 46 * 60 + 18,
+        mode: 'rule',
+        systemProxy: true,
+        tun: false,
+        tunScope: 'all',
+        fallback: true,
+        selectedNodeId: 'sg-01',
+        defaultRuleExit: 'global-follow',
+        ports: { mixed: 7890, http: 9870, socks: 7891 },
+        nodes: [
+          { id: 'sg-01', name: '新加坡 01', tag: 'IEPL 专线', flag: 'sg', proto: 'Hysteria2', delay: 38, speed: 148.5, source: '个人订阅', ip: '103.214.168.42' },
+          { id: 'hk-02', name: '香港 02', tag: 'BGP 极速', flag: 'hk', proto: 'Trojan', delay: 26, speed: 186.2, source: '个人订阅', ip: '45.11.57.90' },
+          { id: 'jp-01', name: '日本 01', tag: 'AI 解锁', flag: 'jp', proto: 'Hysteria2', delay: 62, speed: 132.0, source: '个人订阅', ip: '139.162.88.14' },
+          { id: 'us-01', name: '美国 01', tag: '流媒体', flag: 'us', proto: 'VLESS', delay: 153, speed: 84.6, source: '个人订阅', ip: '104.28.14.79' },
+          { id: 'de-01', name: '德国 01', tag: '欧洲骨干', flag: 'de', proto: 'Trojan', delay: 188, speed: 64.1, source: '个人订阅', ip: '185.220.101.8' },
+          { id: 'hk-01', name: '香港 01', tag: 'IEPL 专线', flag: 'hk', proto: 'Hysteria2', delay: 29, speed: 179.4, source: '个人订阅', ip: '45.11.57.12' },
+          { id: 'sg-02', name: '新加坡 02', tag: 'BGP 高速', flag: 'sg', proto: 'VLESS', delay: 44, speed: 136.8, source: '个人订阅', ip: '103.214.168.88' },
+          { id: 'jp-02', name: '日本 02', tag: '东京直连', flag: 'jp', proto: 'Trojan', delay: 68, speed: 118.5, source: '个人订阅', ip: '139.162.89.21' },
+          { id: 'kr-01', name: '韩国 01', tag: '首尔低延', flag: 'kr', proto: 'Hysteria2', delay: 54, speed: 129.0, source: '个人订阅', ip: '211.45.60.19' },
+          { id: 'us-02', name: '美国 02', tag: '西海岸', flag: 'us', proto: 'Hysteria2', delay: 142, speed: 92.3, source: '备用订阅', ip: '104.28.19.102' },
+          { id: 'gb-01', name: '英国 01', tag: '伦敦节点', flag: 'gb', proto: 'VLESS', delay: 176, speed: 71.8, source: '备用订阅', ip: '51.140.22.9' },
+          { id: 'de-02', name: '德国 02', tag: '法兰克福', flag: 'de', proto: 'VLESS', delay: 192, speed: 58.9, source: '备用订阅', ip: '185.220.102.4' }
+        ],
+        groups: [
+          { id: 'g-dev', name: '开发工具', type: 'Selector', exit: 'global-follow', tun: false, on: true },
+          { id: 'g-ai', name: 'AI 服务', type: 'Selector', exit: 'jp-01', tun: true, on: true },
+          { id: 'g-web', name: '常用网站', type: 'URLTest', exit: 'hk-02', tun: false, on: true }
+        ],
+        rules: [
+          { id: 'r-codex', kind: 'app', label: 'Codex', value: 'Codex.exe', path: 'C:\\Apps\\Codex\\Codex.exe', group: 'g-dev', exit: 'global-follow', tun: 'inherit', on: true },
+          { id: 'r-claude', kind: 'app', label: 'Claude', value: 'Claude.exe', path: 'C:\\Apps\\Claude\\Claude.exe', group: 'g-ai', exit: 'jp-01', tun: 'on', on: true },
+          { id: 'r-chrome', kind: 'app', label: 'Chrome', value: 'chrome.exe', path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', group: 'g-web', exit: 'domain-rules', tun: 'inherit', on: true },
+          { id: 'r-vscode', kind: 'app', label: 'VS Code', value: 'Code.exe', path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VS Code\\Code.exe', group: 'g-dev', exit: 'global-follow', tun: 'inherit', on: true },
+          { id: 'r-gh', kind: 'website', label: 'GitHub', value: '*.github.com', group: 'g-dev', exit: '', tun: 'inherit', on: true },
+          { id: 'r-cn', kind: 'website', label: '国内直连', value: '*.cn', group: '', exit: 'direct', tun: 'off', on: true },
+          { id: 'r-ads', kind: 'website', label: '广告追踪', value: 'ads.example.com', group: '', exit: 'reject', tun: 'off', on: true }
+        ],
+        subscriptions: [
+          { id: 'sub-1', name: '个人订阅', url: 'https://sub.xeylroute.example/v2/airport?token=•••9a2f', kind: '远程订阅', updated: '2026-11-19 22:10', used: 34.2, quota: 200, expires: '2027-05-11', active: true },
+          { id: 'sub-2', name: '备用订阅', url: 'https://backup.xeylroute.example/clash.yaml', kind: '远程订阅', updated: '2026-11-18 19:40', used: 12.8, quota: 120, expires: '2027-02-01', active: false }
+        ],
+        logs: [
+          { time: '22:18:04', app: 'Codex.exe', host: 'api.openai.com', capture: '系统代理', match: 'Codex · 开发工具', action: '新加坡 01', reason: '按软件规则优先命中，跟随共享出口', tone: 'blue' },
+          { time: '22:17:52', app: 'Claude.exe', host: 'api.anthropic.com', capture: '系统代理', match: 'Claude · AI 服务', action: '日本 01', reason: '软件独立出口覆盖策略分组', tone: 'blue' },
+          { time: '22:17:31', app: 'chrome.exe', host: 'www.gov.cn', capture: '系统代理', match: '国内直连 (*.cn)', action: 'DIRECT', reason: '显式 DIRECT 排除优先', tone: 'green' },
+          { time: '22:16:48', app: 'chrome.exe', host: 'ads.example.com', capture: '系统代理', match: '广告追踪', action: 'REJECT', reason: '显式 REJECT 阻断最高优先级', tone: 'red' }
+        ]
+      };
+
+      const VIEW_TITLES = {
+        connect: '连接',
+        nodes: '代理组与节点',
+        split: '分流与程序',
+        logs: '连接记录',
+        subs: '订阅管理',
+        settings: '网络与设置'
+      };
+
+      let state = loadState();
+      let navHistory = ['connect'];
+      let navIndex = 0;
+      let globalSearch = '';
+      let nodesSub = 'groups';
+      let splitSub = 'rules';
+      let simAppValue = '9432';
+      let expandedGroups = new Set(['SHARED', 'g-dev', 'g-ai']);
+      let activePopupCtx = null;
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) return { ...JSON.parse(JSON.stringify(DEFAULT_STATE)), ...JSON.parse(raw) };
+        } catch {}
+        return JSON.parse(JSON.stringify(DEFAULT_STATE));
+      }
+      function save() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      }
+
+      const $ = id => document.getElementById(id);
+      const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+      let toastTimer = null;
+      function notify(msg) {
+        const el = $('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+      }
+
+      function bestAuto(excludeId = null) {
+        return state.nodes.filter(n => !n.retired && n.id !== excludeId).sort((a, b) => a.delay - b.delay)[0] || state.nodes[0];
+      }
+      function currentNode() {
+        if (state.selectedNodeId === 'auto') return bestAuto();
+        return state.nodes.find(n => n.id === state.selectedNodeId && !n.retired) || state.nodes.find(n => !n.retired) || state.nodes[0];
+      }
+      function groupById(id) { return state.groups.find(g => g.id === id); }
+      function exitName(id) {
+        if (!id || id === 'global-follow') return '跟随共享出口';
+        if (id === 'domain-rules') return '按域名规则';
+        if (id === 'auto') return '自动优选 (AUTO)';
+        if (id === 'direct') return '直连 (DIRECT)';
+        if (id === 'reject') return '阻断 (REJECT)';
+        const n = state.nodes.find(x => x.id === id);
+        return n ? n.name : '跟随共享出口';
+      }
+      function resolvedExit(id) {
+        if (!id || id === 'global-follow') return currentNode().name;
+        if (id === 'auto') return `AUTO → ${bestAuto().name}`;
+        return exitName(id);
+      }
+      function dotTone(v) {
+        if (v === 'direct') return 'green';
+        if (v === 'reject') return 'red';
+        if (v === 'domain-rules') return 'purple';
+        if (v === 'auto') return 'cyan';
+        return '';
+      }
+      function effectiveExitId(r) {
+        if (r.exit) return r.exit;
+        const g = groupById(r.group);
+        return g && g.on !== false && g.exit ? g.exit : state.defaultRuleExit;
+      }
+      function captureSummary() {
+        if (state.systemProxy && state.tun) return '系统代理 + TUN';
+        if (state.systemProxy) return '系统代理';
+        if (state.tun) return state.tunScope === 'selected' ? '指定目标 TUN' : 'TUN 接管';
+        return '';
+      }
+      function fmtTime(sec) {
+        const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+        const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+        const s = String(sec % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+      }
+
+      function exitMenuItems(includeDomain = false) {
+        const items = [
+          { value: 'global-follow', label: '跟随共享出口', meta: currentNode().name },
+          ...(includeDomain ? [{ value: 'domain-rules', label: '按域名规则' }] : []),
+          { value: 'auto', label: '自动优选 (AUTO)', meta: `${bestAuto().delay} ms` },
+          { sep: true },
+          ...state.nodes.filter(n => !n.retired).slice(0, 6).map(n => ({ value: n.id, label: n.name, meta: `${n.delay} ms` })),
+          { sep: true },
+          { value: 'direct', label: '直连 (DIRECT)' },
+          { value: 'reject', label: '阻断 (REJECT)' }
+        ];
+        return items;
+      }
+
+      /* =====================================================================
+         Native-Style macOS Pop-Up Button + Liquid Glass Floating Menu
+         ===================================================================== */
+      function macPopupBtnHtml({ id = '', value, label, width = 144, popupKind, popupKey = '' }) {
+        return `
+          <button type="button" class="mac-popup-btn" ${id ? `id="${esc(id)}"` : ''}
+            style="width:${width}px"
+            data-popup-kind="${esc(popupKind)}"
+            data-popup-key="${esc(popupKey)}"
+            data-popup-val="${esc(value)}"
+            aria-haspopup="menu" aria-expanded="false">
+            <span class="mac-popup-dot ${dotTone(value)}"></span>
+            <span class="mac-popup-label">${esc(label)}</span>
+            ${SF_CHEVRON_UD}
+          </button>
+        `;
+      }
+
+      function closeMacMenu() {
+        const pop = $('macMenuPopover');
+        pop.classList.remove('open');
+        if (activePopupCtx?.trigger) activePopupCtx.trigger.setAttribute('aria-expanded', 'false');
+        activePopupCtx = null;
+      }
+
+      function openMacMenu(trigger, items, selectedValue, onSelect) {
+        if (activePopupCtx?.trigger === trigger) { closeMacMenu(); return; }
+        closeMacMenu();
+        const pop = $('macMenuPopover');
+        pop.innerHTML = items.map((it, idx) => {
+          if (it.sep) return `<div class="mac-menu-sep" role="separator"></div>`;
+          const isSel = String(it.value) === String(selectedValue);
+          return `
+            <button type="button" class="mac-menu-item ${isSel ? 'selected' : ''}" role="menuitemradio" aria-checked="${isSel}" data-menu-idx="${idx}">
+              <span class="mac-menu-check">${SF_CHECK}</span>
+              <span class="mac-menu-item-text">${esc(it.label)}</span>
+              ${it.meta ? `<span class="mac-menu-meta">${esc(it.meta)}</span>` : ''}
+            </button>
+          `;
+        }).join('');
+
+        pop.classList.add('open');
+        trigger.setAttribute('aria-expanded', 'true');
+        const rect = trigger.getBoundingClientRect();
+        const pw = Math.max(rect.width + 18, 192);
+        pop.style.minWidth = `${pw}px`;
+        const ph = pop.offsetHeight || 220;
+        const left = Math.max(10, Math.min(window.innerWidth - pw - 12, rect.right - pw));
+        const spaceBelow = window.innerHeight - rect.bottom - 12;
+        const top = spaceBelow >= ph ? rect.bottom + 5 : Math.max(10, rect.top - ph - 5);
+        pop.style.left = `${left}px`;
+        pop.style.top = `${top}px`;
+        pop.style.transformOrigin = spaceBelow >= ph ? 'top right' : 'bottom right';
+        activePopupCtx = { trigger, items, onSelect };
+      }
+
+      $('macMenuPopover').addEventListener('click', e => {
+        const btn = e.target.closest('[data-menu-idx]');
+        if (!btn || !activePopupCtx) return;
+        const item = activePopupCtx.items[Number(btn.dataset.menuIdx)];
+        const cb = activePopupCtx.onSelect;
+        closeMacMenu();
+        if (item && !item.sep) cb(item.value, item.label);
+      });
+
+      /* =====================================================================
+         Route Precedence Evaluator (Spec §3)
+         ===================================================================== */
+      function hostMatches(host, pat) {
+        const h = host.toLowerCase();
+        const p = pat.toLowerCase();
+        return p.startsWith('*.') ? (h === p.slice(2) || h.endsWith(p.slice(1))) : h === p;
+      }
+
+      function evaluateRoute(conn) {
+        if (!state.connected) return { capture: '已断开', action: 'DIRECT', match: '代理已暂停', reason: '当前已断开连接', tone: 'green' };
+        const matched = state.rules.filter(r => {
+          if (!r.on) return false;
+          if (r.kind === 'website') return hostMatches(conn.host, r.value);
+          return conn.path && conn.path.toLowerCase().endsWith(r.value.toLowerCase());
+        });
+
+        let capture = '未接管';
+        if (state.tun && (state.tunScope === 'all' || state.mode !== 'rule')) capture = 'TUN 接管';
+        else if (state.tun && state.tunScope === 'selected' && state.mode === 'rule') {
+          const explicit = matched.find(r => r.tun === 'on' || r.tun === 'off');
+          if (explicit) capture = explicit.tun === 'on' ? '指定目标 TUN' : (state.systemProxy && conn.sysProxy ? '系统代理' : '未接管');
+          else if (matched.some(r => groupById(r.group)?.tun)) capture = '指定目标 TUN';
+          else if (state.systemProxy && conn.sysProxy) capture = '系统代理';
+        } else if (state.systemProxy && conn.sysProxy) capture = '系统代理';
+
+        if (capture === '未接管') return { capture, action: 'DIRECT', match: '未进入接管范围', reason: '未开启对应接管或应用绕过系统代理', tone: 'green' };
+        if (state.mode === 'direct') return { capture, action: 'DIRECT', match: '直连模式', reason: '直连模式下所有已接管流量直接访问', tone: 'green' };
+        if (state.mode === 'global') return finalize(state.selectedNodeId, capture, '全局模式', '全局模式统一使用全局出口', conn.failed);
+
+        const wilds = matched.filter(r => r.kind === 'website' && r.value.startsWith('*.')).sort((a, b) => b.value.length - a.value.length);
+        const ordered = [...matched.filter(r => !wilds.includes(r)), ...wilds];
+        const chosen = ordered.find(r => effectiveExitId(r) === 'reject')
+          || ordered.find(r => effectiveExitId(r) === 'direct')
+          || ordered.find(r => r.kind === 'process')
+          || ordered.find(r => r.kind === 'app')
+          || ordered.find(r => r.kind === 'website' && !r.value.startsWith('*.'))
+          || ordered[0];
+
+        if (!chosen) return finalize(state.defaultRuleExit, capture, '未命中规则', `按默认出口 (${resolvedExit(state.defaultRuleExit)}) 处理`, conn.failed);
+        const eff = effectiveExitId(chosen);
+        const reason = eff === 'reject' ? '显式 REJECT 策略最高优先' : eff === 'direct' ? '显式 DIRECT 排除优先' : '按进程 > 软件 > 精确域名 > 通配域名优先级命中';
+        return finalize(eff, capture, `${chosen.label} · ${groupById(chosen.group)?.name || '未分组'}`, reason, conn.failed);
+      }
+
+      function finalize(exitId, capture, match, reason, failed) {
+        const id = (!exitId || exitId === 'global-follow') ? state.selectedNodeId : exitId;
+        if (id === 'direct') return { capture, action: 'DIRECT', match, reason, tone: 'green' };
+        if (id === 'reject') return { capture, action: 'REJECT', match, reason, tone: 'red' };
+        if (id === 'auto') {
+          const first = bestAuto();
+          if (failed) {
+            const b = bestAuto(first.id);
+            return { capture, action: b.name, match, reason: `${reason} · AUTO 故障切换至 ${b.name}`, tone: 'orange' };
+          }
+          return { capture, action: first.name, match, reason, tone: 'blue' };
+        }
+        const n = state.nodes.find(x => x.id === id && !x.retired);
+        if (failed || !n) {
+          return { capture, action: state.fallback ? 'DIRECT' : 'REJECT', match, reason: `${reason} · 代理故障按设置${state.fallback ? '回退直连' : '阻断'}`, tone: state.fallback ? 'orange' : 'red' };
+        }
+        return { capture, action: n.name, match, reason, tone: 'blue' };
+      }
+
+      /* =====================================================================
+         Renderers
+         ===================================================================== */
+      function switchView(viewId, pushHistory = true) {
+        closeMacMenu();
+        if (pushHistory && navHistory[navIndex] !== viewId) {
+          navHistory.splice(navIndex + 1);
+          navHistory.push(viewId);
+          navIndex = navHistory.length - 1;
+        }
+        document.querySelectorAll('#sidebarNav .nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
+        document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${viewId}`));
+        $('stageTitle').textContent = VIEW_TITLES[viewId] || '连接';
+        $('navBackBtn').disabled = navIndex <= 0;
+        $('navForwardBtn').disabled = navIndex >= navHistory.length - 1;
+      }
+
+      function renderShell() {
+        document.documentElement.dataset.theme = state.theme;
+        const active = currentNode();
+        const cap = captureSummary();
+        const modeLabel = { rule: '规则模式', global: '全局模式', direct: '直连模式' }[state.mode];
+        const modeIdx = { rule: 0, global: 1, direct: 2 }[state.mode] || 0;
+
+        $('modePill').dataset.idx = String(modeIdx);
+        document.querySelectorAll('.mode-pill button').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
+        $('sidebarBrandSub').textContent = `${modeLabel} · ${cap || '未接管'}`;
+        $('sideSysProxy').checked = state.systemProxy;
+        $('sideTunToggle').checked = state.tun;
+        $('navNodeBadge').textContent = state.nodes.filter(n => !n.retired).length;
+        $('navRuleBadge').textContent = state.rules.length;
+        $('navSubBadge').textContent = state.subscriptions.length;
+
+        const pill = $('topOnlinePill');
+        pill.className = 'online-pill lg-track' + (!state.connected ? ' off' : !cap ? ' warn' : '');
+        $('topStatusText').textContent = !state.connected ? '已断开' : !cap ? '未接管' : `${state.mode === 'direct' ? '直连' : '已连接'} · ${active.name}`;
+
+        const pBtn = $('topPowerBtn');
+        pBtn.classList.toggle('off-state', !state.connected);
+        $('topPowerLabel').textContent = state.connected ? '断开' : '连接';
+
+        // Swap sun/moon SF icon based on current theme
+        $('themeSvg').innerHTML = state.theme === 'dark'
+          ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
+          : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+      }
+
+      function renderConnect() {
+        const active = currentNode();
+        const live = state.nodes.filter(n => !n.retired);
+        $('kpiTimer').textContent = fmtTime(state.elapsed);
+        $('kpiRules').textContent = `${state.rules.filter(r => r.on).length} 条`;
+        $('goAllNodesBtn').textContent = `全部 ${live.length} 个节点 ›`;
+        $('homePortFoot').textContent = `127.0.0.1:${state.ports.mixed || state.ports.http}`;
+
+        $('heroFlag').innerHTML = FLAGS[active.flag] || FLAGS.sg;
+        $('heroNodeName').textContent = active.name;
+        $('heroNodeProto').textContent = active.proto;
+        $('heroNodeDelay').innerHTML = `<i class="mini-dot"></i> ${active.delay} ms`;
+        $('heroNodeMeta').textContent = `${active.source} · ${active.tag} · 出口 ${active.ip}`;
+        $('chartModeBadge').textContent = `${{ rule: '规则', global: '全局', direct: '直连' }[state.mode]}模式 · ${captureSummary() || '未接管'}`;
+        const best = bestAuto();
+        $('homeAutoFoot').textContent = state.selectedNodeId === 'auto'
+          ? `已启用 AUTO 智能优选 · 当前 ${best.name} (${best.delay} ms)`
+          : `自动优选推荐：${best.name} · ${best.delay} ms`;
+        $('pickAutoQuickBtn').textContent = state.selectedNodeId === 'auto' ? '已启用 AUTO' : '切换 AUTO ›';
+
+        const q = globalSearch.trim().toLowerCase();
+        const list = q ? live.filter(n => [n.name, n.proto, n.tag].join(' ').toLowerCase().includes(q)) : live.slice(0, 6);
+
+        $('homeQuickNodes').innerHTML = list.map(n => {
+          const msCls = n.delay < 80 ? '' : n.delay < 160 ? 'mid' : 'slow';
+          return `
+            <button type="button" class="cp-node ${n.id === active.id ? 'selected' : ''}" data-pick-node="${esc(n.id)}">
+              <div class="cp-node-left">
+                <span class="flag-box">${FLAGS[n.flag] || FLAGS.sg}</span>
+                <div style="min-width:0">
+                  <div class="cp-node-title">${esc(n.name)}</div>
+                  <span class="cp-node-sub">${esc(n.proto)} · ${esc(n.tag)}</span>
+                </div>
+              </div>
+              <span class="cp-node-ms ${msCls}">${n.delay}<small>ms</small></span>
+            </button>
+          `;
+        }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">没有匹配的节点</div>`;
+
+        // Right App Exits with Authentic macOS ⌃⌄ Pop-Up Buttons
+        $('homeAppExits').innerHTML = RUNNING.slice(0, 4).map(app => {
+          const rule = state.rules.find(r => r.value.toLowerCase() === app.exe.toLowerCase());
+          const val = rule?.exit || 'global-follow';
+          return `
+            <div class="mac-row">
+              <div class="mac-row-left">
+                <span class="sq md ${app.tone}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${app.glyph}</svg></span>
+                <div style="min-width:0">
+                  <span class="mac-row-title">${esc(app.name)}</span>
+                  <span class="mac-row-sub"><i class="mini-dot"></i> ${esc(app.exe)} · PID ${app.pid}</span>
+                </div>
+              </div>
+              ${macPopupBtnHtml({ value: val, label: exitName(val), width: 128, popupKind: 'app-exit', popupKey: app.exe })}
+            </div>
+          `;
+        }).join('');
+
+        // Compact Subscription Status Card
+        const sub = state.subscriptions.find(s => s.active) || state.subscriptions[0];
+        if (sub) {
+          const pct = Math.min(100, Math.round((sub.used / sub.quota) * 100));
+          $('homeSubCard').innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
+                <div>
+                  <strong style="display:block;font-size:13px;font-weight:620">${esc(sub.name)}</strong>
+                  <small style="color:var(--muted);font-size:11px">更新于 ${esc(sub.updated)}</small>
+                </div>
+              </div>
+              <button type="button" class="glass-btn-soft lg-track" id="homeRefreshSubBtn">刷新</button>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
+              <span>已用 ${sub.used} GB / ${sub.quota} GB</span>
+              <span style="color:var(--ink-2);font-weight:600">${pct}%</span>
+            </div>
+            <div class="mac-progress"><span style="width:${pct}%"></span></div>
+          `;
+        }
+      }
+
+      function renderNodes() {
+        $('nodesGroupsPane').hidden = nodesSub !== 'groups';
+        $('nodesSitesPane').hidden = nodesSub !== 'sites';
+        $('nodesActionBtn').textContent = nodesSub === 'groups' ? '全部节点测速' : '全部站点测速';
+
+        const q = globalSearch.trim().toLowerCase();
+        const live = state.nodes.filter(n => !n.retired && (!q || [n.name, n.proto, n.tag].join(' ').toLowerCase().includes(q)));
+
+        const drawers = [
+          {
+            id: 'SHARED',
+            name: 'Auto / 共享全局出口',
+            sub: `Selector · 当前 ${exitName(state.selectedNodeId)}`,
+            selected: state.selectedNodeId,
+            nodes: [
+              { id: 'auto', name: 'AUTO · 自动优选', proto: 'URLTest', tone: 'blue', delay: bestAuto().delay, builtin: true },
+              { id: 'direct', name: 'DIRECT', proto: '直连', tone: 'green', delay: 12, builtin: true },
+              { id: 'reject', name: 'REJECT', proto: '阻断', tone: 'red', delay: 0, builtin: true },
+              ...live
+            ]
+          },
+          ...state.groups.map(g => ({
+            id: g.id,
+            name: g.name,
+            sub: `${g.type} · 当前 ${exitName(g.exit)}`,
+            selected: g.exit,
+            isGroup: true,
+            nodes: [{ id: 'global-follow', name: '跟随共享出口', proto: currentNode().name, tone: 'blue', delay: currentNode().delay, builtin: true }, ...live.slice(0, 5)]
+          }))
+        ];
+
+        $('nodesGroupsPane').innerHTML = drawers.map(d => {
+          const open = expandedGroups.has(d.id);
+          return `
+            <div class="group-drawer ${open ? 'open' : ''}">
+              <div class="group-drawer-head" data-toggle-drawer="${esc(d.id)}">
+                <div>
+                  <strong style="font-size:14px;font-weight:650;display:block">${esc(d.name)}</strong>
+                  <small style="color:var(--muted);font-size:11.5px">${esc(d.sub)}</small>
+                </div>
+                <svg class="drawer-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
+              </div>
+              ${open ? `
+                <div class="group-drawer-body">
+                  <div class="node-pills-grid cols-3">
+                    ${d.nodes.map(n => `
+                      <button type="button" class="cp-node ${d.selected === n.id ? 'selected' : ''}" ${d.isGroup ? `data-group-pick="${esc(d.id)}:${esc(n.id)}"` : `data-pick-node="${esc(n.id)}"`}>
+                        <div class="cp-node-left">
+                          ${n.builtin ? `<span class="pill ${n.tone || ''}">${esc(n.proto)}</span>` : `<span class="flag-box">${FLAGS[n.flag] || FLAGS.sg}</span>`}
+                          <div style="min-width:0">
+                            <div class="cp-node-title">${esc(n.name)}</div>
+                            ${!n.builtin ? `<span class="cp-node-sub">${esc(n.proto)} · ${n.speed} Mbps</span>` : ''}
+                          </div>
+                        </div>
+                        <span class="cp-node-ms ${n.delay >= 160 ? 'slow' : n.delay >= 80 ? 'mid' : ''}">${n.delay ? n.delay : '—'}</span>
+                      </button>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+
+        const usedExit = state.mode === 'direct' ? 'DIRECT' : currentNode().name;
+        $('nodesSitesPane').innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+            ${SITES.map(([cat, items], ci) => `
+              <div>
+                <p class="section-label">${esc(cat)}</p>
+                <div class="mac-card flush">
+                  ${items.map((s, si) => `
+                    <div class="mac-row">
+                      <div class="mac-row-left">
+                        <span class="sq md ${s.c}" style="font-weight:700;font-size:12px">${esc(s.n.slice(0, 1))}</span>
+                        <div>
+                          <span class="mac-row-title">${esc(s.n)}</span>
+                          <span class="mac-row-sub" style="font-family:var(--font-mono)">${esc(s.h)}</span>
+                        </div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span class="pill green">${s.ms} ms · ${esc(usedExit)}</span>
+                        <button type="button" class="sf-icon-btn" data-probe-site="${ci}-${si}" data-tip="重新测速">${SF_REFRESH}</button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      function renderSplit() {
+        $('splitRulesPane').hidden = splitSub !== 'rules';
+        $('splitGroupsPane').hidden = splitSub !== 'groups';
+        $('splitProcsPane').hidden = splitSub !== 'procs';
+        $('splitPrimaryAddBtn').hidden = splitSub === 'procs';
+        $('splitPrimaryAddBtn').textContent = splitSub === 'groups' ? '+ 创建分组' : '+ 添加规则';
+
+        $('defaultExitSelectHost').innerHTML = macPopupBtnHtml({
+          id: 'defaultExitBtn',
+          value: state.defaultRuleExit,
+          label: exitName(state.defaultRuleExit),
+          width: 148,
+          popupKind: 'default-exit'
+        });
+
+        const q = globalSearch.trim().toLowerCase();
+        const filteredRules = state.rules.filter(r => !q || [r.label, r.value, groupById(r.group)?.name || ''].join(' ').toLowerCase().includes(q));
+        $('splitRulesPane').innerHTML = `
+          <div class="mac-card flush">
+            ${filteredRules.map(r => {
+              const eff = effectiveExitId(r);
+              const tone = eff === 'direct' ? 'green' : eff === 'reject' ? 'red' : eff === 'domain-rules' ? 'purple' : 'blue';
+              const appMatch = RUNNING.find(p => p.exe.toLowerCase() === r.value.toLowerCase());
+              const iconTone = appMatch ? appMatch.tone : (r.kind === 'website' ? 'blue' : 'purple');
+              const iconSvg = appMatch ? appMatch.glyph : (r.kind === 'website' ? '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>' : '<rect x="4" y="4" width="16" height="16" rx="3"/>');
+              return `
+                <div class="mac-row">
+                  <div class="mac-row-left">
+                    <span class="sq md ${iconTone}">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
+                    </span>
+                    <div style="min-width:0">
+                      <span class="mac-row-title">${esc(r.label)}</span>
+                      <span class="mac-row-sub">${r.kind === 'website' ? '网站域名' : '软件 · 长期'} · <span style="font-family:var(--font-mono)">${esc(r.value)}</span></span>
+                    </div>
+                  </div>
+                  <div class="rule-right-cols">
+                    <span class="pill">${esc(groupById(r.group)?.name || '未分组')}</span>
+                    <span class="pill ${tone}">${esc(resolvedExit(eff))}</span>
+                    <label class="mac-switch"><input type="checkbox" data-toggle-rule="${esc(r.id)}" ${r.on ? 'checked' : ''}><i></i></label>
+                    <button type="button" class="sf-icon-btn danger" data-del-rule="${esc(r.id)}" data-tip="删除规则">${SF_TRASH}</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+
+        $('splitGroupsPane').innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+            ${state.groups.map(g => {
+              const members = state.rules.filter(r => r.group === g.id);
+              return `
+                <div class="mac-card" style="display:flex;flex-direction:column;gap:12px;${g.on === false ? 'opacity:0.58' : ''}">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+                      <div>
+                        <strong style="font-size:13.5px;font-weight:650;display:block">${esc(g.name)}</strong>
+                        <small style="color:var(--muted);font-size:11px">${members.length} 个成员 · ${esc(g.type)}</small>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <label class="mac-switch"><input type="checkbox" data-toggle-group="${esc(g.id)}" ${g.on === false ? '' : 'checked'}><i></i></label>
+                      <button type="button" class="sf-icon-btn danger" data-del-group="${esc(g.id)}" data-tip="删除分组">${SF_TRASH}</button>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    ${macPopupBtnHtml({ value: g.exit, label: exitName(g.exit), width: 158, popupKind: 'group-exit', popupKey: g.id })}
+                    <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer">
+                      <span>组 TUN</span>
+                      <span class="mac-switch"><input type="checkbox" data-group-tun="${esc(g.id)}" ${g.tun ? 'checked' : ''}><i></i></span>
+                    </label>
+                  </div>
+                  <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:12px">
+                    <summary style="cursor:pointer;color:var(--accent);font-weight:580">管理组成员 (${members.length})</summary>
+                    <div style="margin-top:8px;display:grid;gap:6px">
+                      ${members.map(m => `
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                          <span>${esc(m.label)}</span>
+                          <button type="button" class="glass-btn-soft" style="height:24px;padding:0 9px" data-rm-member="${esc(m.id)}">移出</button>
+                        </div>
+                      `).join('') || '<span style="color:var(--muted)">暂无成员</span>'}
+                    </div>
+                  </details>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+
+        $('splitProcsPane').innerHTML = `
+          <div class="mac-card flush">
+            ${RUNNING.map(p => {
+              const r = state.rules.find(x => x.value.toLowerCase() === p.exe.toLowerCase());
+              const eff = r ? resolvedExit(effectiveExitId(r)) : '按当前模式';
+              const tunOn = (state.tun && state.tunScope === 'all') || r?.tun === 'on';
+              const val = r?.exit || 'global-follow';
+              return `
+                <div class="mac-row">
+                  <div class="mac-row-left">
+                    <span class="sq md ${p.tone}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round">${p.glyph}</svg></span>
+                    <div style="min-width:0">
+                      <span class="mac-row-title">${esc(p.name)}</span>
+                      <span class="mac-row-sub" style="font-family:var(--font-mono)">${esc(p.exe)} · PID ${p.pid} · ${p.threads} 线程</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span class="pill">${esc(groupById(r?.group)?.name || '未分组')}</span>
+                    <span class="pill blue">${esc(eff)}</span>
+                    <span class="pill ${tunOn ? 'green' : ''}">TUN ${tunOn ? '开' : '关'}</span>
+                    ${macPopupBtnHtml({ value: val, label: exitName(val), width: 136, popupKind: 'app-exit', popupKey: p.exe })}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      function renderLogs() {
+        const curProc = RUNNING.find(p => String(p.pid) === String(simAppValue));
+        const curLabel = curProc ? `${curProc.name} (${curProc.exe})` : '仅测试域名';
+        $('simAppSelectHost').innerHTML = macPopupBtnHtml({
+          id: 'simAppBtn',
+          value: simAppValue,
+          label: curLabel,
+          width: 176,
+          popupKind: 'sim-app'
+        });
+
+        $('logsListCard').innerHTML = state.logs.map(l => `
+          <div class="mac-row">
+            <div class="mac-row-left">
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);width:58px;flex:none">${esc(l.time)}</span>
+              <div style="min-width:0">
+                <span class="mac-row-title">${esc(l.app)} <span style="color:var(--muted);font-weight:400">→</span> <span style="font-family:var(--font-mono)">${esc(l.host)}</span></span>
+                <span class="mac-row-sub">${esc(l.match)} · ${esc(l.reason)}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:7px;flex:none">
+              <span class="pill">${esc(l.capture)}</span>
+              <span class="pill ${l.tone}">${esc(l.action)}</span>
+            </div>
+          </div>
+        `).join('') || `<div style="padding:36px;text-align:center;color:var(--muted)">暂无连接记录</div>`;
+      }
+
+      function renderSubs() {
+        $('subsGridPane').innerHTML = state.subscriptions.map(sub => {
+          const pct = Math.min(100, Math.round((sub.used / sub.quota) * 100));
+          const cnt = state.nodes.filter(n => n.source === sub.name && !n.retired).length;
+          return `
+            <div class="mac-card" style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span class="sq md ${sub.active ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
+                  <div>
+                    <strong style="font-size:14px;font-weight:650;display:block">${esc(sub.name)}</strong>
+                    <small style="color:var(--muted);font-size:11px">${esc(sub.kind)} · ${cnt} 个节点</small>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(sub.id)}">刷新</button>
+                  <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(sub.id)}" data-tip="移除订阅">${SF_TRASH}</button>
+                </div>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sub.url)}</div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
+                  <span>已用 ${sub.used} GB / ${sub.quota} GB (${pct}%)</span>
+                  <span>到期 ${esc(sub.expires)}</span>
+                </div>
+                <div class="mac-progress"><span style="width:${pct}%"></span></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function renderSettings() {
+        $('setSysProxyToggle').checked = state.systemProxy;
+        $('setSysProxySub').innerHTML = state.systemProxy
+          ? `<i class="mini-dot"></i> 已启用 · 127.0.0.1:${state.ports.mixed || state.ports.http}`
+          : `<i class="mini-dot off"></i> 停用`;
+        $('setTunToggle').checked = state.tun;
+        $('setTunSub').innerHTML = state.tun
+          ? `<i class="mini-dot"></i> 已接管 (${state.tunScope === 'selected' ? '仅指定分组和程序' : '全部受支持流量'})`
+          : `<i class="mini-dot off"></i> 停用`;
+        $('setTunScopeHost').innerHTML = macPopupBtnHtml({
+          id: 'setTunScopeBtn',
+          value: state.tunScope,
+          label: state.tunScope === 'selected' ? '仅指定分组和程序' : '全部受支持流量',
+          width: 166,
+          popupKind: 'tun-scope'
+        });
+        $('setFallbackToggle').checked = state.fallback;
+        $('portMixedInput').value = state.ports.mixed || '';
+        $('portHttpInput').value = state.ports.http;
+        $('portSocksInput').value = state.ports.socks;
+        $('setExitIpSub').textContent = `${currentNode().ip} (${currentNode().name}) · 系统 DNS 223.5.5.5, 1.1.1.1`;
+        document.querySelectorAll('#settingsThemeSeg button').forEach(b => b.classList.toggle('active', b.dataset.setTheme === state.theme));
+      }
+
+      /* =====================================================================
+         Smooth Monotone Cubic Bézier Live Chart + Interactive Crosshair
+         ===================================================================== */
+      const chartDown = Array.from({ length: 32 }, (_, i) => Number((7.2 + Math.sin(i * 0.42) * 3.6 + Math.cos(i * 0.23) * 1.8).toFixed(1)));
+      const chartUp = chartDown.map((v, i) => Number((v * (0.13 + (i % 3) * 0.02)).toFixed(1)));
+      let totalMB = 246.4;
+      let chartMax = 18;
+      let hoverIndex = -1;
+
+      function smoothPath(coords) {
+        if (!coords.length) return '';
+        let d = `M ${coords[0][0].toFixed(1)} ${coords[0][1].toFixed(1)}`;
+        for (let i = 0; i < coords.length - 1; i++) {
+          const p0 = coords[Math.max(0, i - 1)];
+          const p1 = coords[i];
+          const p2 = coords[i + 1];
+          const p3 = coords[Math.min(coords.length - 1, i + 2)];
+          const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+          const cp1y = Math.max(8, Math.min(124, p1[1] + (p2[1] - p0[1]) / 6));
+          const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+          const cp2y = Math.max(8, Math.min(124, p2[1] - (p3[1] - p1[1]) / 6));
+          d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+        }
+        return d;
+      }
+
+      function paintChart() {
+        chartMax = Math.max(10, Math.ceil(Math.max(...chartDown) * 1.24));
+        const avgD = (chartDown.reduce((a, b) => a + b, 0) / chartDown.length).toFixed(1);
+        const peakD = Math.max(...chartDown).toFixed(1);
+        $('chartTickTop').textContent = `${chartMax} MB/s`;
+        $('chartTickMid').textContent = `${Math.round(chartMax / 2)} MB/s`;
+        if ($('chartAvgFoot')) $('chartAvgFoot').textContent = `平均下载 ${avgD} MB/s · 峰值 ${peakD} MB/s`;
+        const toXY = arr => arr.map((v, i) => [
+          (i / (arr.length - 1)) * 600,
+          120 - (v / chartMax) * 104
+        ]);
+        const dXY = toXY(chartDown);
+        const uXY = toXY(chartUp);
+        const dPath = smoothPath(dXY);
+        const uPath = smoothPath(uXY);
+        $('mainDownLine').setAttribute('d', dPath);
+        $('mainUpLine').setAttribute('d', uPath);
+        $('mainDownArea').setAttribute('d', `${dPath} L 600 130 L 0 130 Z`);
+        $('mainUpArea').setAttribute('d', `${uPath} L 600 130 L 0 130 Z`);
+
+        if (hoverIndex >= 0) updateChartHover(hoverIndex);
+      }
+
+      function updateChartHover(idx) {
+        const i = Math.max(0, Math.min(chartDown.length - 1, idx));
+        const pctX = (i / (chartDown.length - 1)) * 100;
+        const pctYd = ((120 - (chartDown[i] / chartMax) * 104) / 130) * 100;
+        const pctYu = ((120 - (chartUp[i] / chartMax) * 104) / 130) * 100;
+        const vLine = $('chartHoverV');
+        vLine.style.left = `${pctX}%`;
+        vLine.style.opacity = '1';
+        const dDot = $('chartDotDown');
+        dDot.style.left = `${pctX}%`;
+        dDot.style.top = `${pctYd}%`;
+        dDot.style.opacity = '1';
+        const uDot = $('chartDotUp');
+        uDot.style.left = `${pctX}%`;
+        uDot.style.top = `${pctYu}%`;
+        uDot.style.opacity = '1';
+        const tip = $('chartTooltip');
+        const secAgo = chartDown.length - 1 - i;
+        tip.textContent = `${secAgo === 0 ? '实时' : `${secAgo}s 前`} · ↓ ${chartDown[i].toFixed(1)}  ↑ ${chartUp[i].toFixed(1)} MB/s`;
+        tip.style.left = pctX > 62 ? 'auto' : `calc(${pctX}% + 10px)`;
+        tip.style.right = pctX > 62 ? `calc(${100 - pctX}% + 10px)` : 'auto';
+        tip.classList.add('show');
+      }
+
+      $('mainChartSvg').addEventListener('pointermove', e => {
+        const r = $('mainChartSvg').getBoundingClientRect();
+        const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        hoverIndex = Math.round(frac * (chartDown.length - 1));
+        updateChartHover(hoverIndex);
+      });
+      $('mainChartSvg').addEventListener('pointerleave', () => {
+        hoverIndex = -1;
+        $('chartHoverV').style.opacity = '0';
+        $('chartDotDown').style.opacity = '0';
+        $('chartDotUp').style.opacity = '0';
+        $('chartTooltip').classList.remove('show');
+      });
+
+      /* Interactive 96-Cell (16 × 6) Activity Dot Matrix */
+      const heatSamples = Array.from({ length: 96 }, (_, i) => {
+        const row = Math.floor(i / 16);
+        const col = i % 16;
+        const weight = row * 0.45 + col * 0.14;
+        const lvl = weight < 1.8 ? ((i * 3) % 7 === 0 ? 1 : 0) : weight < 3.1 ? ((i * 5) % 3) : 1 + ((i * 7 + row) % 4);
+        const mb = lvl === 0 ? 0.4 : Number((lvl * 4.1 + (i % 5) * 0.6).toFixed(1));
+        const conns = lvl === 0 ? 2 : lvl * 8 + (i % 6);
+        return { idx: i + 1, cls: lvl ? `l${lvl}` : '', mb, conns };
+      });
+      function renderHeatmap() {
+        $('activityHeatmap').innerHTML = heatSamples.map(s => `<span class="hm-cell ${s.cls}" data-hm="${s.idx - 1}"></span>`).join('');
+      }
+      $('activityHeatmap').addEventListener('mouseover', e => {
+        const cell = e.target.closest('[data-hm]');
+        if (!cell) return;
+        const s = heatSamples[Number(cell.dataset.hm)];
+        $('heatmapReadout').textContent = `采样 #${s.idx} · ${s.mb} MB/s · ${s.conns} 连接`;
+      });
+      $('activityHeatmap').addEventListener('mouseleave', () => {
+        $('heatmapReadout').textContent = '近 96 次连接采样';
+      });
+
+      /* =====================================================================
+         Pointer-Tracking Liquid Glass Caustic Specular + Native Tooltip
+         ===================================================================== */
+      document.addEventListener('pointermove', e => {
+        const t = e.target.closest('.lg-track');
+        if (!t) return;
+        const r = t.getBoundingClientRect();
+        t.style.setProperty('--mx', `${e.clientX - r.left}px`);
+        t.style.setProperty('--my', `${e.clientY - r.top}px`);
+      });
+
+      let tipTimer = null;
+      document.addEventListener('pointerover', e => {
+        const el = e.target.closest('[data-tip]');
+        if (!el) return;
+        clearTimeout(tipTimer);
+        tipTimer = setTimeout(() => {
+          const tip = $('macTooltip');
+          const r = el.getBoundingClientRect();
+          tip.textContent = el.dataset.tip;
+          tip.style.left = `${Math.max(56, Math.min(window.innerWidth - 56, r.left + r.width / 2))}px`;
+          tip.style.top = `${r.bottom + 8}px`;
+          tip.classList.add('show');
+        }, 280);
+      });
+      document.addEventListener('pointerout', e => {
+        if (e.target.closest('[data-tip]')) {
+          clearTimeout(tipTimer);
+          $('macTooltip').classList.remove('show');
+        }
+      });
+
+      function renderAll() {
+        renderShell();
+        renderConnect();
+        renderNodes();
+        renderSplit();
+        renderLogs();
+        renderSubs();
+        renderSettings();
+        save();
+      }
+
+      /* =====================================================================
+         Event Bindings & Keyboard Shortcuts (⌘K Search, ⌘S Sidebar, Esc Close)
+         ===================================================================== */
+      function toggleSidebar() { $('macWindow').classList.toggle('sidebar-collapsed'); }
+      $('sidebarCollapseBtn').addEventListener('click', toggleSidebar);
+      $('sidebarExpandBtn').addEventListener('click', toggleSidebar);
+
+      document.addEventListener('keydown', e => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          $('macWindow').classList.remove('sidebar-collapsed');
+          $('globalSearchInput').focus();
+          $('globalSearchInput').select();
+        } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          toggleSidebar();
+        } else if (e.key === 'Escape') {
+          closeMacMenu();
+          closeSheet();
+        }
+      });
+
+      $('sidebarNav').addEventListener('click', e => {
+        const b = e.target.closest('[data-view]');
+        if (b) switchView(b.dataset.view);
+      });
+      $('navBackBtn').addEventListener('click', () => {
+        if (navIndex > 0) { navIndex--; switchView(navHistory[navIndex], false); }
+      });
+      $('navForwardBtn').addEventListener('click', () => {
+        if (navIndex < navHistory.length - 1) { navIndex++; switchView(navHistory[navIndex], false); }
+      });
+      $('goAllNodesBtn').addEventListener('click', () => switchView('nodes'));
+      $('goSplitBtn').addEventListener('click', () => switchView('split'));
+
+      $('globalSearchInput').addEventListener('input', e => {
+        globalSearch = e.target.value;
+        $('searchWrap').classList.toggle('has-value', globalSearch.length > 0);
+        renderConnect();
+        renderNodes();
+        renderSplit();
+      });
+      $('searchClearBtn').addEventListener('click', () => {
+        globalSearch = '';
+        $('globalSearchInput').value = '';
+        $('searchWrap').classList.remove('has-value');
+        renderConnect();
+        renderNodes();
+        renderSplit();
+      });
+
+      document.querySelectorAll('.mode-pill button').forEach(b => {
+        b.addEventListener('click', () => {
+          state.mode = b.dataset.mode;
+          renderAll();
+          notify(`已切换为${{ rule: '规则', global: '全局', direct: '直连' }[state.mode]}模式`);
+        });
+      });
+
+      function setSysProxy(v) { state.systemProxy = v; renderAll(); notify(v ? '系统代理已开启' : '系统代理已关闭'); }
+      function setTun(v) { state.tun = v; renderAll(); notify(v ? '虚拟网卡 (TUN) 已开启' : '虚拟网卡 (TUN) 已关闭'); }
+      $('sideSysProxy').addEventListener('change', e => setSysProxy(e.target.checked));
+      $('setSysProxyToggle').addEventListener('change', e => setSysProxy(e.target.checked));
+      $('sideTunToggle').addEventListener('change', e => setTun(e.target.checked));
+      $('setTunToggle').addEventListener('change', e => setTun(e.target.checked));
+      $('setFallbackToggle').addEventListener('change', e => { state.fallback = e.target.checked; renderAll(); notify('故障回退策略已更新'); });
+
+      $('topPowerBtn').addEventListener('click', () => {
+        state.connected = !state.connected;
+        renderAll();
+        notify(state.connected ? `已连接 · ${currentNode().name}` : '已断开并暂停接管');
+      });
+
+      function setTheme(t) { state.theme = t; renderAll(); }
+      $('topThemeBtn').addEventListener('click', () => setTheme(state.theme === 'dark' ? 'light' : 'dark'));
+      $('settingsThemeSeg').addEventListener('click', e => {
+        const b = e.target.closest('[data-set-theme]');
+        if (b) setTheme(b.dataset.setTheme);
+      });
+
+      function batchSpeedTest() {
+        notify('正在测速所有代理节点…');
+        setTimeout(() => {
+          state.nodes.forEach(n => {
+            if (n.retired) return;
+            n.delay = Math.max(16, n.delay + Math.floor(Math.random() * 15) - 7);
+            n.speed = Number((65 + Math.random() * 130).toFixed(1));
+          });
+          renderAll();
+          notify('全部节点延迟与下载测速完成');
+        }, 320);
+      }
+      $('topSpeedBtn').addEventListener('click', batchSpeedTest);
+      $('heroProbeBtn').addEventListener('click', () => {
+        const n = currentNode();
+        n.delay = Math.max(18, n.delay + Math.floor(Math.random() * 9) - 4);
+        renderAll();
+        notify(`${n.name} 延迟：${n.delay} ms`);
+      });
+
+      $('nodesSubSeg').addEventListener('click', e => {
+        const b = e.target.closest('[data-nodes-sub]');
+        if (!b) return;
+        nodesSub = b.dataset.nodesSub;
+        document.querySelectorAll('#nodesSubSeg button').forEach(x => x.classList.toggle('active', x === b));
+        renderNodes();
+      });
+      $('nodesActionBtn').addEventListener('click', () => {
+        if (nodesSub === 'groups') batchSpeedTest();
+        else {
+          SITES.forEach(([, list]) => list.forEach(s => { s.ms = 18 + Math.floor(Math.random() * 95); }));
+          renderNodes();
+          notify('全部常用网站测速完成');
+        }
+      });
+
+      $('splitSubSeg').addEventListener('click', e => {
+        const b = e.target.closest('[data-split-sub]');
+        if (!b) return;
+        splitSub = b.dataset.splitSub;
+        document.querySelectorAll('#splitSubSeg button').forEach(x => x.classList.toggle('active', x === b));
+        renderSplit();
+      });
+
+      // Delegated Clicks (Including Native-Style macOS Pop-Up Menu Triggers)
+      document.addEventListener('click', e => {
+        const popTrigger = e.target.closest('.mac-popup-btn');
+        if (popTrigger) {
+          e.stopPropagation();
+          const kind = popTrigger.dataset.popupKind;
+          const key = popTrigger.dataset.popupKey;
+          const val = popTrigger.dataset.popupVal;
+          if (kind === 'app-exit') {
+            openMacMenu(popTrigger, exitMenuItems(true), val, nextVal => {
+              let r = state.rules.find(x => x.value.toLowerCase() === key.toLowerCase());
+              if (!r) {
+                const p = RUNNING.find(x => x.exe.toLowerCase() === key.toLowerCase());
+                r = { id: 'r-' + Date.now(), kind: 'app', label: p?.name || key, value: key, path: p?.path || key, group: '', exit: nextVal, tun: 'inherit', on: true };
+                state.rules.unshift(r);
+              } else { r.exit = nextVal; r.on = true; }
+              renderAll();
+              notify(`${r.label} 出口已设为「${exitName(nextVal)}」`);
+            });
+            return;
+          }
+          if (kind === 'group-exit') {
+            openMacMenu(popTrigger, exitMenuItems(false), val, nextVal => {
+              const g = groupById(key);
+              if (g) { g.exit = nextVal; renderAll(); notify(`「${g.name}」出口已更新`); }
+            });
+            return;
+          }
+          if (kind === 'default-exit') {
+            openMacMenu(popTrigger, exitMenuItems(false), val, nextVal => {
+              state.defaultRuleExit = nextVal;
+              renderAll();
+              notify(`默认出口已设为 ${exitName(nextVal)}`);
+            });
+            return;
+          }
+          if (kind === 'tun-scope') {
+            openMacMenu(popTrigger, [
+              { value: 'all', label: '全部受支持流量' },
+              { value: 'selected', label: '仅指定分组和程序' }
+            ], val, nextVal => {
+              state.tunScope = nextVal;
+              renderAll();
+              notify('TUN 接管范围已更新');
+            });
+            return;
+          }
+          if (kind === 'sim-app') {
+            openMacMenu(popTrigger, [
+              { value: '', label: '仅测试域名' },
+              { sep: true },
+              ...RUNNING.map(p => ({ value: String(p.pid), label: p.name, meta: p.exe }))
+            ], val, nextVal => {
+              simAppValue = nextVal;
+              renderLogs();
+            });
+            return;
+          }
+        }
+
+        if (!e.target.closest('#macMenuPopover')) closeMacMenu();
+
+        if (e.target.id === 'homeRefreshSubBtn') {
+          const s = state.subscriptions.find(x => x.active) || state.subscriptions[0];
+          if (s) { s.updated = '刚刚'; renderAll(); notify(`「${s.name}」已刷新`); }
+          return;
+        }
+        const drawerHead = e.target.closest('[data-toggle-drawer]');
+        if (drawerHead) {
+          const id = drawerHead.dataset.toggleDrawer;
+          if (expandedGroups.has(id)) expandedGroups.delete(id); else expandedGroups.add(id);
+          renderNodes();
+          return;
+        }
+        const pickNode = e.target.closest('[data-pick-node]');
+        if (pickNode) {
+          state.selectedNodeId = pickNode.dataset.pickNode;
+          renderAll();
+          notify(`已切换至 ${exitName(state.selectedNodeId)}`);
+          return;
+        }
+        const grpPick = e.target.closest('[data-group-pick]');
+        if (grpPick) {
+          const [gid, nid] = grpPick.dataset.groupPick.split(':');
+          const g = groupById(gid);
+          if (g) { g.exit = nid; renderAll(); notify(`「${g.name}」出口已切换至 ${exitName(nid)}`); }
+          return;
+        }
+        const probeSite = e.target.closest('[data-probe-site]');
+        if (probeSite) {
+          const [ci, si] = probeSite.dataset.probeSite.split('-').map(Number);
+          SITES[ci][1][si].ms = 18 + Math.floor(Math.random() * 95);
+          renderNodes();
+          return;
+        }
+        const delRule = e.target.closest('[data-del-rule]');
+        if (delRule) {
+          state.rules = state.rules.filter(r => r.id !== delRule.dataset.delRule);
+          renderAll();
+          notify('规则已删除');
+          return;
+        }
+        const rmMember = e.target.closest('[data-rm-member]');
+        if (rmMember) {
+          const r = state.rules.find(x => x.id === rmMember.dataset.rmMember);
+          if (r) { r.group = ''; renderAll(); notify('已移出分组，原规则与独立出口已保留'); }
+          return;
+        }
+        const delGrp = e.target.closest('[data-del-group]');
+        if (delGrp) {
+          const gid = delGrp.dataset.delGroup;
+          if (state.rules.some(r => r.group === gid)) { notify('请先移出分组内的成员后再删除'); return; }
+          state.groups = state.groups.filter(g => g.id !== gid);
+          renderAll();
+          notify('分组已删除');
+          return;
+        }
+        const refSub = e.target.closest('[data-ref-sub]');
+        if (refSub) {
+          const s = state.subscriptions.find(x => x.id === refSub.dataset.refSub);
+          if (s) { s.updated = '刚刚'; renderAll(); notify(`「${s.name}」已刷新，节点 ID 已保留`); }
+          return;
+        }
+        const delSub = e.target.closest('[data-del-sub]');
+        if (delSub) {
+          const s = state.subscriptions.find(x => x.id === delSub.dataset.delSub);
+          if (s) {
+            state.subscriptions = state.subscriptions.filter(x => x.id !== s.id);
+            state.nodes.forEach(n => { if (n.source === s.name) n.retired = true; });
+            renderAll();
+            notify(`已移除「${s.name}」`);
+          }
+        }
+      });
+
+      document.addEventListener('change', e => {
+        const tRule = e.target.closest('[data-toggle-rule]');
+        if (tRule) { const r = state.rules.find(x => x.id === tRule.dataset.toggleRule); if (r) { r.on = tRule.checked; renderAll(); } return; }
+        const tGrp = e.target.closest('[data-toggle-group]');
+        if (tGrp) { const g = groupById(tGrp.dataset.toggleGroup); if (g) { g.on = tGrp.checked; renderAll(); } return; }
+        const gTun = e.target.closest('[data-group-tun]');
+        if (gTun) { const g = groupById(gTun.dataset.groupTun); if (g) { g.tun = gTun.checked; renderAll(); } }
+      });
+
+      // Route Simulator Form
+      $('simForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const host = $('simHostInput').value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
+        if (!host) return;
+        const pid = Number(simAppValue || 0);
+        const proc = RUNNING.find(p => p.pid === pid);
+        const res = evaluateRoute({ host, path: proc?.path, sysProxy: $('simSysProxyCheck').checked, failed: $('simFailCheck').checked });
+        state.logs.unshift({
+          time: new Date().toTimeString().slice(0, 8),
+          app: proc ? proc.exe : '浏览器 / 系统',
+          host,
+          ...res
+        });
+        renderLogs();
+        notify(`走向：${res.capture} → ${res.action}`);
+      });
+      $('clearLogsBtn').addEventListener('click', () => { state.logs = []; renderLogs(); notify('连接记录已清空'); });
+
+      // Subscription Import Bar
+      function importLink(raw) {
+        const name = raw.startsWith('http') ? '香港 IEPL 03' : (raw.includes('#') ? decodeURIComponent(raw.split('#')[1]) : raw);
+        const id = 'n-' + Date.now();
+        state.nodes.unshift({ id, name, tag: '新导入', flag: 'hk', proto: 'Hysteria2', delay: 31, speed: 165.0, source: '个人订阅', ip: '45.11.57.99' });
+        state.selectedNodeId = id;
+        renderAll();
+        notify(`已导入并切换至 ${name}`);
+      }
+      $('subBarForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const v = $('subBarInput').value.trim();
+        if (!v) return;
+        importLink(v);
+        $('subBarInput').value = '';
+      });
+      $('subFileBtn').addEventListener('click', () => $('subFileInput').click());
+      $('subFileInput').addEventListener('change', e => {
+        const f = e.target.files?.[0];
+        if (f) { importLink(f.name); e.target.value = ''; }
+      });
+
+      // Sheet Modals
+      function openSheet(html) {
+        closeMacMenu();
+        $('sheetContent').innerHTML = html;
+        $('sheetBackdrop').classList.add('open');
+      }
+      function closeSheet() { $('sheetBackdrop').classList.remove('open'); }
+      $('sheetBackdrop').addEventListener('click', e => { if (e.target === $('sheetBackdrop')) closeSheet(); });
+
+      $('topImportBtn').addEventListener('click', () => {
+        openSheet(`
+          <h3>导入订阅或分享链接</h3>
+          <div class="sheet-field">
+            <label>HTTPS 订阅 / vless:// / trojan:// / ss:// / Base64</label>
+            <input type="text" class="sheet-input" id="sheetImportVal" placeholder="粘贴链接或输入节点名称…" autofocus>
+          </div>
+          <div class="sheet-actions">
+            <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
+            <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport">导入</button>
+          </div>
+        `);
+        $('sheetCancel').onclick = closeSheet;
+        $('sheetConfirmImport').onclick = () => {
+          const v = $('sheetImportVal').value.trim();
+          if (v) { importLink(v); closeSheet(); }
+        };
+      });
+
+      $('helpInfoBtn').addEventListener('click', () => {
+        openSheet(`
+          <h3>路由优先级与快捷键</h3>
+          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.65;display:grid;gap:8px">
+            <div><strong style="color:var(--ink)">规则优先级：</strong>显式 REJECT &gt; 显式 DIRECT &gt; 进程 &gt; 软件 &gt; 精确域名 &gt; 通配域名 &gt; 默认出口</div>
+            <div><strong style="color:var(--ink)">快捷键：</strong><kbd class="kbd-hint">⌘K</kbd> 全局搜索 · <kbd class="kbd-hint">⌘S</kbd> 收起/展开边栏 · <kbd class="kbd-hint">Esc</kbd> 关闭浮层</div>
+          </div>
+          <div class="sheet-actions">
+            <button type="button" class="glass-btn-primary compact lg-track" id="sheetCloseHelp">完成</button>
+          </div>
+        `);
+        $('sheetCloseHelp').onclick = closeSheet;
+      });
+
+      $('splitPrimaryAddBtn').addEventListener('click', () => {
+        if (splitSub === 'groups') {
+          openSheet(`
+            <h3>创建策略分组</h3>
+            <div class="sheet-field"><label>分组名称</label><input type="text" class="sheet-input" id="shGrpName" placeholder="例如：流媒体或办公工具"></div>
+            <div class="sheet-actions">
+              <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
+              <button type="button" class="glass-btn-primary compact lg-track" id="shGrpSave">创建</button>
+            </div>
+          `);
+          $('sheetCancel').onclick = closeSheet;
+          $('shGrpSave').onclick = () => {
+            const name = $('shGrpName').value.trim();
+            if (!name) return;
+            state.groups.push({ id: 'g-' + Date.now(), name, type: 'Selector', exit: 'global-follow', tun: false, on: true });
+            renderAll();
+            closeSheet();
+            notify(`已创建分组「${name}」`);
+          };
+        } else {
+          openSheet(`
+            <h3>添加分流规则</h3>
+            <div class="sheet-field"><label>网站域名（支持 *.example.com）</label><input type="text" class="sheet-input" id="shRuleDomain" placeholder="例如 openai.com"></div>
+            <div class="sheet-actions">
+              <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
+              <button type="button" class="glass-btn-primary compact lg-track" id="shRuleSave">保存</button>
+            </div>
+          `);
+          $('sheetCancel').onclick = closeSheet;
+          $('shRuleSave').onclick = () => {
+            const d = $('shRuleDomain').value.trim().toLowerCase();
+            if (!d) return;
+            state.rules.unshift({ id: 'r-' + Date.now(), kind: 'website', label: d, value: d, group: state.groups[0]?.id || '', exit: '', on: true });
+            renderAll();
+            closeSheet();
+            notify(`已添加规则 ${d}`);
+          };
+        }
+      });
+
+      // Settings Actions
+      $('savePortsBtn').addEventListener('click', () => {
+        const m = $('portMixedInput').value ? Number($('portMixedInput').value) : null;
+        const h = Number($('portHttpInput').value);
+        const s = Number($('portSocksInput').value);
+        const list = [m, h, s].filter(Boolean);
+        if (list.some(p => p < 1 || p > 65535) || new Set(list).size !== list.length) {
+          notify('端口号无效或存在重复冲突');
+          return;
+        }
+        state.ports = { mixed: m, http: h, socks: s };
+        renderAll();
+        notify('端口配置已保存');
+      });
+      $('copyEnvBtn').addEventListener('click', () => {
+        const p = state.ports.mixed || state.ports.http;
+        navigator.clipboard?.writeText(`export https_proxy=http://127.0.0.1:${p} http_proxy=http://127.0.0.1:${p}`).catch(() => {});
+        notify(`已复制代理环境变量 (127.0.0.1:${p})`);
+      });
+      $('probeIpBtn').addEventListener('click', () => notify(`出口 IP 检测完成：${currentNode().ip}`));
+      $('exportBackupBtn').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'xeylroute-macos27-backup.json';
+        a.click();
+        notify('配置备份已导出');
+      });
+      $('resetStateBtn').addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY);
+        state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+        renderAll();
+        notify('已恢复初始示例数据');
+      });
+
+      // Live Telemetry Ticker
+      setInterval(() => {
+        if (!state.connected || !captureSummary()) {
+          $('kpiDown').textContent = '0.0 MB/s';
+          $('kpiUp').textContent = '0.0 MB/s';
+          $('sideDownRate').textContent = '0.0 MB/s ↓';
+          $('sideUpRate').textContent = '0.0 MB/s ↑';
+          chartDown.push(0); chartDown.shift();
+          chartUp.push(0); chartUp.shift();
+          paintChart();
+          return;
+        }
+        state.elapsed++;
+        const prev = chartDown[chartDown.length - 1] || 10;
+        const d = Number(Math.max(4.2, Math.min(17.6, prev + (Math.random() - 0.48) * 3.6)).toFixed(1));
+        const u = Number((d * (0.11 + Math.random() * 0.06)).toFixed(1));
+        totalMB += d * 0.12;
+        $('kpiDown').textContent = `${d.toFixed(1)} MB/s`;
+        $('kpiUp').textContent = `${u.toFixed(1)} MB/s`;
+        $('kpiTimer').textContent = fmtTime(state.elapsed);
+        $('kpiTotal').textContent = `${totalMB.toFixed(1)} MB`;
+        $('sideDownRate').textContent = `${d.toFixed(1)} MB/s ↓`;
+        $('sideUpRate').textContent = `${u.toFixed(1)} MB/s ↑`;
+        chartDown.push(d); chartDown.shift();
+        chartUp.push(u); chartUp.shift();
+        paintChart();
+      }, 1000);
+
+      renderHeatmap();
+      paintChart();
+      renderAll();
+    })();
+  </script>
+</body>
+</html>

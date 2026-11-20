@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare:ui": "node scripts/prepare-ui.mjs",
-    "dev": "npm run prepare:ui && vite --host 127.0.0.1",
-    "build": "npm run prepare:ui && vite build",
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4174",
+    "test": "node --test scripts/routing.test.mjs scripts/running-apps.test.mjs",
     "desktop": "tauri"
   },
   "devDependencies": {

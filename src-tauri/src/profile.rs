@@ -8,7 +8,64 @@ const SCOPED_FIELDS: &[&str] = &[
     "routepilot-disabled-rules",
     "routepilot-disabled-groups",
     "routepilot-independent-exits",
+    "routepilot-tun-groups",
+    "routepilot-tun-targets",
 ];
+
+pub fn tun_scope(profile: &Value) -> &str {
+    match profile["routepilot-tun-scope"].as_str() {
+        Some("selected") => "selected",
+        _ => "all",
+    }
+}
+
+pub fn scoped_tun_process_paths(profile: &Value) -> Vec<String> {
+    let scoped = scoped_profile(profile);
+    let view = scoped.as_ref();
+    let tun_groups: std::collections::HashSet<&str> = entries(view, "routepilot-tun-groups")
+        .filter_map(Value::as_str)
+        .filter(|name| !disabled(view, "routepilot-disabled-groups", name))
+        .collect();
+    let targets_map = view["routepilot-tun-targets"].as_object();
+    let mut paths = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // 1. Explicit per-target "on" overrides
+    if let Some(map) = targets_map {
+        for (target, mode) in map {
+            if mode.as_str() == Some("on")
+                && std::path::Path::new(target).is_absolute()
+                && seen.insert(target.to_lowercase())
+            {
+                paths.push(target.clone());
+            }
+        }
+    }
+
+    // 2. Active PROCESS-PATH rules targeting a TUN-enabled group (unless explicitly "off")
+    let mut active_rules = view["rules"].as_array().cloned().unwrap_or_default();
+    apply_rule_order(view, &mut active_rules);
+    for rule in active_rules.iter().filter_map(Value::as_str) {
+        let Some(rest) = rule.strip_prefix("PROCESS-PATH,") else {
+            continue;
+        };
+        let Some((target, _)) = rest.split_once(',') else {
+            continue;
+        };
+        let target = target.trim();
+        let override_mode = targets_map
+            .and_then(|map| map.get(target))
+            .and_then(Value::as_str);
+        if override_mode == Some("off") {
+            continue;
+        }
+        let in_tun_group = rule_exit(rule).is_some_and(|exit| tun_groups.contains(exit));
+        if (override_mode == Some("on") || in_tun_group) && seen.insert(target.to_lowercase()) {
+            paths.push(target.to_owned());
+        }
+    }
+    paths
+}
 
 pub fn active_subscription(profile: &Value) -> Option<&str> {
     profile["routepilot-active-subscription"]
@@ -72,7 +129,11 @@ pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     }
     if matches!(
         &mutation,
-        Edit::Mode { .. } | Edit::Ports { .. } | Edit::Provider { .. }
+        Edit::Mode { .. }
+            | Edit::Ports { .. }
+            | Edit::Provider { .. }
+            | Edit::TunScope { .. }
+            | Edit::RemoveNode { .. }
     ) {
         return edit(profile, mutation);
     }
@@ -144,6 +205,20 @@ pub enum Edit {
     },
     RemoveProvider {
         name: String,
+    },
+    RemoveNode {
+        name: String,
+    },
+    TunScope {
+        scope: String,
+    },
+    ToggleGroupTun {
+        name: String,
+        enabled: bool,
+    },
+    SetRuleTun {
+        target: String,
+        mode: String,
     },
 }
 
@@ -316,6 +391,9 @@ pub fn runtime_profile(profile: &Value) -> Value {
         map.remove("routepilot-created");
         map.remove("routepilot-active-subscription");
         map.remove("routepilot-subscription-scopes");
+        map.remove("routepilot-tun-scope");
+        map.remove("routepilot-tun-groups");
+        map.remove("routepilot-tun-targets");
     }
     let providers: Vec<_> = profile["proxy-providers"]
         .as_object()
@@ -490,10 +568,54 @@ pub fn summary(profile: &Value) -> Value {
         "http":profile.get("port"), "socks":profile.get("socks-port"), "mixed":profile.get("mixed-port"), "mode":profile.get("mode"),
         "rules":profile.get("rules"), "groups":groups, "providers":providers, "exits":exits(profile),
         "disabledRules":profile.get("routepilot-disabled-rules"), "disabledGroups":profile.get("routepilot-disabled-groups"),
+        "tunScope": tun_scope(catalog),
+        "tunGroups": profile.get("routepilot-tun-groups").cloned().unwrap_or_else(|| json!([])),
+        "tunTargets": profile.get("routepilot-tun-targets").cloned().unwrap_or_else(|| json!({})),
         "processRules":process_rules,
         "nodes":entries(profile,"proxies").map(|item|json!({"name":item.get("name"),"type":item.get("type")})).collect::<Vec<_>>(),
         "ruleExits":entries(profile,"rules").map(|item|item.as_str().and_then(rule_exit)).collect::<Vec<_>>()
     })
+}
+
+pub fn import_node_links(
+    profile: &mut Value,
+    raw: &str,
+    first_profile: bool,
+) -> Result<usize, String> {
+    let parsed = crate::share_links::parse_share_links(raw)?;
+    let mut added = 0usize;
+    for mut node in parsed {
+        let base_name = node["name"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Imported Node")
+            .to_owned();
+        let duplicate = entries(profile, "proxies").any(|existing| {
+            existing["type"] == node["type"]
+                && existing["server"] == node["server"]
+                && existing["port"] == node["port"]
+                && existing["uuid"] == node["uuid"]
+                && existing["password"] == node["password"]
+        });
+        if duplicate {
+            continue;
+        }
+        let unique = subscription_name(profile, &base_name);
+        node["name"] = json!(unique);
+        array(profile, "proxies")?.push(node);
+        added += 1;
+    }
+    if added > 0
+        && (first_profile
+            || (profile["proxy-providers"]
+                .as_object()
+                .is_none_or(|p| p.is_empty())
+                && profile["rules"] == json!(["MATCH,DIRECT"])))
+    {
+        profile["rules"] = json!(["MATCH,AUTO"]);
+    }
+    Ok(added)
 }
 
 pub fn import_subscription(
@@ -910,6 +1032,50 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
             }
             set_enabled(profile, "routepilot-imported-providers", &name, true)?;
         }
+        Edit::RemoveNode { name } => {
+            if entries(profile, "rules")
+                .filter_map(Value::as_str)
+                .any(|r| rule_exit(r) == Some(&name))
+                || entries(profile, "proxy-groups")
+                    .any(|group| contains_member(group, "proxies", &name))
+            {
+                return Err("节点仍被规则或策略组引用，请先修改引用后再移除。".into());
+            }
+            array(profile, "proxies")?.retain(|node| node["name"].as_str() != Some(&name));
+        }
+        Edit::TunScope { scope } => {
+            if !matches!(scope.as_str(), "all" | "selected") {
+                return Err("无效的 TUN 接管范围。".into());
+            }
+            profile["routepilot-tun-scope"] = json!(scope);
+        }
+        Edit::ToggleGroupTun { name, enabled } => {
+            if !names(profile, "proxy-groups").any(|item| item == name) {
+                return Err("找不到该分组。".into());
+            }
+            let items = array(profile, "routepilot-tun-groups")?;
+            items.retain(|item| item.as_str() != Some(&name));
+            if enabled {
+                items.push(json!(name));
+            }
+        }
+        Edit::SetRuleTun { target, mode } => {
+            if !clean(&target) || !matches!(mode.as_str(), "inherit" | "on" | "off") {
+                return Err("无效的 TUN 规则设置。".into());
+            }
+            let map = profile
+                .as_object_mut()
+                .ok_or("Invalid configuration")?
+                .entry("routepilot-tun-targets")
+                .or_insert_with(|| json!({}))
+                .as_object_mut()
+                .ok_or("Invalid tun targets")?;
+            if mode == "inherit" {
+                map.remove(&target);
+            } else {
+                map.insert(target, json!(mode));
+            }
+        }
     }
     Ok(())
 }
@@ -1249,5 +1415,79 @@ mod tests {
         )
         .unwrap();
         assert!(!summary(&config).to_string().contains("private"));
+    }
+
+    #[test]
+    fn imports_single_node_share_links_and_deduplicates_safely() {
+        let mut config = json!({"rules":["MATCH,DIRECT"]});
+        let link = "trojan://pass@sg.example.com:443?sni=sg.example.com#SG%2001";
+        let added = import_node_links(&mut config, link, true).unwrap();
+        assert_eq!(added, 1);
+        assert_eq!(config["proxies"][0]["name"], "SG 01");
+        assert_eq!(config["rules"], json!(["MATCH,AUTO"]));
+        // Re-importing the exact same node is a no-op
+        assert_eq!(import_node_links(&mut config, link, false).unwrap(), 0);
+        // Runtime profile automatically wires static nodes into AUTO & GLOBAL
+        let rt = runtime_profile(&config);
+        let auto = entries(&rt, "proxy-groups")
+            .find(|g| g["name"] == "AUTO")
+            .unwrap();
+        assert_eq!(auto["proxies"], json!(["SG 01"]));
+    }
+
+    #[test]
+    fn scoped_tun_resolves_group_and_explicit_target_overrides() {
+        let mut config = json!({
+            "routepilot-created": true,
+            "proxy-groups": [{"name":"AI","type":"select","proxies":["DIRECT"]}],
+            "rules": [
+                "PROCESS-PATH,/Applications/Claude.app/Contents/MacOS/Claude,AI",
+                "PROCESS-PATH,/Applications/Chrome.app/Contents/MacOS/Chrome,AI",
+                "MATCH,DIRECT"
+            ]
+        });
+        edit(
+            &mut config,
+            Edit::TunScope {
+                scope: "selected".into(),
+            },
+        )
+        .unwrap();
+        edit(
+            &mut config,
+            Edit::ToggleGroupTun {
+                name: "AI".into(),
+                enabled: true,
+            },
+        )
+        .unwrap();
+        edit(
+            &mut config,
+            Edit::SetRuleTun {
+                target: "/Applications/Chrome.app/Contents/MacOS/Chrome".into(),
+                mode: "off".into(),
+            },
+        )
+        .unwrap();
+        edit(
+            &mut config,
+            Edit::SetRuleTun {
+                target: "/Applications/Codex.app/Contents/MacOS/Codex".into(),
+                mode: "on".into(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(tun_scope(&config), "selected");
+        let paths = scoped_tun_process_paths(&config);
+        assert!(paths.contains(&"/Applications/Claude.app/Contents/MacOS/Claude".to_owned()));
+        assert!(paths.contains(&"/Applications/Codex.app/Contents/MacOS/Codex".to_owned()));
+        assert!(!paths.contains(&"/Applications/Chrome.app/Contents/MacOS/Chrome".to_owned()));
+
+        // Runtime config strips RoutePilot TUN metadata cleanly
+        let rt = runtime_profile(&config);
+        assert!(rt.get("routepilot-tun-scope").is_none());
+        assert!(rt.get("routepilot-tun-groups").is_none());
+        assert!(rt.get("routepilot-tun-targets").is_none());
     }
 }

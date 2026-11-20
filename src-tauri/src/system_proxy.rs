@@ -1,122 +1,392 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    ffi::c_void,
     fs::{self, OpenOptions},
     io::{self, Write},
-    mem::size_of,
     path::Path,
-    ptr::{null, null_mut},
 };
-use windows_sys::Win32::{Foundation::GlobalFree, Networking::WinInet::*};
 
 const JOURNAL: &str = "system-proxy-recovery.json";
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-struct ProxySettings {
-    flags: u32,
-    server: String,
+#[cfg(windows)]
+mod platform {
+    use super::*;
+    use std::{
+        ffi::c_void,
+        mem::size_of,
+        ptr::{null, null_mut},
+    };
+    use windows_sys::Win32::{Foundation::GlobalFree, Networking::WinInet::*};
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    pub struct ProxySettings {
+        pub flags: u32,
+        pub server: String,
+    }
+
+    fn options_list(options: &mut [INTERNET_PER_CONN_OPTIONW]) -> INTERNET_PER_CONN_OPTION_LISTW {
+        INTERNET_PER_CONN_OPTION_LISTW {
+            dwSize: size_of::<INTERNET_PER_CONN_OPTION_LISTW>() as u32,
+            pszConnection: null_mut(),
+            dwOptionCount: options.len() as u32,
+            dwOptionError: 0,
+            pOptions: options.as_mut_ptr(),
+        }
+    }
+
+    fn query_with_flags(flag_option: u32) -> io::Result<ProxySettings> {
+        let mut flags = INTERNET_PER_CONN_OPTIONW {
+            dwOption: flag_option,
+            ..Default::default()
+        };
+        let mut server = INTERNET_PER_CONN_OPTIONW {
+            dwOption: INTERNET_PER_CONN_PROXY_SERVER,
+            ..Default::default()
+        };
+        flags.Value.dwValue = 0;
+        server.Value.pszValue = null_mut();
+        let mut options = [flags, server];
+        let mut list = options_list(&mut options);
+        let mut size = list.dwSize;
+        // WinINet allocates the returned string, including when some requested options fail.
+        let ok = unsafe {
+            InternetQueryOptionW(
+                null(),
+                INTERNET_OPTION_PER_CONNECTION_OPTION,
+                (&mut list as *mut INTERNET_PER_CONN_OPTION_LISTW).cast::<c_void>(),
+                &mut size,
+            )
+        };
+        let error = (ok == 0).then(io::Error::last_os_error);
+        let server = unsafe {
+            let pointer = options[1].Value.pszValue;
+            if pointer.is_null() {
+                String::new()
+            } else {
+                let mut count = 0;
+                while *pointer.add(count) != 0 {
+                    count += 1;
+                }
+                let value = String::from_utf16_lossy(std::slice::from_raw_parts(pointer, count));
+                GlobalFree(pointer.cast::<c_void>());
+                value
+            }
+        };
+        if let Some(error) = error {
+            return Err(error);
+        }
+        Ok(ProxySettings {
+            flags: unsafe { options[0].Value.dwValue },
+            server,
+        })
+    }
+
+    pub fn query() -> Result<ProxySettings, String> {
+        query_with_flags(INTERNET_PER_CONN_FLAGS_UI)
+            .or_else(|_| query_with_flags(INTERNET_PER_CONN_FLAGS))
+            .map_err(|err| err.to_string())
+    }
+
+    pub fn desired(port: u16, _previous: &ProxySettings) -> ProxySettings {
+        ProxySettings {
+            flags: PROXY_TYPE_DIRECT | PROXY_TYPE_PROXY,
+            server: format!("127.0.0.1:{port}"),
+        }
+    }
+
+    pub fn apply(settings: &ProxySettings) -> Result<(), String> {
+        let mut server: Vec<u16> = settings.server.encode_utf16().chain([0]).collect();
+        let mut options = [
+            INTERNET_PER_CONN_OPTIONW {
+                dwOption: INTERNET_PER_CONN_PROXY_SERVER,
+                Value: INTERNET_PER_CONN_OPTIONW_0 {
+                    pszValue: server.as_mut_ptr(),
+                },
+            },
+            INTERNET_PER_CONN_OPTIONW {
+                dwOption: INTERNET_PER_CONN_FLAGS,
+                Value: INTERNET_PER_CONN_OPTIONW_0 {
+                    dwValue: settings.flags,
+                },
+            },
+        ];
+        let list = options_list(&mut options);
+        unsafe {
+            if InternetSetOptionW(
+                null(),
+                INTERNET_OPTION_PER_CONNECTION_OPTION,
+                (&list as *const INTERNET_PER_CONN_OPTION_LISTW).cast::<c_void>(),
+                list.dwSize,
+            ) == 0
+            {
+                return Err(io::Error::last_os_error().to_string());
+            }
+            InternetSetOptionW(null(), INTERNET_OPTION_PROXY_SETTINGS_CHANGED, null(), 0);
+            InternetSetOptionW(null(), INTERNET_OPTION_REFRESH, null(), 0);
+        }
+        Ok(())
+    }
+
+    pub const ALREADY_OWNED_ERR: &str =
+        "Windows already uses this address. RoutePilot did not take ownership.";
+    pub const APPLY_MISMATCH_ERR: &str = "Windows did not apply the expected proxy settings";
 }
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::*;
+    use std::process::Command;
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    pub struct ServiceProxy {
+        pub enabled: bool,
+        pub server: String,
+        pub port: u16,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    pub struct ServiceEntry {
+        pub service: String,
+        pub http: ServiceProxy,
+        pub https: ServiceProxy,
+        pub socks: ServiceProxy,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    pub struct ProxySettings {
+        pub services: Vec<ServiceEntry>,
+    }
+
+    fn networksetup(args: &[&str]) -> Result<String, String> {
+        let output = Command::new("/usr/sbin/networksetup")
+            .args(args)
+            .output()
+            .map_err(|err| format!("无法执行 networksetup：{err}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            let detail = if !stderr.is_empty() { stderr } else { stdout };
+            return Err(if detail.is_empty() {
+                "macOS 系统代理设置失败。".into()
+            } else {
+                format!("macOS 系统代理设置失败：{detail}")
+            });
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+
+    pub(crate) fn parse_services(output: &str) -> Vec<String> {
+        output
+            .lines()
+            .skip(1)
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('*'))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    pub(crate) fn parse_proxy_output(output: &str) -> ServiceProxy {
+        let mut enabled = false;
+        let mut server = String::new();
+        let mut port = 0u16;
+        for line in output.lines() {
+            let Some((k, v)) = line.split_once(':') else {
+                continue;
+            };
+            let val = v.trim();
+            match k.trim().to_ascii_lowercase().as_str() {
+                "enabled" => enabled = val.eq_ignore_ascii_case("yes"),
+                "server" => server = val.to_owned(),
+                "port" => port = val.parse::<u16>().unwrap_or(0),
+                _ => {}
+            }
+        }
+        ServiceProxy {
+            enabled,
+            server,
+            port,
+        }
+    }
+
+    fn has_active_ip(service: &str) -> bool {
+        networksetup(&["-getinfo", service]).is_ok_and(|out| {
+            out.lines().any(|line| {
+                line.strip_prefix("IP address:")
+                    .map(str::trim)
+                    .is_some_and(|ip| !ip.is_empty() && !ip.eq_ignore_ascii_case("none"))
+            })
+        })
+    }
+
+    fn target_services() -> Result<Vec<String>, String> {
+        let all = parse_services(&networksetup(&["-listallnetworkservices"])?);
+        if all.is_empty() {
+            return Err("未检测到可用的 macOS 网络服务。".into());
+        }
+        let active: Vec<String> = all
+            .iter()
+            .filter(|svc| has_active_ip(svc))
+            .cloned()
+            .collect();
+        if !active.is_empty() {
+            return Ok(active);
+        }
+        // Fall back to Wi-Fi or the first enabled service when offline.
+        if let Some(wifi) = all.iter().find(|s| s.eq_ignore_ascii_case("Wi-Fi")) {
+            return Ok(vec![wifi.clone()]);
+        }
+        Ok(vec![all[0].clone()])
+    }
+
+    fn query_service(service: &str) -> Result<ServiceEntry, String> {
+        let http = parse_proxy_output(&networksetup(&["-getwebproxy", service])?);
+        let https = parse_proxy_output(&networksetup(&["-getsecurewebproxy", service])?);
+        let socks = parse_proxy_output(&networksetup(&["-getsocksfirewallproxy", service])?);
+        Ok(ServiceEntry {
+            service: service.to_owned(),
+            http,
+            https,
+            socks,
+        })
+    }
+
+    pub fn query() -> Result<ProxySettings, String> {
+        let services = target_services()?;
+        query_for(&services)
+    }
+
+    pub fn query_for(services: &[String]) -> Result<ProxySettings, String> {
+        let mut entries = Vec::with_capacity(services.len());
+        for service in services {
+            entries.push(query_service(service)?);
+        }
+        Ok(ProxySettings { services: entries })
+    }
+
+    pub fn desired(port: u16, previous: &ProxySettings) -> ProxySettings {
+        let target = ServiceProxy {
+            enabled: true,
+            server: "127.0.0.1".into(),
+            port,
+        };
+        ProxySettings {
+            services: previous
+                .services
+                .iter()
+                .map(|entry| ServiceEntry {
+                    service: entry.service.clone(),
+                    http: target.clone(),
+                    https: target.clone(),
+                    socks: target.clone(),
+                })
+                .collect(),
+        }
+    }
+
+    fn apply_one(service: &str, set_cmd: &str, state_cmd: &str, cfg: &ServiceProxy) -> Result<(), String> {
+        if cfg.enabled && !cfg.server.is_empty() && cfg.port > 0 {
+            let port_str = cfg.port.to_string();
+            networksetup(&[set_cmd, service, &cfg.server, &port_str])?;
+            networksetup(&[state_cmd, service, "on"])?;
+        } else {
+            networksetup(&[state_cmd, service, "off"])?;
+        }
+        Ok(())
+    }
+
+    pub fn apply(settings: &ProxySettings) -> Result<(), String> {
+        for entry in &settings.services {
+            apply_one(
+                &entry.service,
+                "-setwebproxy",
+                "-setwebproxystate",
+                &entry.http,
+            )?;
+            apply_one(
+                &entry.service,
+                "-setsecurewebproxy",
+                "-setsecurewebproxystate",
+                &entry.https,
+            )?;
+            apply_one(
+                &entry.service,
+                "-setsocksfirewallproxy",
+                "-setsocksfirewallproxystate",
+                &entry.socks,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub const ALREADY_OWNED_ERR: &str =
+        "macOS 系统代理已指向该地址，RoutePilot 未重复接管。";
+    pub const APPLY_MISMATCH_ERR: &str = "macOS 未按预期应用系统代理设置。";
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+mod platform {
+    use super::*;
+    use std::process::Command;
+
+    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    pub struct ProxySettings {
+        pub mode: String,
+        pub host: String,
+        pub port: u16,
+    }
+
+    fn gsettings(args: &[&str]) -> Result<String, String> {
+        let output = Command::new("gsettings")
+            .args(args)
+            .output()
+            .map_err(|_| "当前 Linux 桌面环境缺少 gsettings，请改用终端代理变量或 TUN 模式。".to_owned())?;
+        if !output.status.success() {
+            return Err("Linux 系统代理配置失败，请改用终端代理变量或 TUN 模式。".into());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().trim_matches('\'').to_owned())
+    }
+
+    pub fn query() -> Result<ProxySettings, String> {
+        let mode = gsettings(&["get", "org.gnome.system.proxy", "mode"])?;
+        let host = gsettings(&["get", "org.gnome.system.proxy.http", "host"]).unwrap_or_default();
+        let port = gsettings(&["get", "org.gnome.system.proxy.http", "port"])
+            .ok()
+            .and_then(|s| s.parse::<u16>().ok())
+            .unwrap_or(0);
+        Ok(ProxySettings { mode, host, port })
+    }
+
+    pub fn desired(port: u16, _previous: &ProxySettings) -> ProxySettings {
+        ProxySettings {
+            mode: "manual".into(),
+            host: "127.0.0.1".into(),
+            port,
+        }
+    }
+
+    pub fn apply(settings: &ProxySettings) -> Result<(), String> {
+        let port_str = settings.port.to_string();
+        for schema in [
+            "org.gnome.system.proxy.http",
+            "org.gnome.system.proxy.https",
+            "org.gnome.system.proxy.socks",
+        ] {
+            gsettings(&["set", schema, "host", &settings.host])?;
+            gsettings(&["set", schema, "port", &port_str])?;
+        }
+        gsettings(&["set", "org.gnome.system.proxy", "mode", &settings.mode])?;
+        Ok(())
+    }
+
+    pub const ALREADY_OWNED_ERR: &str = "Linux 系统代理已指向该地址，RoutePilot 未重复接管。";
+    pub const APPLY_MISMATCH_ERR: &str = "Linux 未按预期应用系统代理设置。";
+}
+
+use platform::ProxySettings;
 
 #[derive(Deserialize, Serialize)]
 struct Recovery {
     previous: ProxySettings,
     applied: ProxySettings,
-}
-
-fn options_list(options: &mut [INTERNET_PER_CONN_OPTIONW]) -> INTERNET_PER_CONN_OPTION_LISTW {
-    INTERNET_PER_CONN_OPTION_LISTW {
-        dwSize: size_of::<INTERNET_PER_CONN_OPTION_LISTW>() as u32,
-        pszConnection: null_mut(),
-        dwOptionCount: options.len() as u32,
-        dwOptionError: 0,
-        pOptions: options.as_mut_ptr(),
-    }
-}
-
-fn query_with_flags(flag_option: u32) -> io::Result<ProxySettings> {
-    let mut flags = INTERNET_PER_CONN_OPTIONW {
-        dwOption: flag_option,
-        ..Default::default()
-    };
-    let mut server = INTERNET_PER_CONN_OPTIONW {
-        dwOption: INTERNET_PER_CONN_PROXY_SERVER,
-        ..Default::default()
-    };
-    flags.Value.dwValue = 0;
-    server.Value.pszValue = null_mut();
-    let mut options = [flags, server];
-    let mut list = options_list(&mut options);
-    let mut size = list.dwSize;
-    // WinINet allocates the returned string, including when some requested options fail.
-    let ok = unsafe {
-        InternetQueryOptionW(
-            null(),
-            INTERNET_OPTION_PER_CONNECTION_OPTION,
-            (&mut list as *mut INTERNET_PER_CONN_OPTION_LISTW).cast::<c_void>(),
-            &mut size,
-        )
-    };
-    let error = (ok == 0).then(io::Error::last_os_error);
-    let server = unsafe {
-        let pointer = options[1].Value.pszValue;
-        if pointer.is_null() {
-            String::new()
-        } else {
-            let mut count = 0;
-            while *pointer.add(count) != 0 {
-                count += 1;
-            }
-            let value = String::from_utf16_lossy(std::slice::from_raw_parts(pointer, count));
-            GlobalFree(pointer.cast::<c_void>());
-            value
-        }
-    };
-    if let Some(error) = error {
-        return Err(error);
-    }
-    Ok(ProxySettings {
-        flags: unsafe { options[0].Value.dwValue },
-        server,
-    })
-}
-
-fn query() -> io::Result<ProxySettings> {
-    query_with_flags(INTERNET_PER_CONN_FLAGS_UI)
-        .or_else(|_| query_with_flags(INTERNET_PER_CONN_FLAGS))
-}
-
-fn apply(settings: &ProxySettings) -> io::Result<()> {
-    let mut server: Vec<u16> = settings.server.encode_utf16().chain([0]).collect();
-    let mut options = [
-        INTERNET_PER_CONN_OPTIONW {
-            dwOption: INTERNET_PER_CONN_PROXY_SERVER,
-            Value: INTERNET_PER_CONN_OPTIONW_0 {
-                pszValue: server.as_mut_ptr(),
-            },
-        },
-        INTERNET_PER_CONN_OPTIONW {
-            dwOption: INTERNET_PER_CONN_FLAGS,
-            Value: INTERNET_PER_CONN_OPTIONW_0 {
-                dwValue: settings.flags,
-            },
-        },
-    ];
-    let list = options_list(&mut options);
-    // The original PAC URL and bypass rules are never written.
-    unsafe {
-        if InternetSetOptionW(
-            null(),
-            INTERNET_OPTION_PER_CONNECTION_OPTION,
-            (&list as *const INTERNET_PER_CONN_OPTION_LISTW).cast::<c_void>(),
-            list.dwSize,
-        ) == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        InternetSetOptionW(null(), INTERNET_OPTION_PROXY_SETTINGS_CHANGED, null(), 0);
-        InternetSetOptionW(null(), INTERNET_OPTION_REFRESH, null(), 0);
-    }
-    Ok(())
 }
 
 fn load(dir: &Path) -> Result<Option<Recovery>, String> {
@@ -126,6 +396,24 @@ fn load(dir: &Path) -> Result<Option<Recovery>, String> {
             .map_err(|err| err.to_string()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.to_string()),
+    }
+}
+
+fn query_matching(recovery: &Recovery) -> Result<ProxySettings, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let names: Vec<String> = recovery
+            .applied
+            .services
+            .iter()
+            .map(|entry| entry.service.clone())
+            .collect();
+        return platform::query_for(&names);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = recovery;
+        platform::query()
     }
 }
 
@@ -141,16 +429,16 @@ pub fn is_owned(dir: &Path) -> Result<bool, String> {
     let Some(recovery) = load(dir)? else {
         return Ok(false);
     };
-    Ok(restore_target(&recovery, &query().map_err(|err| err.to_string())?).is_some())
+    Ok(restore_target(&recovery, &query_matching(&recovery)?).is_some())
 }
 
 pub fn restore(dir: &Path) -> Result<(), String> {
     let Some(recovery) = load(dir)? else {
         return Ok(());
     };
-    let current = query().map_err(|err| err.to_string())?;
+    let current = query_matching(&recovery)?;
     if let Some(previous) = restore_target(&recovery, &current) {
-        apply(previous).map_err(|err| err.to_string())?;
+        platform::apply(previous)?;
     }
     fs::remove_file(dir.join(JOURNAL)).map_err(|err| err.to_string())
 }
@@ -160,13 +448,10 @@ pub fn enable(dir: &Path, port: u16) -> Result<(), String> {
         return Ok(());
     }
     restore(dir)?;
-    let previous = query().map_err(|err| err.to_string())?;
-    let applied = ProxySettings {
-        flags: PROXY_TYPE_DIRECT | PROXY_TYPE_PROXY,
-        server: format!("127.0.0.1:{port}"),
-    };
+    let previous = platform::query()?;
+    let applied = platform::desired(port, &previous);
     if previous == applied {
-        return Err("Windows already uses this address. RoutePilot did not take ownership.".into());
+        return Err(platform::ALREADY_OWNED_ERR.into());
     }
 
     let recovery = Recovery { previous, applied };
@@ -184,15 +469,13 @@ pub fn enable(dir: &Path, port: u16) -> Result<(), String> {
     drop(file);
     fs::rename(&temporary, dir.join(JOURNAL)).map_err(|err| err.to_string())?;
 
-    let result = apply(&recovery.applied)
-        .map_err(|err| err.to_string())
-        .and_then(|()| {
-            if is_owned(dir)? {
-                Ok(())
-            } else {
-                Err("Windows did not apply the expected proxy settings".into())
-            }
-        });
+    let result = platform::apply(&recovery.applied).and_then(|()| {
+        if is_owned(dir)? {
+            Ok(())
+        } else {
+            Err(platform::APPLY_MISMATCH_ERR.into())
+        }
+    });
     if let Err(error) = result {
         // Leave the recovery journal intact when the result of a partial write is uncertain.
         return Err(error);
@@ -204,6 +487,7 @@ pub fn enable(dir: &Path, port: u16) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn recovery_only_restores_exact_owned_settings() {
         let recovery = Recovery {
@@ -231,5 +515,49 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parses_macos_networksetup_services_and_proxy_state() {
+        let list = "An asterisk (*) denotes that a network service is disabled.\nWi-Fi\n*Bluetooth PAN\nUSB 10/100/1000 LAN\n";
+        assert_eq!(
+            platform::parse_services(list),
+            vec!["Wi-Fi".to_owned(), "USB 10/100/1000 LAN".to_owned()]
+        );
+        let state = "Enabled: Yes\nServer: 127.0.0.1\nPort: 7890\nAuthenticated Proxy Enabled: 0\n";
+        let parsed = platform::parse_proxy_output(state);
+        assert!(parsed.enabled);
+        assert_eq!(parsed.server, "127.0.0.1");
+        assert_eq!(parsed.port, 7890);
+
+        let entry = platform::ServiceEntry {
+            service: "Wi-Fi".into(),
+            http: parsed.clone(),
+            https: parsed.clone(),
+            socks: parsed,
+        };
+        let off = platform::ServiceProxy {
+            enabled: false,
+            server: String::new(),
+            port: 0,
+        };
+        let prev = ProxySettings {
+            services: vec![platform::ServiceEntry {
+                service: "Wi-Fi".into(),
+                http: off.clone(),
+                https: off.clone(),
+                socks: off,
+            }],
+        };
+        let applied = ProxySettings {
+            services: vec![entry],
+        };
+        let recovery = Recovery {
+            previous: prev.clone(),
+            applied: applied.clone(),
+        };
+        assert_eq!(restore_target(&recovery, &applied), Some(&prev));
+        assert_eq!(restore_target(&recovery, &prev), None);
     }
 }

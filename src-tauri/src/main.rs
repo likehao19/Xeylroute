@@ -5,6 +5,7 @@ mod mihomo_api;
 mod processes;
 mod profile;
 mod program_files;
+mod share_links;
 mod system_proxy;
 mod tray;
 mod tun_worker;
@@ -15,22 +16,38 @@ use serde_json::Value;
 use std::{
     fs,
     net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
-    os::windows::{io::OwnedHandle, process::CommandExt},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, RunEvent, State};
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+pub(crate) const CORE_BINARY: &str = if cfg!(windows) {
+    "mihomo.exe"
+} else {
+    "mihomo"
+};
+
+fn platform_name() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    }
+}
 
 #[derive(Default)]
 struct Core(Mutex<Option<CoreProcess>>);
 
 enum CoreProcess {
-    Local { child: Child, _job: OwnedHandle },
+    Local(tun_worker::ManagedChild),
     Tun(tun_worker::Worker),
 }
 
@@ -46,8 +63,8 @@ fn require_core_access(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-fn mihomo_command(dir: &Path) -> Command {
-    let mut command = Command::new(dir.join("mihomo.exe"));
+pub(crate) fn mihomo_command(dir: &Path) -> Command {
+    let mut command = Command::new(dir.join(CORE_BINARY));
     for (key, _) in std::env::vars_os() {
         if key
             .to_string_lossy()
@@ -57,7 +74,12 @@ fn mihomo_command(dir: &Path) -> Command {
             command.env_remove(key);
         }
     }
-    command.arg("-d").arg(dir).creation_flags(CREATE_NO_WINDOW);
+    command.arg("-d").arg(dir);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
     command
 }
 
@@ -65,11 +87,13 @@ fn mihomo_command(dir: &Path) -> Command {
 #[serde(rename_all = "camelCase")]
 struct CoreStatus {
     app_data: String,
+    platform: &'static str,
     available: bool,
     configured: bool,
     running: bool,
     system_proxy: bool,
     tun: bool,
+    tun_scope: String,
     http_port: Option<u16>,
 }
 
@@ -86,7 +110,7 @@ fn core_dir(app: &AppHandle) -> Result<PathBuf, String> {
 fn running(child: &mut Option<CoreProcess>) -> Result<bool, String> {
     if let Some(process) = child {
         let alive = match process {
-            CoreProcess::Local { child, .. } => child.try_wait().map(|status| status.is_none()),
+            CoreProcess::Local(managed) => managed.try_wait().map(|status| status.is_none()),
             CoreProcess::Tun(worker) => worker.running(),
         }
         .map_err(|err| err.to_string())?;
@@ -117,12 +141,17 @@ fn status(dir: &Path, child: &mut Option<CoreProcess>) -> Result<CoreStatus, Str
             .ok()
             .and_then(|data| serde_json::from_slice::<Value>(&data).ok())
             .is_some_and(|config| config["tun"]["enable"] == true);
+    let tun_scope = configured_profile(dir)
+        .map(|cfg| profile::tun_scope(&cfg).to_owned())
+        .unwrap_or_else(|_| "all".into());
     Ok(CoreStatus {
         app_data: dir.display().to_string(),
-        available: dir.join("mihomo.exe").is_file(),
+        platform: platform_name(),
+        available: dir.join(CORE_BINARY).is_file(),
         configured: dir.join("mihomo.json").is_file(),
         running: is_running,
         tun,
+        tun_scope,
         system_proxy: system_proxy::is_owned(dir)?,
         http_port: http_port(dir),
     })
@@ -142,7 +171,6 @@ fn validate_config(input: &str) -> Result<Vec<u16>, String> {
         "external-ui",
         "redir-port",
         "tproxy-port",
-        "dns",
         "iptables",
         "experimental",
     ] {
@@ -150,6 +178,11 @@ fn validate_config(input: &str) -> Result<Vec<u16>, String> {
             return Err(format!(
                 "{key} is outside the local listener verification scope"
             ));
+        }
+    }
+    if let Some(dns) = config.get("dns") {
+        if !dns.is_object() {
+            return Err("Invalid dns configuration object".into());
         }
     }
     if config
@@ -186,6 +219,42 @@ fn validate_config(input: &str) -> Result<Vec<u16>, String> {
         return Err("Configure at least one local proxy port".into());
     }
     Ok(ports)
+}
+
+fn sanitize_imported_config(input: &str) -> Result<Value, String> {
+    let mut root: Value = serde_json::from_str(input)
+        .or_else(|_| serde_yaml_ng::from_str::<Value>(input))
+        .map_err(|err| format!("配置解析失败（支持 JSON / YAML）：{err}"))?;
+    let map = root
+        .as_object_mut()
+        .ok_or("配置文件顶层必须为对象（Mapping / JSON Object）。")?;
+    for key in [
+        "listeners",
+        "external-controller",
+        "external-controller-tls",
+        "external-controller-pipe",
+        "external-controller-unix",
+        "external-ui",
+        "secret",
+        "redir-port",
+        "tproxy-port",
+        "iptables",
+        "experimental",
+    ] {
+        map.remove(key);
+    }
+    map.insert("allow-lan".into(), Value::Bool(false));
+    map.insert("bind-address".into(), Value::String("127.0.0.1".into()));
+    if map.contains_key("tun") {
+        map.insert("tun".into(), serde_json::json!({ "enable": false }));
+    }
+    let has_port = ["port", "socks-port", "mixed-port"]
+        .iter()
+        .any(|k| map.get(*k).and_then(Value::as_u64).is_some_and(|p| p > 0));
+    if !has_port {
+        map.insert("mixed-port".into(), serde_json::json!(7890));
+    }
+    Ok(root)
 }
 
 #[tauri::command]
@@ -250,12 +319,41 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
         settings.insert("store-selected".into(), Value::Bool(true));
     }
     if tun {
-        normalized["tun"] = serde_json::json!({
+        let mut tun_cfg = serde_json::json!({
             "enable": true,
             "stack": "mixed",
             "auto-route": true,
             "auto-detect-interface": true,
         });
+        let scope = profile::tun_scope(&configured);
+        let is_rule_mode = normalized["mode"]
+            .as_str()
+            .is_none_or(|m| m.eq_ignore_ascii_case("rule"));
+        if scope == "selected" && is_rule_mode {
+            let paths = profile::scoped_tun_process_paths(&configured);
+            if paths.is_empty() {
+                return Err(
+                    "当前未勾选任何需要 TUN 接管的分组或程序，请先在分流与程序中开启目标 TUN，或将接管范围切换为「全部受支持流量」。"
+                        .into(),
+                );
+            }
+            let names: Vec<String> = paths
+                .iter()
+                .filter_map(|p| Path::new(p).file_name()?.to_str().map(str::to_owned))
+                .collect();
+            tun_cfg["include-process-path"] = serde_json::json!(paths);
+            if !names.is_empty() {
+                tun_cfg["include-process"] = serde_json::json!(names);
+            }
+        }
+        normalized["tun"] = tun_cfg;
+        if normalized.get("dns").is_none() {
+            normalized["dns"] = serde_json::json!({
+                "enable": true,
+                "enhanced-mode": "fake-ip",
+                "nameserver": ["223.5.5.5", "1.1.1.1"],
+            });
+        }
     }
     let management = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).map_err(|err| err.to_string())?;
     let endpoint = management.local_addr().map_err(|err| err.to_string())?;
@@ -288,9 +386,8 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
             .stdin(Stdio::null())
             .stdout(log)
             .stderr(stderr);
-        let (child, job) =
-            tun_worker::spawn_managed_core(command).map_err(|err| err.to_string())?;
-        CoreProcess::Local { child, _job: job }
+        let managed = tun_worker::spawn_managed_core(command).map_err(|err| err.to_string())?;
+        CoreProcess::Local(managed)
     });
     let deadline = Instant::now() + Duration::from_secs(if tun { 12 } else { 3 });
     while Instant::now() < deadline {
@@ -348,9 +445,8 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
 fn terminate(process: &mut Option<CoreProcess>) -> Result<(), String> {
     if running(process)? {
         match process.as_mut().expect("a running process is present") {
-            CoreProcess::Local { child, .. } => {
-                child.kill().map_err(|err| err.to_string())?;
-                child.wait().map_err(|err| err.to_string())?;
+            CoreProcess::Local(managed) => {
+                managed.terminate().map_err(|err| err.to_string())?;
             }
             CoreProcess::Tun(worker) => worker.stop().map_err(|err| err.to_string())?,
         }
@@ -385,8 +481,9 @@ async fn import_core_config(app: AppHandle, content: String) -> Result<CoreStatu
     }
     tauri::async_runtime::spawn_blocking(move || {
         let content = content.trim_start_matches('\u{feff}');
-        validate_config(content)?;
-        let config = serde_json::from_str(content).map_err(|err| err.to_string())?;
+        let config = sanitize_imported_config(content)?;
+        let normalized = serde_json::to_string(&config).map_err(|err| err.to_string())?;
+        validate_config(&normalized)?;
         require_core_access(&app)?;
         let dir = core_dir(&app)?;
         let state = app.state::<Core>();
@@ -611,7 +708,7 @@ fn save_profile(dir: &Path, config: &Value) -> Result<(), String> {
 }
 
 fn validate_with_core(dir: &Path, config: &Value) -> Result<(), String> {
-    if !dir.join("mihomo.exe").is_file() {
+    if !dir.join(CORE_BINARY).is_file() {
         return Ok(());
     }
     let path = dir.join("routepilot-profile-check.json");
@@ -755,9 +852,27 @@ fn update_profile(
 #[tauri::command]
 async fn import_subscription_link(app: AppHandle, url: String) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        if share_links::looks_like_share_links(&url) {
+            return update_profile(&app, true, |config, _, first| {
+                profile::import_node_links(config, &url, first)?;
+                Ok(())
+            });
+        }
         update_profile(&app, true, |config, _, first| {
             profile::import_subscription(config, &url, first)?;
             profile::select_subscription(config, None)
+        })
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+async fn import_node_links(app: AppHandle, content: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        update_profile(&app, true, |config, _, first| {
+            profile::import_node_links(config, &content, first)?;
+            Ok(())
         })
     })
     .await
@@ -975,12 +1090,12 @@ async fn mihomo_exit_ip(app: AppHandle, state: State<'_, Core>) -> Result<String
         .ok_or("The IP service returned an invalid address".into())
 }
 
-#[tauri::command]
-async fn windows_network_details() -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let windows = std::env::var_os("SystemRoot").ok_or("Windows installation path unavailable")?;
-        let shell = PathBuf::from(windows).join("System32/WindowsPowerShell/v1.0/powershell.exe");
-        let command = r#"
+#[cfg(windows)]
+fn read_network_details() -> Result<Value, String> {
+    use std::os::windows::process::CommandExt;
+    let windows = std::env::var_os("SystemRoot").ok_or("Windows installation path unavailable")?;
+    let shell = PathBuf::from(windows).join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let command = r#"
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $ErrorActionPreference='Stop'
 $active=@([Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
@@ -990,12 +1105,132 @@ $addresses=@($active | ForEach-Object { $_.UnicastAddresses | ForEach-Object { $
 $dns=@($active | ForEach-Object { $_.DnsAddresses | ForEach-Object { $_.ToString() } } | Sort-Object -Unique)
 @{addresses=$addresses;dns=$dns} | ConvertTo-Json -Compress
 "#;
-        let output = Command::new(shell)
-            .args(["-NoProfile", "-NonInteractive", "-Command", command])
-            .creation_flags(CREATE_NO_WINDOW).output().map_err(|err| err.to_string())?;
-        if !output.status.success() { return Err("Windows IP or DNS information is unavailable".into()); }
-        serde_json::from_slice(&output.stdout).map_err(|err| err.to_string())
-    }).await.map_err(|err| err.to_string())?
+    let output = Command::new(shell)
+        .args(["-NoProfile", "-NonInteractive", "-Command", command])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|err| err.to_string())?;
+    if !output.status.success() {
+        return Err("Windows IP or DNS information is unavailable".into());
+    }
+    serde_json::from_slice(&output.stdout).map_err(|err| err.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn read_network_details() -> Result<Value, String> {
+    use std::collections::BTreeSet;
+    let mut addresses = BTreeSet::new();
+    let mut dns = BTreeSet::new();
+    if let Ok(output) = Command::new("/sbin/ifconfig").output() {
+        if output.status.success() {
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix("inet ") {
+                    if let Some(ip) = rest.split_whitespace().next() {
+                        if !ip.starts_with("127.") {
+                            addresses.insert(ip.to_owned());
+                        }
+                    }
+                } else if let Some(rest) = trimmed.strip_prefix("inet6 ") {
+                    if let Some(ip) = rest.split_whitespace().next() {
+                        let clean = ip.split('%').next().unwrap_or(ip);
+                        if clean != "::1" && !clean.starts_with("fe80:") {
+                            addresses.insert(clean.to_owned());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(output) = Command::new("/usr/sbin/scutil").arg("--dns").output() {
+        if output.status.success() {
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                let trimmed = line.trim();
+                if let Some((_, val)) = trimmed
+                    .strip_prefix("nameserver[")
+                    .and_then(|s| s.split_once(':'))
+                {
+                    let addr = val.trim();
+                    if addr.parse::<std::net::IpAddr>().is_ok() {
+                        dns.insert(addr.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "addresses": addresses.into_iter().collect::<Vec<_>>(),
+        "dns": dns.into_iter().collect::<Vec<_>>(),
+    }))
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+fn read_network_details() -> Result<Value, String> {
+    use std::collections::BTreeSet;
+    let mut addresses = BTreeSet::new();
+    let mut dns = BTreeSet::new();
+    if let Ok(output) = Command::new("ip").args(["-o", "addr", "show", "up"]).output() {
+        if output.status.success() {
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 4 && (parts[2] == "inet" || parts[2] == "inet6") {
+                    let ip = parts[3].split('/').next().unwrap_or("");
+                    if !ip.starts_with("127.") && ip != "::1" && !ip.starts_with("fe80:") {
+                        addresses.insert(ip.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(resolv) = fs::read_to_string("/etc/resolv.conf") {
+        for line in resolv.lines() {
+            if let Some(ip) = line.trim().strip_prefix("nameserver ") {
+                let ip = ip.trim();
+                if ip.parse::<std::net::IpAddr>().is_ok() {
+                    dns.insert(ip.to_owned());
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "addresses": addresses.into_iter().collect::<Vec<_>>(),
+        "dns": dns.into_iter().collect::<Vec<_>>(),
+    }))
+}
+
+#[tauri::command]
+async fn windows_network_details() -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(read_network_details)
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+async fn system_network_details() -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(read_network_details)
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+fn window_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.minimize().map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn window_toggle_maximize(window: tauri::WebviewWindow) -> Result<bool, String> {
+    if window.is_maximized().map_err(|err| err.to_string())? {
+        window.unmaximize().map_err(|err| err.to_string())?;
+        Ok(false)
+    } else {
+        window.maximize().map_err(|err| err.to_string())?;
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn window_close(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.close().map_err(|err| err.to_string())
 }
 
 fn main() {
@@ -1053,11 +1288,18 @@ fn main() {
                     });
                 }
             }
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_decorations(false);
+            }
             tray::install(app.handle())?;
             Ok(())
         })
         .on_window_event(tray::on_window_event)
         .invoke_handler(tauri::generate_handler![
+            window_minimize,
+            window_toggle_maximize,
+            window_close,
             tray::update_tray_menu,
             tray::show_routepilot,
             core_status,
@@ -1073,6 +1315,7 @@ fn main() {
             set_subscription_scope,
             core_profile_backup,
             import_subscription_link,
+            import_node_links,
             import_subscription_file,
             connection_log::connection_log_rows,
             processes::list_running_processes,
@@ -1084,7 +1327,8 @@ fn main() {
             mihomo_api::mihomo_refresh_provider,
             mihomo_website_probe,
             mihomo_exit_ip,
-            windows_network_details
+            windows_network_details,
+            system_network_details
         ])
         .build(tauri::generate_context!())
         .expect("failed to initialize RoutePilot")
@@ -1102,7 +1346,31 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{subscription_usage, validate_config};
+    use super::{sanitize_imported_config, subscription_usage, validate_config};
+
+    #[test]
+    fn accepts_third_party_yaml_or_json_with_dns_after_sanitization() {
+        let yaml = r#"
+mixed-port: 7890
+allow-lan: true
+external-controller: 0.0.0.0:9090
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  nameserver:
+    - 223.5.5.5
+    - 1.1.1.1
+rules:
+  - MATCH,DIRECT
+"#;
+        let sanitized = sanitize_imported_config(yaml).unwrap();
+        assert_eq!(sanitized["allow-lan"], false);
+        assert_eq!(sanitized["bind-address"], "127.0.0.1");
+        assert!(sanitized.get("external-controller").is_none());
+        assert_eq!(sanitized["dns"]["enable"], true);
+        let json_str = serde_json::to_string(&sanitized).unwrap();
+        assert_eq!(validate_config(&json_str).unwrap(), vec![7890]);
+    }
 
     #[test]
     fn subscription_header_keeps_valid_usage_fields() {

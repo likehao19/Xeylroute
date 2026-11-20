@@ -1,5 +1,4 @@
 node_modules/
-index.html
 src/prototype.js
 dist/
 src-tauri/target/
