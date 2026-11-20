@@ -111,7 +111,10 @@ export function mountDesktopApp(shell: ShellController): void {
   const root = document.documentElement;
   root.classList.add('tauri-native');
 
+  const dragRegions = document.querySelectorAll<HTMLElement>('[data-tauri-drag-region]');
   function applyPlatformClass(platform: 'macos' | 'windows' | 'linux'): void {
+    if (root.classList.contains(`platform-${platform}`)) return;
+    dragRegions.forEach(el => el.toggleAttribute('data-tauri-drag-region', platform !== 'windows'));
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
     root.classList.toggle('vibrant', platform === 'macos');
@@ -131,8 +134,11 @@ export function mountDesktopApp(shell: ShellController): void {
   $('winMinBtn').addEventListener('click', () => { void tauriApi.windowMinimize(); });
   $('winMaxBtn').addEventListener('click', toggleMaximize);
   $('winCloseBtn').addEventListener('click', () => { void tauriApi.windowClose(); });
-  $('toolbarDragSpacer').addEventListener('dblclick', toggleMaximize);
+  $('toolbarDragSpacer').addEventListener('dblclick', () => {
+    if (!root.classList.contains('platform-windows')) toggleMaximize();
+  });
 
+  $('topSpeedBtn').setAttribute('aria-label', '测量全部节点的 HTTP 延迟');
   $('topSpeedBtn').dataset.tip = '测量全部节点的 HTTP 延迟';
   $('topSpeedBtn').querySelector('span')!.textContent = '测延迟';
   $('tunScopeHelp').textContent = '全局 TUN 接管系统流量，可用程序规则指定出口。';
@@ -898,8 +904,7 @@ export function mountDesktopApp(shell: ShellController): void {
     if (batchTesting || networkUpdating || changingSubscription) return;
     const generation = probeGeneration;
     batchTesting = true;
-    const toolbar = $<HTMLButtonElement>('topSpeedBtn');
-    toolbar.disabled = true;
+    $<HTMLButtonElement>('topSpeedBtn').disabled = true;
     renderView();
     try {
       if (!await ensureLocalCore()) throw new Error('请先添加订阅或节点链接。');
@@ -917,7 +922,7 @@ export function mountDesktopApp(shell: ShellController): void {
       notify(cleanError(err), true);
     } finally {
       batchTesting = false;
-      toolbar.disabled = false;
+      renderHeaderState();
       scheduleProbeRender();
     }
   }
@@ -976,6 +981,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
     const realNodes = allSelectableNodes();
     const storedRules = (liveProfile?.rules || []).filter(r => !r.startsWith('MATCH,'));
+    $<HTMLButtonElement>('topSpeedBtn').disabled = batchTesting || liveStatus?.configured === false;
     $('navNodeBadge').textContent = String(realNodes.length);
     $('navRuleBadge').textContent = String(storedRules.length);
     $('navSubBadge').textContent = String(liveProfile?.providers.length ?? 0);
@@ -997,7 +1003,9 @@ export function mountDesktopApp(shell: ShellController): void {
     pBtn.disabled = networkUpdating;
     pBtn.classList.toggle('off-state', !isOn);
     $('topPowerLabel').textContent = networkUpdating ? '处理中…' : isOn ? '断开' : '连接';
-    $('sideCoreLabel').textContent = liveStatus?.available ? 'Mihomo Core' : '缺少 Mihomo 内核';
+    $('sideCoreLabel').textContent = liveStatus
+      ? liveStatus.available ? 'Mihomo Core' : '缺少 Mihomo 内核'
+      : liveError ? '内核状态未知' : '正在检查内核…';
 
     syncTray();
   }
@@ -1195,13 +1203,16 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   function renderNodes(): void {
-    $('nodesGroupsPane').hidden = nodesSub !== 'groups';
+    const needsImport = liveStatus?.configured === false;
+    $('nodesEmpty').hidden = nodesSub !== 'groups' || !needsImport;
+    $('nodesGroupsPane').hidden = nodesSub !== 'groups' || needsImport;
     $('nodesSitesPane').hidden = nodesSub !== 'sites';
     const actBtn = $<HTMLButtonElement>('nodesActionBtn');
     actBtn.textContent = batchTesting ? '测速中…' : nodesSub === 'groups' ? '全部测延迟' : '全部站点测速';
-    actBtn.disabled = batchTesting || networkUpdating || changingSubscription;
+    actBtn.hidden = nodesSub === 'groups' && needsImport;
+    actBtn.disabled = needsImport || batchTesting || networkUpdating || changingSubscription;
     const bandwidth = $<HTMLButtonElement>('nodesBandwidthBtn');
-    bandwidth.hidden = nodesSub !== 'groups';
+    bandwidth.hidden = nodesSub !== 'groups' || needsImport;
     bandwidth.disabled = actBtn.disabled;
 
     const scopePill = $('nodesScopePill');
@@ -1217,6 +1228,7 @@ export function mountDesktopApp(shell: ShellController): void {
       renderSiteTests();
       return;
     }
+    if (needsImport) return;
     const shared = sharedDrawerNodes().filter(n => !q || [n.name, n.type].join(' ').toLowerCase().includes(q));
     const activeExit = activeGlobalExit();
 
@@ -2375,6 +2387,7 @@ export function mountDesktopApp(shell: ShellController): void {
   });
 
   $('topSpeedBtn').addEventListener('click', () => void runBatch('delay'));
+  $('nodesImportBtn').addEventListener('click', openImportSheet);
   $('topImportBtn').addEventListener('click', openImportSheet);
   $('heroProbeBtn').addEventListener('click', () => {
     const active = activeGlobalExit();

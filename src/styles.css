@@ -2091,13 +2091,11 @@
       padding-left: 96px;
     }
 
-    /* Windows & Linux frameless: brand icon+name replaces traffic-lights slot,
-       and native-style window controls sit at the far top-right of the toolbar */
+    /* Linux uses client-side window controls. Windows keeps its system frame. */
     :root.tauri-native.platform-windows .traffic-lights,
     :root.tauri-native.platform-linux .traffic-lights {
       display: none;
     }
-    :root.tauri-native.platform-windows .sidebar-top-brand,
     :root.tauri-native.platform-linux .sidebar-top-brand {
       display: inline-flex;
     }
@@ -2116,7 +2114,6 @@
     .win-controls {
       display: none;
     }
-    :root.tauri-native.platform-windows .win-controls,
     :root.tauri-native.platform-linux .win-controls {
       display: inline-flex;
     }
@@ -2449,3 +2446,95 @@
       :root.vibrant .mac-window { background: var(--window-bg); }
       .mac-menu-popover, .modal-sheet { backdrop-filter: none; background: var(--window-bg); }
     }
+
+    .node-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+    #nodesScopePill { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nodes-empty { padding: 36px 24px; }
+    .nodes-empty strong { font-size: 17px; }
+    .nodes-empty p { margin: 6px 0 18px; color: var(--muted); }
+
+    /* An opaque client area below the Windows system title bar. */
+    :root.platform-windows {
+      --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      --window-bg: #202020;
+      --sidebar-surface: #252525;
+      --card-surface: #2c2c2c;
+      --win-line: #444;
+      --muted: #b9bbc2;
+      --subtle: #a2a5ac;
+      --nav-active-sq: transparent;
+      --win-accent: #83caff;
+      --win-action: #075987;
+      --lg-accent-bg: var(--win-action);
+      --lg-accent-bg-hover: #0a6b9e;
+      --card-shadow: inset 0 0 0 1px var(--win-line);
+      --lg-shadow: none;
+      --lg-accent-shadow: none;
+      --nav-active-bg: var(--node-hover);
+      --nav-active-ink: var(--ink);
+    }
+    :root.platform-windows[data-theme="light"] {
+      --window-bg: #f6f7f9;
+      --sidebar-surface: #eff1f4;
+      --card-surface: #fff;
+      --win-line: #d9dde2;
+      --muted: #505a65;
+      --subtle: #5e6874;
+      --win-accent: #0067a3;
+      --win-action: #0067a3;
+    }
+    .platform-windows .mac-window { background: var(--window-bg); }
+    .platform-windows .sidebar {
+      margin: 0; border-radius: 0; box-shadow: inset -1px 0 var(--win-line);
+    }
+    .platform-windows .sidebar-top { position: absolute; top: 12px; right: 10px; z-index: 1; }
+    :root.platform-windows.tauri-native .sidebar-brand-row { min-height: 32px; padding: 0 34px 0 8px; }
+    .platform-windows .sidebar::before, .platform-windows .sidebar::after,
+    .platform-windows .glass-toolbar::before { content: none; }
+    .platform-windows .glass-toolbar {
+      position: relative; flex: none; height: 54px; padding-block: 0;
+      border-bottom: 1px solid var(--win-line); pointer-events: auto;
+    }
+    .platform-windows .view { padding-top: 16px; }
+    .platform-windows .stage-title { font-size: 18px; font-weight: 600; }
+    .platform-windows :is(.glass-capsule, .glass-circle, .online-pill) {
+      background: transparent; box-shadow: none; border-radius: 4px;
+    }
+    .platform-windows .glass-capsule { gap: 2px; overflow: visible; }
+    .platform-windows .glass-capsule .cap-sep { display: none; }
+    .platform-windows .glass-capsule button { padding-inline: 9px; border-radius: 4px; }
+    .platform-windows .glass-circle:hover { background: var(--node-hover); }
+    .platform-windows .online-pill { padding-inline: 6px; color: var(--muted); }
+    .platform-windows .online-pill .dot { box-shadow: none; }
+    .platform-windows :is(.glass-btn-primary, .glass-btn-soft, .glass-search, .mode-pill, .mode-pill-thumb, .nav-item) { border-radius: 5px; }
+    .platform-windows .glass-btn-soft, .platform-windows .glass-btn-primary.off-state {
+      background: var(--card-surface); border: 1px solid var(--win-line);
+    }
+    .platform-windows :is(.glass-btn-soft, .glass-btn-primary.off-state):hover { background: var(--node-hover); }
+    .platform-windows .nav-item { position: relative; min-height: 34px; }
+    .platform-windows .nav-item.active { box-shadow: none; }
+    .platform-windows .nav-item.active::before {
+      content: ""; position: absolute; left: 0; width: 3px; height: 16px;
+      border-radius: 2px; background: var(--win-accent);
+    }
+    :root.platform-windows .nav-item .sq { background: transparent; color: inherit; box-shadow: none; }
+    .platform-windows .nav-item .sq svg { width: 16px; height: 16px; }
+    .platform-windows .sub-seg { background: none; box-shadow: none; padding: 0; }
+    .platform-windows .sub-seg button {
+      position: relative; height: 34px; border-radius: 4px; padding-inline: 10px;
+    }
+    .platform-windows .sub-seg button.active { background: transparent; box-shadow: none; }
+    .platform-windows .sub-seg button:hover { background: var(--node-hover); }
+    .platform-windows .sub-seg button.active::after {
+      content: ""; position: absolute; bottom: 0; left: 10px; right: 10px;
+      height: 2px; background: var(--win-accent);
+    }
+    .platform-windows :is(.group-drawer, .mac-card) { border-radius: 8px; }
+    .platform-windows .cp-node { border-radius: 5px; box-shadow: none; }
+    .platform-windows .cp-node.selected { border-color: var(--win-accent); }
+    .platform-windows :is(.mac-menu-popover, .modal-sheet) {
+      background: var(--card-surface); backdrop-filter: none; -webkit-backdrop-filter: none;
+    }
+    .platform-windows .modal-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+    .platform-windows .modal-sheet::after { content: none; }
+    .platform-windows .glass-btn-primary:disabled { cursor: default; }

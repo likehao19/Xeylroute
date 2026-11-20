@@ -23,7 +23,7 @@
           <strong>Xeylroute</strong>
         </div>
         <div class="sidebar-top-spacer" data-tauri-drag-region></div>
-        <button type="button" class="sidebar-toggle-btn" id="sidebarCollapseBtn" data-tip="隐藏边栏 (⌘S)">
+        <button type="button" class="sidebar-toggle-btn" id="sidebarCollapseBtn" aria-label="隐藏边栏" data-tip="隐藏边栏 (⌘S)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>
           </svg>
@@ -146,16 +146,16 @@
     <div class="detail-stage">
       <header class="glass-toolbar" data-tauri-drag-region>
         <div class="toolbar-left">
-          <button type="button" class="glass-circle lg-track toolbar-sidebar-btn" id="sidebarExpandBtn" data-tip="显示边栏 (⌘S)">
+          <button type="button" class="glass-circle lg-track toolbar-sidebar-btn" id="sidebarExpandBtn" aria-label="显示边栏" data-tip="显示边栏 (⌘S)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
           </button>
 
           <div class="glass-capsule lg-track">
-            <button type="button" id="navBackBtn" data-tip="返回" disabled>
+            <button type="button" id="navBackBtn" aria-label="返回" data-tip="返回" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             </button>
             <span class="cap-sep"></span>
-            <button type="button" id="navForwardBtn" data-tip="前进" disabled>
+            <button type="button" id="navForwardBtn" aria-label="前进" data-tip="前进" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </button>
           </div>
@@ -172,18 +172,18 @@
 
         <div class="toolbar-right">
           <div class="glass-capsule lg-track">
-            <button type="button" id="topSpeedBtn" data-tip="全部节点延迟与速度测速">
+            <button type="button" id="topSpeedBtn" aria-label="全部节点测速" data-tip="全部节点延迟与速度测速">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 13 3.5-3.5"/></svg>
               <span>测速</span>
             </button>
             <span class="cap-sep"></span>
-            <button type="button" id="topImportBtn" data-tip="导入订阅或分享链接">
+            <button type="button" id="topImportBtn" aria-label="导入订阅或节点" data-tip="导入订阅或分享链接">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
               <span>导入</span>
             </button>
           </div>
 
-          <button type="button" class="glass-circle lg-track" id="topThemeBtn" data-tip="切换深色 / 浅色外观">
+          <button type="button" class="glass-circle lg-track" id="topThemeBtn" aria-label="切换明暗主题" data-tip="切换深色 / 浅色外观">
             <svg id="themeSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
           </button>
 
@@ -362,13 +362,18 @@
               <button type="button" class="active" data-nodes-sub="groups">代理组与节点</button>
               <button type="button" data-nodes-sub="sites">常用网站测速</button>
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div class="node-actions">
               <span class="pill" id="nodesScopePill" hidden></span>
               <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
               <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
             </div>
           </div>
 
+          <div class="nodes-empty mac-card" id="nodesEmpty" hidden>
+            <strong>还没有代理节点</strong>
+            <p>导入订阅链接、节点分享链接或本地配置文件。</p>
+            <button type="button" class="glass-btn-primary compact" id="nodesImportBtn">导入节点或订阅</button>
+          </div>
           <div id="nodesGroupsPane"></div>
           <div id="nodesSitesPane" hidden></div>
         </section>

@@ -1385,7 +1385,7 @@ fn main() {
                     });
                 }
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_decorations(false);
             }
