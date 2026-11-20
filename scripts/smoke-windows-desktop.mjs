@@ -40,6 +40,7 @@ const proxy = () => ps("$s=Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/Cu
 const route = async (address = '192.0.2.123') => (await promisify(execFile)('python', ['scripts/windows_routes.py', address])).stdout.trim();
 const initialProxy = await proxy();
 const initialRoute = await route();
+const gateway = await ps(`([Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object { $_.GetIPProperties().GetIPv4Properties().Index -eq ${Number(initialRoute)} }).GetIPProperties().GatewayAddresses.Address.IPAddressToString | Where-Object { $_ -match '^[0-9.]+$' } | Select-Object -First 1`);
 assert.ok(Number(initialRoute) > 0);
 const port = await unusedPort();
 assert.ok(!fs.existsSync(data), 'Expected a fresh user profile');
@@ -104,17 +105,18 @@ try {
   await waitToggle('#sideTunToggle', true);
   const activeRoute = await route();
   assert.ok(Number(activeRoute) > 0 && activeRoute !== initialRoute);
-  // Move only the documentation address to loopback and back, leaving the CI uplink alone.
-  const loopback = await route('127.0.0.1');
-  const routeArgs = ['192.0.2.123', 'MASK', '255.255.255.255', '127.0.0.1', 'IF', loopback];
-  await promisify(execFile)('route.exe', ['ADD', ...routeArgs]);
+  assert.equal(net.isIPv4(gateway), true, 'Expected an IPv4 gateway for the test uplink');
+  const routeArgs = ['interface', 'ipv4', 'route', 'prefix=192.0.2.123/32',
+    'interface=' + initialRoute, 'nexthop=' + gateway, 'store=active'];
+  const netsh = (action, ...extra) => promisify(execFile)('netsh.exe',
+    [...routeArgs.slice(0, 2), action, ...routeArgs.slice(2), ...extra]);
+  await netsh('add', 'metric=1');
   try {
-    assert.equal(await route(), loopback);
-    assert.notEqual(activeRoute, loopback);
+    await until('test address to return to the original interface', async () => (await route()) === initialRoute);
   } finally {
-    await promisify(execFile)('route.exe', ['DELETE', ...routeArgs]);
+    await netsh('delete');
   }
-  assert.equal(await route(), activeRoute);
+  await until('test address to return to TUN', async () => (await route()) === activeRoute);
   await promisify(execFile)('curl.exe', ['--noproxy', '*', '--max-time', '3', 'http://192.0.2.123:18080/']).catch(() => {});
   await until('actual TUN decision', () => fs.readFileSync(path.join(data, 'mihomo.log'), 'utf8')
     .split('\n').some(line => line.includes('192.0.2.123:18080') && line.includes('REJECT')));

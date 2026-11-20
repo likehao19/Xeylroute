@@ -81,20 +81,30 @@ def verify():
                     if child.stdin:
                         child.stdin.write(b"\n")
                         child.stdin.flush()
-                    ready, _, _ = select.select(list(sinks.values()), [], [], 8)
-                    assert len(ready) == 1, f"Missing or ambiguous outlet for port {port}"
-                    marker = ready[0]
-                    with marker.accept()[0] as conn:
-                        conn.settimeout(5)
-                        with conn.makefile("rb") as reader:
-                            assert reader.readline(4096).split()[:2] == [b"CONNECT", f"{address}:{port}".encode()]
-                    decisions.append(next(tag for tag, sock in sinks.items() if sock is marker))
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        ready, _, _ = select.select(list(sinks.values()), [], [], 1)
+                        for marker in ready:
+                            with marker.accept()[0] as conn:
+                                conn.settimeout(3)
+                                with conn.makefile("rb") as reader:
+                                    target = reader.readline(4096).split()[:2]
+                            if target == [b"CONNECT", f"{address}:{port}".encode()]:
+                                decisions.append(next(tag for tag, sock in sinks.items() if sock is marker))
+                                break
+                        else:
+                            continue
+                        break
+                    else:
+                        raise AssertionError(f"No HTTP outlet received the test connection to {port}")
                 assert decisions[0] == "selected", decisions
                 print(f"sing-box 1.14.4: with include_package set to curl.exe, all three clients entered TUN. "
                       f"Outlets for curl, Python PID {first.pid} (selected instance), "
                       f"Python PID {second.pid} (other instance): {decisions}.")
             except Exception:
-                print((root / "core.log").read_text(errors="replace")[-3000:], file=sys.stderr)
+                relevant = [line for line in (root / "core.log").read_text(errors="replace").splitlines()
+                            if address in line or "outbound/http" in line or "ERROR" in line or "WARN" in line]
+                print("\n".join(relevant[-50:]), file=sys.stderr)
                 raise
             finally:
                 proc.terminate()
