@@ -2665,4 +2665,47 @@
     .batch-rule-list { max-height: min(44vh, 350px); overflow-y: auto; }
     .batch-rule-list .picker-meta { flex: 1; min-width: 0; }
     .batch-rule-list small { color: var(--muted); }
-    .sheet-textarea.yaml-editor { min-height: min(35vh, 260px); font: 12px/1.6 var(--font-mono); white-space: pre; tab-size: 2; }
+    .modal-sheet:has(.doc-editor) {
+      --doc-paper: #1b1c20;
+      --doc-chrome: #25262b;
+      width: min(760px, 100%);
+      height: min(680px, 82vh);
+      background: var(--doc-chrome);
+    }
+    [data-theme="light"] .modal-sheet:has(.doc-editor) {
+      --doc-paper: #fff;
+      --doc-chrome: #f7f8fa;
+    }
+    .modal-sheet:has(.short-document) { height: min(470px, 82vh); }
+    .modal-sheet:has(.doc-editor) .sheet-head { padding: 17px 20px 15px; border-bottom: 1px solid var(--inset-divider); }
+    .modal-sheet:has(.doc-editor) .sheet-head p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .doc-icon {
+      display: grid; place-items: center; width: 34px; height: 38px;
+      flex: none; color: var(--accent); background: var(--accent-soft); border-radius: 9px;
+    }
+    .doc-icon svg { width: 23px; height: 23px; }
+    .modal-sheet:has(.doc-editor) .sheet-body { flex: 1; padding: 0; gap: 0; }
+    .doc-name { display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: var(--doc-paper); }
+    .doc-name label, .doc-bar { font-size: 12px; font-weight: 550; color: var(--ink-2); }
+    .doc-name .sheet-input { flex: 1; min-width: 0; border-radius: 6px; height: 30px; }
+    .modal-sheet .doc-name .sheet-input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--focus-ring); }
+    .doc-editor { flex: 1; display: flex; flex-direction: column; min-height: 90px; background: var(--doc-paper); }
+    .doc-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; border-bottom: 1px solid var(--inset-divider); }
+    .doc-name + .doc-editor .doc-bar { border-top: 1px solid var(--inset-divider); }
+    #docCount { color: var(--muted); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+    .doc-code { display: flex; flex: 1; min-height: 0; font: 13px/22px var(--font-mono); }
+    .doc-code:focus-within { box-shadow: inset 2px 0 var(--focus-ring); }
+    .doc-gutter {
+      width: 4ch; flex: none; overflow: hidden; text-align: right; user-select: none;
+      background: var(--inset-divider); color: var(--muted);
+    }
+    .doc-gutter pre { font: inherit; margin: 0; padding: 12px 9px 0 0; }
+    .doc-code textarea {
+      flex: 1; min-width: 0; resize: none; margin: 0; padding: 12px 14px;
+      font: inherit; color: var(--ink); caret-color: var(--accent); white-space: pre;
+      tab-size: 2; border: 0; outline: 0; border-radius: 0; background: transparent;
+    }
+    .modal-sheet:has(.doc-editor) :is(.sheet-hint, .sheet-error:not(:empty)) { padding: 8px 20px; margin: 0; }
+    .modal-sheet:has(.doc-editor) .sheet-actions { padding: 11px 16px; border-top: 1px solid var(--inset-divider); }
+    .sub-refresh-result { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+    .sub-refresh-result.failed { color: var(--red); }

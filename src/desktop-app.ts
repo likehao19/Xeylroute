@@ -165,6 +165,9 @@ export function mountDesktopApp(shell: ShellController): void {
   const subscriptionSelections = loadMap<string>(KEY_SUB_EXITS);
   const subscriptionCardData = loadMap<CardMeta>(KEY_SUB_CARD);
   const subscriptionCardReads = new Set<string>();
+  const refreshResults = new Map<string, { message: string; failed?: boolean }>();
+  let providerRefresh: { total: number; done: number; batch: boolean } | null = null;
+  let subscriptionCardsHtml = '';
   const groupSelections = loadMap<string>(KEY_GROUP_EXITS);
   let restoredGroupScope: string | null = null;
   let scopeMigrationAttempted = false;
@@ -393,6 +396,7 @@ export function mountDesktopApp(shell: ShellController): void {
   function applyProfile(profile: ProfileSummary): void {
     liveProfile = profile;
     const providerNames = new Set(profile.providers.map(p => p.name));
+    for (const name of refreshResults.keys()) if (!providerNames.has(name)) refreshResults.delete(name);
     for (const name of [...subscriptionCardData.keys()]) {
       if (!providerNames.has(name)) {
         subscriptionCardData.delete(name);
@@ -1614,11 +1618,53 @@ export function mountDesktopApp(shell: ShellController): void {
     });
   }
 
+  async function refreshSubscriptions(single?: string): Promise<void> {
+    if (providerRefresh || changingSubscription || networkUpdating) return;
+    const names = single ? [single] : (liveProfile?.providers || []).filter(p => p.type === 'http').map(p => p.name);
+    if (!names.length) return;
+    const progress = { total: names.length, done: 0, batch: !single };
+    providerRefresh = progress;
+    for (const name of names) refreshResults.set(name, { message: '等待刷新' });
+    renderView();
+    let failed = 0;
+    try {
+      if (!await ensureLocalCore()) throw new Error('没有可刷新的代理配置');
+      for (const name of names) {
+        refreshResults.set(name, { message: '正在刷新…' });
+        renderView();
+        try {
+          await tauriApi.mihomoRefreshProvider(name);
+          const detail = await loadSubscriptionMeta(name, true);
+          refreshResults.set(name, { message: detail ? `节点已更新，订阅信息读取失败：${detail}` : '已刷新', failed: !!detail });
+          if (detail) failed++;
+        } catch (err) {
+          refreshResults.set(name, { message: cleanError(err), failed: true });
+          failed++;
+        }
+        progress.done++;
+      }
+      await refreshLiveState(true);
+      if (single) notify(refreshResults.get(single)?.message || '已刷新', failed > 0);
+      else notify(failed ? `已处理 ${names.length} 个订阅，${failed} 个有异常` : `已刷新 ${names.length} 个订阅`, failed > 0);
+    } catch (err) {
+      const message = cleanError(err);
+      for (const name of names.slice(progress.done)) refreshResults.set(name, { message, failed: true });
+      notify(message, true);
+    } finally {
+      providerRefresh = null;
+      renderView();
+    }
+  }
+
   function renderSubs(): void {
     $('newYamlBtn').hidden = false;
     $('editConfigBtn').hidden = !liveStatus?.configured;
     const providers = liveProfile?.providers || [];
-    $('subsGridPane').innerHTML = providers.length
+    const refreshAll = $<HTMLButtonElement>('refreshAllSubsBtn');
+    refreshAll.hidden = !providers.some(p => p.type === 'http');
+    refreshAll.disabled = !!providerRefresh || changingSubscription || networkUpdating;
+    refreshAll.textContent = providerRefresh?.batch ? `刷新中 ${providerRefresh.done}/${providerRefresh.total}` : '全部刷新';
+    const cards = providers.length
       ? providers.map(saved => {
           const selected = selectedSubscription === saved.name;
           const remote = saved.type === 'http';
@@ -1630,6 +1676,7 @@ export function mountDesktopApp(shell: ShellController): void {
           const nodeCount = (liveCore?.providers?.providers?.[saved.name]?.proxies ?? subscriptionNodes.get(saved.name) ?? []).filter(isTestableNode).length;
           const expiry = remote && usage?.Expire ? new Date(usage.Expire * 1000).toLocaleDateString() : (remote ? '—' : '本地文件');
           const updated = meta?.updatedAt ? new Date(meta.updatedAt).toLocaleDateString() : '待刷新';
+          const result = refreshResults.get(saved.name);
           return `
             <div class="mac-card sub-card-clickable ${selected ? 'active-sub' : ''}" data-select-sub="${esc(saved.name)}" style="display:flex;flex-direction:column;gap:12px">
               <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1642,7 +1689,7 @@ export function mountDesktopApp(shell: ShellController): void {
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex:none">
                   ${remote || saved.type === 'file' ? `<button type="button" class="sf-icon-btn" data-edit-sub="${esc(saved.name)}" aria-label="编辑订阅" data-tip="编辑订阅">${SF_EDIT}</button>` : ''}
-                  <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(saved.name)}" ${changingSubscription ? 'disabled' : ''}>刷新</button>
+                  <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(saved.name)}" ${providerRefresh || changingSubscription || networkUpdating ? 'disabled' : ''}>刷新</button>
                   <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(saved.name)}" data-tip="移除订阅">${SF_TRASH}</button>
                 </div>
               </div>
@@ -1652,6 +1699,7 @@ export function mountDesktopApp(shell: ShellController): void {
               </div>
               ${saved.ruleExitDisabled ? `<button type="button" class="glass-btn-soft" data-restore-sub-exit="${esc(saved.name)}">恢复规则出口</button>` : ''}
               ${pendingSubscription === saved.name ? `<span style="font-size:11.5px;color:var(--accent)">正在切换订阅配置…</span>` : ''}
+              ${result ? `<span class="sub-refresh-result${result.failed ? ' failed' : ''}">${esc(result.message)}</span>` : ''}
               ${hasQuota ? `
                 <div>
                   <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
@@ -1665,6 +1713,10 @@ export function mountDesktopApp(shell: ShellController): void {
           `;
         }).join('')
       : `<div class="mac-card" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--muted)">还没有订阅。导入后可以在这里切换订阅、刷新节点和查看用量。</div>`;
+    if (cards !== subscriptionCardsHtml) {
+      $('subsGridPane').innerHTML = cards;
+      subscriptionCardsHtml = cards;
+    }
 
     const statics = standaloneNodes();
     const sec = $('standaloneNodesSection');
@@ -2487,6 +2539,7 @@ export function mountDesktopApp(shell: ShellController): void {
   $('nodesImportBtn').addEventListener('click', openImportSheet);
   $('subImportBtn').addEventListener('click', openImportSheet);
   $('newYamlBtn').onclick = () => editDocument('new');
+  $('refreshAllSubsBtn').onclick = () => void refreshSubscriptions();
   $('editConfigBtn').onclick = () => editDocument('config');
   $('heroProbeBtn').addEventListener('click', () => {
     const active = activeGlobalExit();
@@ -2819,19 +2872,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const refSubBtn = target.closest<HTMLElement>('[data-ref-sub]');
     if (refSubBtn?.dataset.refSub) {
       e.stopPropagation();
-      const name = refSubBtn.dataset.refSub;
-      const metaErr = loadSubscriptionMeta(name, true);
-      try {
-        if (await ensureLocalCore()) {
-          await tauriApi.mihomoRefreshProvider(name);
-          await refreshLiveState(true);
-        }
-        const errText = await metaErr;
-        if (errText) notify(errText, true);
-        else notify(`订阅「${name}」已刷新`);
-      } catch (err) {
-        notify((await metaErr) || cleanError(err), true);
-      }
+      void refreshSubscriptions(refSubBtn.dataset.refSub);
       return;
     }
 
