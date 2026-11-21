@@ -81,7 +81,7 @@ fn scoped_profile(profile: &Value) -> std::borrow::Cow<'_, Value> {
             map.remove(field);
         }
     }
-    map.entry("rules").or_insert_with(|| json!(["MATCH,AUTO"]));
+    map.entry("rules").or_insert_with(|| json!(["MATCH,GLOBAL"]));
     map.insert(
         "proxy-providers".into(),
         json!({name: profile["proxy-providers"][name]}),
@@ -735,7 +735,7 @@ pub fn import_node_links(
                 .is_none_or(|p| p.is_empty())
                 && profile["rules"] == json!(["MATCH,DIRECT"])))
     {
-        profile["rules"] = json!(["MATCH,AUTO"]);
+        profile["rules"] = json!(["MATCH,GLOBAL"]);
     }
     Ok(added)
 }
@@ -813,7 +813,7 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
             && entries(profile, "proxy-groups").count() == 1
             && profile["rules"] == json!(["MATCH,DIRECT"]))
     {
-        profile["rules"] = json!([format!("MATCH,{name}")]);
+        profile["rules"] = json!(["MATCH,GLOBAL"]);
     }
     array(profile, "routepilot-imported-providers")?.push(json!(name));
     Ok(())
@@ -1511,7 +1511,7 @@ mod tests {
         let second_runtime = runtime_profile(&config);
         assert_eq!(
             second_runtime["rules"],
-            json!(["DOMAIN,second.example,开发工具", "MATCH,AUTO"])
+            json!(["DOMAIN,second.example,开发工具", "MATCH,GLOBAL"])
         );
         for name in ["AUTO", "GLOBAL"] {
             let group = entries(&second_runtime, "proxy-groups")
@@ -1523,7 +1523,7 @@ mod tests {
         assert_eq!(summary(&config)["groups"][0]["proxies"], json!(["DIRECT"]));
         assert_eq!(
             runtime_profile(&config)["rules"],
-            json!(["DOMAIN,first.example,开发工具", "MATCH,AUTO"])
+            json!(["DOMAIN,first.example,开发工具", "MATCH,GLOBAL"])
         );
         assert_eq!(summary(&config)["providers"].as_array().unwrap().len(), 2);
         select_subscription(&mut config, None).unwrap();
@@ -1658,7 +1658,7 @@ mod tests {
         let mut config = json!({"rules":["MATCH,DIRECT"]});
         let url = "https://example.org/sub?token=private";
         import_subscription(&mut config, url, true).unwrap();
-        assert_eq!(config["rules"], json!(["MATCH,订阅 · example.org"]));
+        assert_eq!(config["rules"], json!(["MATCH,GLOBAL"]));
         assert_eq!(
             config["proxy-groups"][0]["use"],
             json!(["订阅 · example.org"])
@@ -1666,7 +1666,7 @@ mod tests {
         import_subscription(&mut config, url, false).unwrap();
         assert_eq!(config["proxy-providers"].as_object().unwrap().len(), 1);
         import_subscription(&mut config, "https://example.org/second", false).unwrap();
-        assert_eq!(config["rules"], json!(["MATCH,订阅 · example.org"]));
+        assert_eq!(config["rules"], json!(["MATCH,GLOBAL"]));
         assert_eq!(config["proxy-providers"].as_object().unwrap().len(), 2);
         assert!(!summary(&config).to_string().contains("private"));
     }
@@ -1676,6 +1676,8 @@ mod tests {
         let mut config = json!({"rules":["MATCH,DIRECT"]});
         import_subscription_file(&mut config, "local.yaml", "./providers/local.yaml", true)
             .unwrap();
+        // Explicitly using the subscription as the fallback exercises disabling that exit.
+        config["rules"] = json!(["MATCH,local.yaml"]);
         let groups = array(&mut config, "proxy-groups").unwrap();
         groups.push(json!({"name":"Work","type":"select","use":["local.yaml"]}));
         groups.push(json!({"name":"GLOBAL","type":"select","proxies":["Work"]}));
@@ -1813,7 +1815,7 @@ mod tests {
         let added = import_node_links(&mut config, link, true).unwrap();
         assert_eq!(added, 1);
         assert_eq!(config["proxies"][0]["name"], "SG 01");
-        assert_eq!(config["rules"], json!(["MATCH,AUTO"]));
+        assert_eq!(config["rules"], json!(["MATCH,GLOBAL"]));
         // Re-importing the exact same node is a no-op
         assert_eq!(import_node_links(&mut config, link, false).unwrap(), 0);
         // Runtime profile automatically wires static nodes into AUTO & GLOBAL

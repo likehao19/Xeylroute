@@ -2790,7 +2790,7 @@ export function mountDesktopApp(shell: ShellController): void {
       const val = popTrigger.dataset.popupVal || '';
 
       if (kind === 'default-exit') {
-        openMacMenu(popTrigger, buildExitPopupItems().filter(i => i.sep || i.value !== 'GLOBAL'), val, nextVal => {
+        openMacMenu(popTrigger, buildExitPopupItems(), val, nextVal => {
           const idx = liveProfile?.rules?.findIndex(r => r.startsWith('MATCH,')) ?? -1;
           void commitProfileEdit({
             kind: 'rule',
