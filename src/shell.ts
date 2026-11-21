@@ -98,9 +98,8 @@ export function initShell(): ShellController {
     if ($('macWindow').inert && e.key !== 'Escape') return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      const splitSearch = currentView === 'split';
-      if (!splitSearch) $('macWindow').classList.remove('sidebar-collapsed');
-      const input = $<HTMLInputElement>(splitSearch ? 'ruleSearch' : 'globalSearchInput');
+      const input = document.querySelector<HTMLInputElement>('.view.active .list-search:not([hidden])') ?? $<HTMLInputElement>('globalSearchInput');
+      if (input.id === 'globalSearchInput') $('macWindow').classList.remove('sidebar-collapsed');
       input.focus();
       input.select();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
@@ -129,13 +128,13 @@ export function initShell(): ShellController {
 
   function syncSearch(query: string): void {
     globalSearch = query;
-    for (const id of ['globalSearchInput', 'ruleSearch']) {
+    for (const id of ['globalSearchInput', 'ruleSearch', 'portSearch']) {
       const input = $<HTMLInputElement>(id);
       if (input.value !== query) input.value = query;
     }
     $('searchWrap').classList.toggle('has-value', Boolean(query));
   }
-  for (const id of ['globalSearchInput', 'ruleSearch']) {
+  for (const id of ['globalSearchInput', 'ruleSearch', 'portSearch']) {
     $(id).addEventListener('input', e => {
       syncSearch((e.target as HTMLInputElement).value);
       for (const cb of searchListeners) cb(globalSearch);

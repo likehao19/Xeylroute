@@ -1182,7 +1182,7 @@ export function mountDesktopApp(shell: ShellController): void {
         }).join('')
       : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:var(--type-label)">${q ? '没有匹配的应用' : processStatus}</div>`;
 
-    // Right Active Subscription Card
+    // Active subscription summary
     const activeSub = liveProfile?.providers.find(p => p.name === selectedSubscription) || liveProfile?.providers[0];
     if (activeSub) {
       const meta = subscriptionCardData.get(activeSub.name);
@@ -1256,6 +1256,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
     $('fixedSocksTab').hidden = false;
     $('fixedSocksPane').hidden = nodesSub !== 'ports';
+    $('portSearch').hidden = nodesSub !== 'ports';
     if (nodesSub === 'ports') {
       $('nodesScopePill').hidden = true;
       actBtn.textContent = '添加固定入口';
@@ -1382,20 +1383,27 @@ export function mountDesktopApp(shell: ShellController): void {
 
   }
 
+  let fixedSocksMarkup = '';
   function renderFixedSocks(): void {
     const bindings = liveProfile?.fixedSocks || [];
     const pane = $('fixedSocksPane');
     const query = shell.getSearch().trim().toLowerCase();
     const rows = bindings.filter(b => [b.node, b.provider, b.port].join(' ').toLowerCase().includes(query));
-    pane.innerHTML = `
+    const markup = `
       <p class="section-label">本机 SOCKS5 · ${liveStatus?.running ? '内核运行中' : '内核已停止'}</p>
       <div class="mac-card flush">${rows.map(b => `
         <div class="mac-row"><div class="mac-row-left"><div><span class="mac-row-title">${esc(b.node)}</span>
-          <div class="mac-row-sub selectable">127.0.0.1:${b.port} · ${esc(b.provider || '本地节点')}</div></div></div>
-          <button type="button" class="glass-btn-soft compact" data-clash="${b.port}">Clash 配置…</button>
-          <button type="button" class="sf-icon-btn" data-remove-port="${b.port}" aria-label="移除端口 ${b.port}">${SF_TRASH}</button></div>`).join('') ||
+          <div class="mac-row-sub selectable"><code>127.0.0.1:${b.port}</code><span>· ${esc(b.provider || '本地节点')}</span></div></div></div>
+          <div class="port-actions">
+            <button type="button" class="glass-btn-soft compact" data-clash="${b.port}">Clash 配置…</button>
+            <button type="button" class="sf-icon-btn" data-remove-port="${b.port}" aria-label="移除端口 ${b.port}">${SF_TRASH}</button></div></div>`).join('') ||
         `<div class="rule-empty">${bindings.length ? '没有匹配的入口' : '添加固定入口，让 Clash 将选定应用转到指定节点。'}</div>`}</div>
       ${bindings.length && !liveStatus?.running ? '<button type="button" class="glass-btn-soft" id="startSocksCore">启动本地监听</button>' : ''}`;
+    // Preserve focus and pending clicks when a status poll returns the same rows.
+    if (markup !== fixedSocksMarkup) {
+      pane.innerHTML = markup;
+      fixedSocksMarkup = markup;
+    }
     const start = pane.querySelector<HTMLButtonElement>('#startSocksCore');
     if (start) start.onclick = () => void performNetworkControl({ control: 'core', enabled: true });
     pane.onclick = async event => {
@@ -1732,10 +1740,10 @@ rules:
             return `
               <div class="mac-card" style="display:flex;flex-direction:column;gap:12px;${g.enabled ? '' : 'opacity:0.58'}">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                  <div style="display:flex;align-items:center;gap:10px">
+                  <div class="group-heading">
                     <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
                     <div>
-                      <strong class="card-title" style="display:block">${esc(g.name)}</strong>
+                      <strong class="card-title" title="${esc(g.name)}">${esc(g.name)}</strong>
                       <small style="color:var(--muted);font-size:var(--type-caption)">${members.length} 个目标 · ${esc(g.type)}${g.enabled ? '' : ' · 已停用'}</small>
                     </div>
                   </div>
@@ -1806,8 +1814,8 @@ rules:
                   <span class="mac-row-sub" style="font-family:var(--font-mono)" title="${esc(item.path)}">${esc(item.exe)} · ${esc(metric)}</span>
                 </div>
               </div>
-              <div style="display:flex;align-items:center;gap:7px;flex:none">
-                <span class="pill">${esc(groupTag)}</span>
+              <div class="process-actions">
+                <span class="pill" title="${esc(groupTag)}">${esc(groupTag)}</span>
                 ${macPopupBtnHtml({
                   value: assigned,
                   label: appExitLabel(paths, pathRules),

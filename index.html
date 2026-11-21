@@ -274,17 +274,15 @@
                   <button type="button" class="section-link" id="pickAutoQuickBtn" data-pick-node="AUTO">切换 AUTO ›</button>
                 </div>
               </div>
+              <div class="mac-card" id="homeSubCard"></div>
             </div>
 
-            <div class="connect-col" style="gap:12px">
-              <div>
-                <div class="section-head">
-                  <span class="section-label">应用出口</span>
-                  <button type="button" class="section-link" id="goSplitBtn">规则管理 ›</button>
-                </div>
-                <div class="mac-card flush" id="homeAppExits"></div>
+            <div class="connect-col home-apps">
+              <div class="section-head">
+                <span class="section-label">应用出口</span>
+                <button type="button" class="section-link" id="goSplitBtn">规则管理 ›</button>
               </div>
-              <div class="mac-card" id="homeSubCard"></div>
+              <div class="mac-card flush" id="homeAppExits"></div>
             </div>
           </div>
 
@@ -379,6 +377,7 @@
           </div>
           <div id="nodesGroupsPane"></div>
           <div id="nodesSitesPane" hidden></div>
+          <input type="search" class="sheet-input list-search" id="portSearch" aria-label="搜索固定入口" placeholder="搜索节点、订阅或端口" hidden>
           <div id="fixedSocksPane" hidden></div>
         </section>
 
@@ -386,30 +385,25 @@
              VIEW 3: 分流与程序
              =============================================================== -->
         <section class="view" id="view-split">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div class="sub-seg" id="splitSubSeg">
-                <button type="button" class="active" data-split-sub="rules">分流规则</button>
-                <button type="button" data-split-sub="groups">策略分组</button>
-                <button type="button" data-split-sub="procs">运行中的程序</button>
-              </div>
-              <span class="pill blue" id="splitScopePill" hidden></span>
+          <div class="sub-seg" id="splitSubSeg">
+            <button type="button" class="active" data-split-sub="rules">分流规则</button>
+            <button type="button" data-split-sub="groups">策略分组</button>
+            <button type="button" data-split-sub="procs">运行中的程序</button>
+          </div>
+          <div class="list-filters">
+            <input type="search" class="sheet-input list-search" id="ruleSearch" aria-label="搜索分流规则" placeholder="搜索规则">
+            <span class="pill blue" id="splitScopePill" hidden></span>
+            <div id="splitDefaultWrap">
+              <span>未命中规则时</span>
+              <div id="defaultExitSelectHost"></div>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div id="splitDefaultWrap" style="display:flex;align-items:center;gap:8px">
-                <span style="font-size:var(--type-label);color:var(--muted)">未命中规则时</span>
-                <div id="defaultExitSelectHost"></div>
-              </div>
-              <div id="procToolsWrap" style="display:none;align-items:center;gap:8px">
-                <div class="sub-seg" id="procScanSeg">
-                  <button type="button" class="active" data-scan-type="app">按应用</button>
-                  <button type="button" data-scan-type="process">按进程</button>
-                </div>
+            <div id="procToolsWrap" style="display:none">
+              <div class="sub-seg" id="procScanSeg">
+                <button type="button" class="active" data-scan-type="app">按应用</button>
+                <button type="button" data-scan-type="process">按进程</button>
               </div>
             </div>
           </div>
-
-          <input type="search" class="sheet-input" id="ruleSearch" aria-label="搜索分流规则" placeholder="搜索规则">
           <div id="splitRulesPane"></div>
           <div id="splitGroupsPane" hidden></div>
           <div id="splitProcsPane" hidden></div>
