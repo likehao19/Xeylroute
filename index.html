@@ -407,6 +407,7 @@
             </div>
           </div>
 
+          <input type="search" class="sheet-input" id="ruleSearch" aria-label="搜索分流规则" placeholder="搜索应用、网站、IP 或出口">
           <div id="splitRulesPane"></div>
           <div id="splitGroupsPane" hidden></div>
           <div id="splitProcsPane" hidden></div>
@@ -453,6 +454,7 @@
              VIEW 6: 网络与设置
              =============================================================== -->
         <section class="view" id="view-settings">
+          <p id="settingsSearchEmpty" class="rule-empty" data-detail-for="system tun" hidden>当前页面没有匹配的设置</p>
           <div class="mac-card flush appearance-card">
             <div class="mac-row">
               <span class="mac-row-title" id="appearanceLabel">外观</span>

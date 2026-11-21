@@ -60,7 +60,14 @@ export function initShell(): ShellController {
     }
     if (detail) settings.dataset.detail = detail;
     else delete settings.dataset.detail;
+    if (viewId !== currentView) syncSearch('');
     currentView = viewId;
+    if (isTauri()) {
+      const input = $<HTMLInputElement>('globalSearchInput');
+      input.placeholder = { connect: '搜索节点或应用', nodes: '搜索节点、分组或网站', split: '搜索当前列表',
+        logs: '搜索应用、地址或出口', subs: '搜索订阅或独立节点', settings: '搜索当前页面的设置' }[viewId];
+      input.setAttribute('aria-label', input.placeholder);
+    }
     document.querySelectorAll<HTMLElement>('#sidebarNav .nav-item').forEach(b =>
       b.classList.toggle('active', !detail && b.dataset.view === viewId)
     );
@@ -90,8 +97,9 @@ export function initShell(): ShellController {
     if ($('macWindow').inert && e.key !== 'Escape') return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      $('macWindow').classList.remove('sidebar-collapsed');
-      const input = $<HTMLInputElement>('globalSearchInput');
+      const splitSearch = currentView === 'split';
+      if (!splitSearch) $('macWindow').classList.remove('sidebar-collapsed');
+      const input = $<HTMLInputElement>(splitSearch ? 'ruleSearch' : 'globalSearchInput');
       input.focus();
       input.select();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
@@ -108,24 +116,32 @@ export function initShell(): ShellController {
     if (b?.dataset.view) switchView(b.dataset.view as ViewId);
   });
   $('goAllNodesBtn').addEventListener('click', () => switchView('nodes'));
-  $('goSplitBtn').addEventListener('click', () => switchView('split'));
+  function openSplitRules(): void {
+    switchView('split');
+    document.querySelector<HTMLButtonElement>('[data-split-sub="rules"]')?.click();
+  }
+  $('goSplitBtn').addEventListener('click', openSplitRules);
   $('systemDetailBtn').addEventListener('click', () => switchView('settings', 'system'));
   $('tunDetailBtn').addEventListener('click', () => switchView('settings', 'tun'));
   $('allNetworkSettings').addEventListener('click', () => switchView('settings'));
-  $('tunRoutingBtn').addEventListener('click', () => {
-    switchView('split');
-    document.querySelector<HTMLButtonElement>('[data-split-sub="rules"]')?.click();
-  });
+  $('tunRoutingBtn').addEventListener('click', openSplitRules);
 
-  $('globalSearchInput').addEventListener('input', e => {
-    globalSearch = (e.target as HTMLInputElement).value;
-    $('searchWrap').classList.toggle('has-value', globalSearch.length > 0);
-    for (const cb of searchListeners) cb(globalSearch);
-  });
+  function syncSearch(query: string): void {
+    globalSearch = query;
+    for (const id of ['globalSearchInput', 'ruleSearch']) {
+      const input = $<HTMLInputElement>(id);
+      if (input.value !== query) input.value = query;
+    }
+    $('searchWrap').classList.toggle('has-value', Boolean(query));
+  }
+  for (const id of ['globalSearchInput', 'ruleSearch']) {
+    $(id).addEventListener('input', e => {
+      syncSearch((e.target as HTMLInputElement).value);
+      for (const cb of searchListeners) cb(globalSearch);
+    });
+  }
   $('searchClearBtn').addEventListener('click', () => {
-    globalSearch = '';
-    $<HTMLInputElement>('globalSearchInput').value = '';
-    $('searchWrap').classList.remove('has-value');
+    syncSearch('');
     for (const cb of searchListeners) cb(globalSearch);
   });
 
@@ -150,8 +166,8 @@ export function initShell(): ShellController {
       iconHtml: `<span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>`,
       bodyHtml: `
         <div style="font-size:var(--type-body);color:var(--ink-2);line-height:1.68;display:grid;gap:10px">
-          <div><strong style="color:var(--ink)">规则优先级：</strong>显式 REJECT &gt; 显式 DIRECT &gt; 进程 &gt; 软件 &gt; 精确域名 &gt; 通配域名 &gt; 默认出口</div>
-          <div><strong style="color:var(--ink)">Scoped TUN：</strong>${isTauri() ? '桌面端支持全局 TUN。按软件指定出口请使用分流规则。' : '规则模式下仅接管勾选 TUN 的分组或程序。'}</div>
+          <div><strong style="color:var(--ink)">规则优先级：</strong>${isTauri() ? '首条匹配生效。打开「分流与程序 → 生效顺序」可查看当前订阅的实际顺序。' : '显式 REJECT &gt; 显式 DIRECT &gt; 进程 &gt; 软件 &gt; 精确域名 &gt; 通配域名 &gt; 默认出口'}</div>
+          <div><strong style="color:var(--ink)">Scoped TUN：</strong>${isTauri() ? '支持接管全部流量或指定目标。打开「虚拟网卡」可查看当前接管范围。' : '规则模式下仅接管勾选 TUN 的分组或程序。'}</div>
           <div><strong style="color:var(--ink)">导入支持：</strong>HTTPS 订阅链接、单/多条分享链接（vless / trojan / ss / vmess / hy2 / tuic / Base64），以及第三方 YAML / JSON 完整配置。</div>
           <div><strong style="color:var(--ink)">快捷键：</strong><kbd class="kbd-hint">${modKey}K</kbd> 全局搜索 · <kbd class="kbd-hint">${modKey}S</kbd> 收起/展开边栏 · <kbd class="kbd-hint">Esc</kbd> 关闭浮层</div>
         </div>

@@ -18,9 +18,7 @@ export function bindRuleProgramPicker(program: HTMLInputElement, multiple: boole
       if (input.dataset.file !== undefined) {
         input.checked = selected.has(app.paths[Number(input.dataset.file)]);
       } else {
-        const count = app.paths.filter(path => selected.has(path)).length;
-        input.checked = multiple ? count === app.paths.length : selected.has(app.path);
-        input.indeterminate = multiple && count > 0 && count < app.paths.length;
+        input.checked = selected.has(app.path);
       }
     });
   }
@@ -57,9 +55,9 @@ export function bindRuleProgramPicker(program: HTMLInputElement, multiple: boole
     emptyMessage = status;
     list.innerHTML = apps.map((app, i) => `
       <div class="rule-program-row">
-        <input type="checkbox" data-app="${i}" aria-label="${esc(multiple ? '选择全部可执行文件：' + app.name : '选择主程序：' + app.name)}">
+        <input type="checkbox" data-app="${i}" aria-label="${esc('选择主程序：' + app.name)}">
         <details><summary>${renderProgramIcon(app.icon, app.name)}
-          <strong>${esc(app.name)}</strong><small>${app.paths.length} 个文件</small><span class="rule-disclosure" aria-hidden="true">›</span>
+          <strong>${esc(app.name)}</strong><small>主程序${app.paths.length > 1 ? ` · ${app.paths.length - 1} 个辅助程序` : ''}</small><span class="rule-disclosure" aria-hidden="true">›</span>
         </summary>
         ${app.paths.map((path, j) => `<label class="rule-program-file" title="${esc(path)}">
           <input type="checkbox" data-app="${i}" data-file="${j}"><span>
@@ -75,7 +73,7 @@ export function bindRuleProgramPicker(program: HTMLInputElement, multiple: boole
     if (!(input instanceof HTMLInputElement)) return;
     const app = apps[Number(input.dataset.app)];
     const paths = input.dataset.file !== undefined ? [app.paths[Number(input.dataset.file)]]
-      : multiple ? app.paths : [app.path];
+      : [app.path];
     if (multiple) {
       for (const path of paths) {
         if (input.checked) selectedPaths.add(path);

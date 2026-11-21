@@ -1080,6 +1080,13 @@ export function mountDesktopApp(shell: ShellController): void {
     return exits;
   }
 
+  function appExitLabel(paths: string[], rules: Map<string, string>): string {
+    const values = paths.map(path => rules.get(programRuleKey(path)));
+    if (values.every(value => value === values[0])) return values[0] ? exitDisplayLabel(values[0]) : '按分流规则';
+    if (values[0] && values.slice(1).every(value => !value)) return `${exitDisplayLabel(values[0])}（主程序）`;
+    return '多项规则';
+  }
+
   function renderConnect(): void {
     renderDesktopBanner();
     const realNodes = allSelectableNodes();
@@ -1144,12 +1151,12 @@ export function mountDesktopApp(shell: ShellController): void {
 
     // Right App Exits (real top 4 grouped apps)
     const ruleMap = programPathExits();
-    const topApps = liveApps.slice(0, 4);
+    const topApps = liveApps.filter(app => !q || [app.name, ...app.paths].some(value => value.toLowerCase().includes(q))).slice(0, 4);
     $('homeAppExits').innerHTML = topApps.length
       ? topApps.map(app => {
           const exits = new Set(app.paths.map(p => ruleMap.get(programRuleKey(p)) || ''));
           const val = exits.size === 1 ? [...exits][0] : null;
-          const label = exits.size > 1 ? '多项规则' : val ? exitDisplayLabel(val) : '按分流规则';
+          const label = appExitLabel(app.paths, ruleMap);
           return `
             <div class="mac-row">
               <div class="mac-row-left">
@@ -1169,7 +1176,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           `;
         }).join('')
-      : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:var(--type-label)">${processStatus}</div>`;
+      : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:var(--type-label)">${q ? '没有匹配的应用' : processStatus}</div>`;
 
     // Right Active Subscription Card
     const activeSub = liveProfile?.providers.find(p => p.name === selectedSubscription) || liveProfile?.providers[0];
@@ -1257,7 +1264,7 @@ export function mountDesktopApp(shell: ShellController): void {
       return;
     }
     if (needsImport) return;
-    const shared = sharedDrawerNodes().filter(n => !q || [n.name, n.type].join(' ').toLowerCase().includes(q));
+    const shared = sharedDrawerNodes();
     const activeExit = activeGlobalExit();
 
     const drawers: {
@@ -1283,7 +1290,6 @@ export function mountDesktopApp(shell: ShellController): void {
           ? live.all.filter(m => !HIDDEN_NODES.has(m))
           : [...(g.proxies || [])];
         const items: NodeCardItem[] = members
-          .filter(m => !q || m.toLowerCase().includes(q))
           .map(m => ({
             name: m,
             type: liveCore?.proxies?.proxies?.[m]?.type || (['DIRECT', 'REJECT', 'AUTO'].includes(m) ? '策略' : '节点'),
@@ -1302,7 +1308,10 @@ export function mountDesktopApp(shell: ShellController): void {
       }),
     ];
 
-    $('nodesGroupsPane').innerHTML = drawers.map(d => {
+    const matching = drawers.map(d => d.name.toLowerCase().includes(q) ? d : {
+      ...d, nodes: d.nodes.filter(n => [n.name, n.type, exitDisplayLabel(n.name)].join(' ').toLowerCase().includes(q)),
+    }).filter(d => !q || d.nodes.length || d.name.toLowerCase().includes(q));
+    $('nodesGroupsPane').innerHTML = matching.map(d => {
       const open = expandedGroups.has(d.id);
       return `
         <div class="group-drawer ${open ? 'open' : ''}">
@@ -1355,18 +1364,22 @@ export function mountDesktopApp(shell: ShellController): void {
           ` : ''}
         </div>
       `;
-    }).join('');
+    }).join('') || '<div class="rule-empty">没有匹配的节点或分组</div>';
 
   }
 
   function renderSiteTests(): void {
+    const q = shell.getSearch().trim().toLowerCase();
+    const categories = sites.map(([cat, items], ci) => ({
+      cat, ci, rows: items.map((s, si) => ({ s, si })).filter(({ s }) => [cat, s.n, s.h].join(' ').toLowerCase().includes(q)),
+    })).filter(category => category.rows.length);
     $('nodesSitesPane').innerHTML = `
       <div class="grid-2col">
-        ${sites.map(([cat, items], ci) => `
+        ${categories.map(({cat, ci, rows}) => `
           <div>
             <p class="section-label">${esc(cat)}</p>
             <div class="mac-card flush">
-              ${items.map((s, si) => {
+              ${rows.map(({s, si}) => {
                 const key = `${ci}-${si}`;
                 const busy = siteProbing.has(key);
                 let badge = `<span class="pill">未测速</span>`;
@@ -1394,13 +1407,16 @@ export function mountDesktopApp(shell: ShellController): void {
               }).join('')}
             </div>
           </div>
-        `).join('')}
+        `).join('') || '<div class="rule-empty">没有匹配的测速网站</div>'}
       </div>
     `;
   }
 
 
   function renderSplit(): void {
+    const search = $<HTMLInputElement>('ruleSearch');
+    search.placeholder = { rules: '搜索应用、网站、IP 或出口', groups: '搜索分组或出口', procs: '搜索应用、进程或 PID' }[splitSub];
+    search.setAttribute('aria-label', { rules: '搜索分流规则', groups: '搜索策略分组', procs: '搜索运行中的程序' }[splitSub]);
     $('splitRulesPane').hidden = splitSub !== 'rules';
     $('ruleOrderBtn').hidden = splitSub !== 'rules' || !liveProfile;
     $('bulkRulesBtn').hidden = splitSub !== 'rules';
@@ -1500,7 +1516,21 @@ export function mountDesktopApp(shell: ShellController): void {
     const disabledGroups = new Set(liveProfile?.disabledGroups || []);
 
     // Sub-tab 1: Rules
-    const rules = (liveProfile?.rules || [])
+    const lines = liveProfile?.rules || [];
+    const processes = new Map(liveProcesses.map(proc => [programRuleKey(proc.path), proc]));
+    const programPaths = new Set(lines.filter(line => line.startsWith('PROCESS-PATH,')).map(line => line.split(',')[1]));
+    const savedApps = groupRunningApps(Array.from(programPaths, path => {
+      const exe = path.split(/[\\/]/).at(-1) || path;
+      const bundle = path.match(/(?:^|\/)([^/]+)\.app\//i)?.[1];
+      return { path, exe, name: processes.get(programRuleKey(path))?.name || bundle || exe };
+    }));
+    const appByPath = new Map(savedApps.flatMap(app => app.paths.map(path => [path, app] as const)));
+    function matches(line: string, type: string, exit: string, active: boolean, app = ''): boolean {
+      const kind = type.startsWith('PROCESS') ? '软件 应用 进程' : type.startsWith('DOMAIN') ? '网站 域名'
+        : type.startsWith('IP-') ? 'IP 网段' : type === 'AND' ? '组合条件' : '';
+      return !q || [line, app, kind, exitDisplayLabel(exit), active ? '启用' : '停用'].join(' ').toLowerCase().includes(q);
+    }
+    const rules = lines
       .map((line, index) => {
         const [type, ...rest] = line.split(',');
         const payload = type === 'MATCH' ? '' : (rest.slice(0,-1).join(',') || '');
@@ -1509,23 +1539,73 @@ export function mountDesktopApp(shell: ShellController): void {
         return { line, index, type, payload, exit, enabled, active: enabled && !disabledGroups.has(exit) };
       })
       .filter(r => r.type !== 'MATCH')
-      .filter(r => !q || [r.type, r.payload, r.exit].join(' ').toLowerCase().includes(q));
+      .filter(r => matches(r.line, r.type, r.exit, r.active, appByPath.get(r.payload)?.name));
+    const buckets = new Map<string, typeof rules>();
+    for (const rule of rules) {
+      const app = rule.type === 'PROCESS-PATH' && appByPath.get(rule.payload);
+      const key = app ? app.path : String(rule.index);
+      const members = buckets.get(key);
+      if (members) members.push(rule);
+      else buckets.set(key, [rule]);
+    }
+    const groups = [...buckets.values()];
 
     const bulk = $<HTMLButtonElement>('bulkRulesBtn');
     bulk.disabled = !rules.length;
     bulk.onclick = () => {
       const scope = liveProfile?.subscriptionScope ?? '';
-      openRuleBatch(rules.map(r => ({ title: r.payload || r.type, detail: r.line, enabled: r.enabled })), (action, selected) => {
-        void commitProfileEdit({ kind: 'batchRules', action,
-          rules: selected.map(i => ({ index: rules[i].index, expected: rules[i].line })),
-        }, `已${{ enable: '启用', disable: '停用', delete: '删除' }[action]}${selected.length} 条规则`, scope);
+      openRuleBatch(groups.map(group => {
+        const r = group[0];
+        return { title: group.length > 1 ? appByPath.get(r.payload)!.name : r.payload || r.type,
+          detail: group.length > 1 ? `${group.length} 条程序路径规则` : r.line,
+          count: group.length, enabled: group.every(row => row.enabled === r.enabled) ? r.enabled : null };
+      }), (action, selected) => {
+        const targets = selected.flatMap(i => groups[i].map(r => ({ index: r.index, expected: r.line })));
+        void commitProfileEdit({ kind: 'batchRules', action, rules: targets },
+          `已${{ enable: '启用', disable: '停用', delete: '删除' }[action]}${targets.length} 条规则`, scope);
       });
     };
-    const iconByPath = new Map<string, string | null | undefined>();
-    for (const p of liveProcesses) iconByPath.set(normalizedProgramPath(p.path), p.icon);
 
+
+    const shared = (liveProfile?.sharedRules || []).filter(r => matches(
+      r.line + ' 个人共享', r.line.split(',')[0], r.line.split(',').at(-1) || '', !disabledGroups.has(r.line.split(',').at(-1) || '')));
+    function renderRule(r: (typeof rules)[number]): string {
+      const isProc = r.type.startsWith('PROCESS');
+      const isDomain = r.type.startsWith('DOMAIN');
+      const tone = r.exit === 'DIRECT' ? 'green' : r.exit === 'REJECT' ? 'red' : r.exit === 'PASS' ? 'purple' : 'blue';
+      const conditions = liveProfile?.ruleConditions?.[r.index];
+      const shortName = conditions ? conditionLabel(conditions) : isProc ? (r.payload.split(/[\\/]/).at(-1) || r.payload) : r.payload;
+      const iconHtml = isProc
+        ? renderProgramIcon(processes.get(programRuleKey(r.payload))?.icon, shortName)
+        : isDomain
+          ? renderSiteIcon(r.payload, shortName, 'blue')
+          : `<span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>`;
+      const editable = Boolean(liveProfile?.ruleConditions?.[r.index]);
+      return `
+        <div class="mac-row">
+          <div class="mac-row-left">
+            ${iconHtml}
+            <div style="min-width:0">
+              <span class="mac-row-title">${esc(shortName)}</span>
+              <span class="mac-row-sub">${esc(r.type)} · <span style="font-family:var(--font-mono)" title="${esc(r.payload)}">${esc(r.payload)}</span></span>
+            </div>
+          </div>
+          <div class="rule-right-cols live-cols">
+            <span class="pill ${r.active ? tone : 'orange'}">${esc(liveProfile?.nodePins?.[r.exit] || r.exit)}${r.active ? '' : ' · 停用'}</span>
+            <label class="mac-switch">
+              <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
+              <i></i>
+            </label>
+            <button type="button" class="sf-icon-btn" data-inspect-rule="${r.index}" aria-label="查看命中连接" data-tip="查看命中连接">${SF_DETAIL}</button>
+            <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" data-tip="${editable ? '编辑规则' : '编辑完整配置'}">${SF_EDIT}</button>
+            <button type="button" class="sf-icon-btn danger" data-del-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" data-tip="删除规则">${SF_TRASH}</button>
+          </div>
+        </div>
+      `;
+    }
+    const openApps = new Set(Array.from($('splitRulesPane').querySelectorAll<HTMLDetailsElement>('details[open]'), el => el.dataset.app));
     $('splitRulesPane').innerHTML = `
-      ${(liveProfile?.sharedRules || []).filter(r => !q || r.line.toLowerCase().includes(q)).map(r => `
+      ${shared.map(r => `
         <div class="mac-card flush"><div class="mac-row"><div class="mac-row-left"><div>
         <span class="mac-row-title">${esc(r.conditions ? conditionLabel(r.conditions) : r.source)}</span>
         <span class="mac-row-sub">个人共享 · ${esc(r.line)}</span></div></div>
@@ -1533,47 +1613,21 @@ export function mountDesktopApp(shell: ShellController): void {
         <button class="sf-icon-btn" data-shared-edit="${esc(r.source)}" aria-label="编辑共享规则">${SF_EDIT}</button>
         <button class="sf-icon-btn danger" data-shared-delete="${esc(r.source)}" aria-label="删除共享规则">${SF_TRASH}</button></div></div></div>`).join('')}
       <div class="mac-card flush">
-        ${rules.map(r => {
-          const isProc = r.type.startsWith('PROCESS');
-          const isDomain = r.type.startsWith('DOMAIN');
-          const tone = r.exit === 'DIRECT' ? 'green' : r.exit === 'REJECT' ? 'red' : r.exit === 'PASS' ? 'purple' : 'blue';
-          const conditions = liveProfile?.ruleConditions?.[r.index];
-          const shortName = conditions ? conditionLabel(conditions) : isProc ? (r.payload.split(/[\\/]/).at(-1) || r.payload) : r.payload;
-          const iconHtml = isProc
-            ? renderProgramIcon(iconByPath.get(normalizedProgramPath(r.payload)), shortName)
-            : isDomain
-              ? renderSiteIcon(r.payload, shortName, 'blue')
-              : `<span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>`;
-          const editable = Boolean(liveProfile?.ruleConditions?.[r.index]);
-          return `
-            <div class="mac-row">
-              <div class="mac-row-left">
-                ${iconHtml}
-                <div style="min-width:0">
-                  <span class="mac-row-title">${esc(shortName)}</span>
-                  <span class="mac-row-sub">${esc(r.type)} · <span style="font-family:var(--font-mono)" title="${esc(r.payload)}">${esc(r.payload)}</span></span>
-                </div>
-              </div>
-              <div class="rule-right-cols live-cols">
-                <span class="pill ${r.active ? tone : 'orange'}">${esc(liveProfile?.nodePins?.[r.exit] || r.exit)}${r.active ? '' : ' · 停用'}</span>
-                <label class="mac-switch">
-                  <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
-                  <i></i>
-                </label>
-                <button type="button" class="sf-icon-btn" data-inspect-rule="${r.index}" aria-label="查看命中连接" data-tip="查看命中连接">${SF_DETAIL}</button>
-                <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" data-tip="${editable ? '编辑规则' : '编辑完整配置'}">${SF_EDIT}</button>
-                <button type="button" class="sf-icon-btn danger" data-del-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" data-tip="删除规则">${SF_TRASH}</button>
-              </div>
-            </div>
-          `;
-        }).join('') || `<div style="padding:36px;text-align:center;color:var(--muted)">暂无分流规则，点击右上角「+ 添加规则」创建</div>`}
+        ${groups.map(group => {
+          if (group.length === 1) return renderRule(group[0]);
+          const app = appByPath.get(group[0].payload)!;
+          const exits = new Set(group.map(r => exitDisplayLabel(r.exit)));
+          return `<details class="rule-app-group" data-app="${esc(app.path)}" ${openApps.has(app.path) ? 'open' : ''}>
+            <summary>${esc(app.name)} <small>${group.length} 条程序规则 · ${esc(exits.size === 1 ? [...exits][0] : '多个出口')}</small></summary>
+            ${group.map(renderRule).join('')}</details>`;
+        }).join('') || (shared.length ? '' : `<div class="rule-empty">${q ? '没有匹配的规则，试试应用名、域名或出口' : '暂无分流规则，点击右上角「+ 添加规则」创建'}</div>`)}
       </div>
     `;
 
   }
 
   function renderGroups(q: string): void {
-    const groups = (liveProfile?.groups || []).filter(g => !q || g.name.toLowerCase().includes(q));
+    const groups = (liveProfile?.groups || []).filter(g => !q || [g.name, g.type, ...(g.proxies || []).map(exitDisplayLabel), ...(g.use || [])].join(' ').toLowerCase().includes(q));
     $('splitGroupsPane').innerHTML = groups.length
       ? `
         <div class="grid-2col">
@@ -1625,7 +1679,7 @@ export function mountDesktopApp(shell: ShellController): void {
           }).join('')}
         </div>
       `
-      : `<div class="mac-card" style="padding:36px;text-align:center;color:var(--muted)">暂无策略分组，点击右上角「+ 创建分组」创建</div>`;
+      : `<div class="mac-card" style="padding:36px;text-align:center;color:var(--muted)">${q ? '没有匹配的策略分组' : '暂无策略分组，点击右上角「+ 创建分组」创建'}</div>`;
 
   }
 
@@ -1665,7 +1719,7 @@ export function mountDesktopApp(shell: ShellController): void {
                 <span class="pill">${esc(groupTag)}</span>
                 ${macPopupBtnHtml({
                   value: assigned,
-                  label: assignedExits.size > 1 ? '多项规则' : (assigned ? exitDisplayLabel(assigned) : '按分流规则'),
+                  label: appExitLabel(paths, pathRules),
                   width: 132,
                   popupKind: isApp ? 'app-exit' : 'process-exit',
                   popupKey: item.path,
@@ -1731,8 +1785,11 @@ export function mountDesktopApp(shell: ShellController): void {
 
   function renderLogs(): void {
     $<HTMLButtonElement>('clearLogsBtn').disabled = !liveLogs.length;
-    $('logsListCard').innerHTML = liveLogs.length
-      ? liveLogs.map((row,i) => {
+    const q = shell.getSearch().trim().toLowerCase();
+    const rows = liveLogs.map((row, i) => ({ row, i })).filter(({ row }) =>
+      !q || [row.app, row.target, row.decision, row.protocol, row.exit, row.time].join(' ').toLowerCase().includes(q));
+    $('logsListCard').innerHTML = rows.length
+      ? rows.map(({ row, i }) => {
           const tone = row.failed ? 'red' : row.exit === 'DIRECT' ? 'green' : row.exit === 'REJECT' ? 'red' : 'blue';
           return `
             <div class="mac-row">
@@ -1750,7 +1807,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           `;
         }).join('')
-      : `<div style="padding:36px;text-align:center;color:var(--muted)">${liveStatus?.running ? '暂无连接记录，可直接在上方输入域名实测连通' : '代理服务未启动，启动后将实时记录连接'}</div>`;
+      : `<div style="padding:36px;text-align:center;color:var(--muted)">${q ? '没有匹配的连接记录' : liveStatus?.running ? '暂无连接记录，可直接在上方输入域名实测连通' : '代理服务未启动，启动后将实时记录连接'}</div>`;
   }
 
   function editDocument(mode: DocumentMode, name = ''): void {
@@ -1814,8 +1871,10 @@ export function mountDesktopApp(shell: ShellController): void {
     refreshAll.hidden = !providers.some(p => p.type === 'http');
     refreshAll.disabled = !!providerRefresh || changingSubscription || networkUpdating;
     refreshAll.textContent = providerRefresh?.batch ? `刷新中 ${providerRefresh.done}/${providerRefresh.total}` : '全部刷新';
-    const cards = providers.length
-      ? providers.map(saved => {
+    const q = shell.getSearch().trim().toLowerCase();
+    const matches = providers.filter(p => [p.name, p.source, p.type === 'file' ? '本地文件' : '远程订阅'].join(' ').toLowerCase().includes(q));
+    const cards = matches.length
+      ? matches.map(saved => {
           const selected = selectedSubscription === saved.name;
           const remote = saved.type === 'http';
           const meta = subscriptionCardData.get(saved.name);
@@ -1862,13 +1921,13 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           `;
         }).join('')
-      : `<div class="mac-card" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--muted)">还没有订阅。导入后可以在这里切换订阅、刷新节点和查看用量。</div>`;
+      : `<div class="mac-card" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--muted)">${q ? '没有匹配的订阅' : '还没有订阅。导入后可以在这里切换订阅、刷新节点和查看用量。'}</div>`;
     if (cards !== subscriptionCardsHtml) {
       $('subsGridPane').innerHTML = cards;
       subscriptionCardsHtml = cards;
     }
 
-    const statics = standaloneNodes();
+    const statics = standaloneNodes().filter(node => [node.name, node.type].join(' ').toLowerCase().includes(q));
     const sec = $('standaloneNodesSection');
     if (statics.length) {
       sec.hidden = false;
@@ -2018,8 +2077,25 @@ export function mountDesktopApp(shell: ShellController): void {
         ? '停止内核会关闭本地监听、系统代理和虚拟网卡。'
         : '开启系统代理或虚拟网卡会自动启动内核。也可在此单独启动本地监听。';
       $('setCoreSub').title = liveStatus.appData;
-
     }
+    const q = shell.getSearch().trim().toLowerCase();
+    const page = $('view-settings');
+    const cards = page.querySelectorAll<HTMLElement>('.mac-card');
+    let any = false;
+    for (const card of cards) {
+      card.classList.remove('search-miss');
+      const heading = card.previousElementSibling?.matches('.section-label') ? card.previousElementSibling : null;
+      const rows = [...card.querySelectorAll<HTMLElement>('.mac-row')];
+      for (const row of rows) {
+        const matches = !q || [heading?.textContent, row.textContent].join(' ').toLowerCase().includes(q);
+        row.classList.toggle('search-miss', !matches);
+      }
+      const visible = !q || rows.some(row => row.getClientRects().length);
+      card.classList.toggle('search-miss', !visible);
+      heading?.classList.toggle('search-miss', !visible);
+      any ||= visible;
+    }
+    $('settingsSearchEmpty').hidden = !q || any;
   }
 
   function renderView(): void {
@@ -2474,30 +2550,33 @@ export function mountDesktopApp(shell: ShellController): void {
       await save(paths);
       return;
     }
+    const pathRow = (path: string, idx: number) => `
+      <label class="sheet-picker-row">
+        <span class="mac-check"><input type="checkbox" class="ap-path-chk" data-path-idx="${idx}" ${!exit || path === app.path ? 'checked' : ''}></span>
+        <span class="picker-meta"><strong>${esc(path.split(/[\\/]/).at(-1) || path)}</strong>
+          <small title="${esc(path)}">${esc(path)}</small></span>
+      </label>`;
+    const primary = paths.indexOf(app.path);
+    const helpers = paths.map((path, idx) => idx !== primary ? pathRow(path, idx) : '').join('');
     openSheet({
       title: `${exit ? '设置软件出口' : '恢复默认出口'} · ${app.name}`,
-      subtitle: exit ? `包含 ${paths.length} 个可执行文件 · 目标出口：${exitDisplayLabel(exit)}` : '清除勾选程序的单独规则，之后按其余分流规则处理。',
+      subtitle: exit ? `默认只选择主程序，可另外勾选辅助程序 · 出口：${exitDisplayLabel(exit)}` : `将清除已勾选的程序规则（共 ${paths.length} 条可选），恢复后按其余规则处理。`,
       iconHtml: renderProgramIcon(app.icon, app.name),
       size: 'wide',
-      bodyHtml: `
-        <div class="sheet-picker" style="max-height:240px">
-          ${paths.map((p, idx) => `
-            <label class="sheet-picker-row">
-              <span class="mac-check"><input type="checkbox" class="ap-path-chk" data-path-idx="${idx}" checked></span>
-              <span class="picker-meta">
-                <strong>${esc(p.split(/[\\/]/).at(-1) || p)}</strong>
-                <small title="${esc(p)}">${esc(p)}</small>
-              </span>
-            </label>
-          `).join('')}
-        </div>
-      `,
+      bodyHtml: `<div class="sheet-picker" style="max-height:240px">
+        ${primary >= 0 ? pathRow(paths[primary], primary) : ''}
+        <details class="rule-app-group" ${primary < 0 ? 'open' : ''}>
+          <summary>辅助程序（${paths.length - Number(primary >= 0)}）</summary>${helpers}</details>
+      </div>`,
       actionsHtml: `
         <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
         <button type="button" class="glass-btn-primary compact" id="apSave">${exit ? '应用规则' : '恢复默认'}</button>
       `,
     });
     $('sheetCancel').onclick = closeSheet;
+    $('sheetContent').querySelector('.sheet-picker')!.addEventListener('change', () => {
+      $<HTMLButtonElement>('apSave').disabled = !$('sheetContent').querySelector('.ap-path-chk:checked');
+    });
     $('apSave').onclick = async () => {
       const chosen = [...document.querySelectorAll<HTMLInputElement>('.ap-path-chk')]
         .filter(c => c.checked)

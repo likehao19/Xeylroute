@@ -47,6 +47,7 @@ export type PopupMenuItem =
 
 type ActivePopupContext = {
   trigger: HTMLElement;
+  anchorTop: number;
   items: PopupMenuItem[];
   onSelect: (value: string, label: string) => void;
 };
@@ -142,8 +143,12 @@ export function openMacMenu(
   pop.style.transformOrigin = openBelow
     ? (matchTriggerWidth ? 'top center' : 'top right')
     : (matchTriggerWidth ? 'bottom center' : 'bottom right');
-  activePopupCtx = { trigger, items, onSelect };
+  activePopupCtx = { trigger, items, onSelect, anchorTop: rect.top };
   (pop.querySelector<HTMLButtonElement>('.selected') ?? pop.querySelector('button'))?.focus({ preventScroll: true });
+}
+
+function dismissMovedMenu(): void {
+  if (activePopupCtx && Math.abs(activePopupCtx.trigger.getBoundingClientRect().top - activePopupCtx.anchorTop) > 1) closeMacMenu();
 }
 
 export function initMacMenuListener(): void {
@@ -170,9 +175,7 @@ export function initMacMenuListener(): void {
     if (item && !item.sep) cb(item.value, item.label);
   });
 
-  document.querySelector('.views-host')?.addEventListener('scroll', () => {
-    if (activePopupCtx) closeMacMenu();
-  }, { passive: true });
+  document.querySelector('.views-host')?.addEventListener('scroll', dismissMovedMenu, { passive: true });
 }
 
 /* =========================================================================
@@ -224,9 +227,7 @@ export function openSheet(opts: SheetOptions): void {
     </div>
     ${opts.actionsHtml ? `<div class="sheet-actions${opts.actionsSplit ? ' sheet-actions-split' : ''}">${opts.actionsHtml}</div>` : ''}
   `;
-  $('sheetScrollBody').addEventListener('scroll', () => {
-    if (activePopupCtx) closeMacMenu();
-  }, { passive: true });
+  $('sheetScrollBody').addEventListener('scroll', dismissMovedMenu, { passive: true });
   showSheet();
   content.focus({ preventScroll: true });
 }

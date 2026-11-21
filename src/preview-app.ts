@@ -341,6 +341,9 @@ export function mountPreviewApp(shell: ShellController): void {
   }
 
   function renderSplit(): void {
+    const search = $<HTMLInputElement>('ruleSearch');
+    search.placeholder = { rules: '搜索应用、网站、IP 或出口', groups: '搜索分组或出口', procs: '搜索应用、进程或 PID' }[splitSub];
+    search.setAttribute('aria-label', { rules: '搜索分流规则', groups: '搜索策略分组', procs: '搜索运行中的程序' }[splitSub]);
     $('splitRulesPane').hidden = splitSub !== 'rules';
     $('bulkRulesBtn').hidden = splitSub !== 'rules';
     $('splitGroupsPane').hidden = splitSub !== 'groups';
@@ -360,7 +363,7 @@ export function mountPreviewApp(shell: ShellController): void {
 
     const q = shell.getSearch().trim().toLowerCase();
     const filteredRules = state.rules.filter(r =>
-      !q || [r.label, r.value, groupById(r.group)?.name || ''].join(' ').toLowerCase().includes(q)
+      !q || [r.label, r.value, resolvedExit(effectiveExitId(r)), exitName(effectiveExitId(r)), r.kind === 'website' ? '网站 域名' : '软件 应用', groupById(r.group)?.name || ''].join(' ').toLowerCase().includes(q)
     );
     const bulk = $<HTMLButtonElement>('bulkRulesBtn');
     bulk.disabled = !filteredRules.length;
@@ -397,13 +400,13 @@ export function mountPreviewApp(shell: ShellController): void {
               </div>
             </div>
           `;
-        }).join('')}
+        }).join('') || `<div class="rule-empty">${q ? '没有匹配的规则' : '暂无分流规则'}</div>`}
       </div>
     `;
 
     $('splitGroupsPane').innerHTML = `
       <div class="grid-2col">
-        ${state.groups.map(g => {
+        ${state.groups.filter(g => [g.name, exitName(g.exit), resolvedExit(g.exit)].join(' ').toLowerCase().includes(q)).map(g => {
           const members = state.rules.filter(r => r.group === g.id);
           return `
             <div class="mac-card" style="display:flex;flex-direction:column;gap:12px;${g.on === false ? 'opacity:0.58' : ''}">
@@ -440,13 +443,13 @@ export function mountPreviewApp(shell: ShellController): void {
               </details>
             </div>
           `;
-        }).join('')}
+        }).join('') || '<div class="rule-empty">没有匹配的策略分组</div>'}
       </div>
     `;
 
     $('splitProcsPane').innerHTML = `
       <div class="mac-card flush">
-        ${DEMO_RUNNING.map(p => {
+        ${DEMO_RUNNING.filter(p => [p.name, p.exe, p.pid, p.path].join(' ').toLowerCase().includes(q)).map(p => {
           const r = state.rules.find(x => x.kind === 'app' && x.value.toLowerCase() === p.exe.toLowerCase());
           const eff = r ? resolvedExit(effectiveExitId(r)) : '按当前模式';
           const tunOn = (state.tun && state.tunScope === 'all') || r?.tun === 'on';
@@ -468,7 +471,7 @@ export function mountPreviewApp(shell: ShellController): void {
               </div>
             </div>
           `;
-        }).join('')}
+        }).join('') || '<div class="rule-empty">没有匹配的运行程序</div>'}
       </div>
     `;
   }

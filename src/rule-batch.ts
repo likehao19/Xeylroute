@@ -3,7 +3,7 @@ import { $, closeSheet, confirmSheet, esc, openSheet } from './ui-kit';
 export type RuleBatchAction = 'enable' | 'disable' | 'delete';
 
 export function openRuleBatch(
-  rows: { title: string; detail: string; enabled: boolean }[],
+  rows: { title: string; detail: string; enabled: boolean | null; count?: number }[],
   apply: (action: RuleBatchAction, selected: number[]) => void,
 ): void {
   openSheet({
@@ -15,7 +15,7 @@ export function openRuleBatch(
         <label class="sheet-picker-row">
           <input type="checkbox" data-batch-row="${i}">
           <span class="picker-meta"><strong>${esc(row.title)}</strong><small title="${esc(row.detail)}">${esc(row.detail)}</small></span>
-          <small>${row.enabled ? '启用' : '停用'}</small>
+          <small>${row.enabled === null ? '部分启用' : row.enabled ? '启用' : '停用'}</small>
         </label>`).join('')}</div>`,
     actionsSplit: true,
     actionsHtml: `<button type="button" class="glass-btn-soft" id="batchCancel">取消</button>
@@ -41,8 +41,9 @@ export function openRuleBatch(
   buttons.forEach(b => { b.onclick = async () => {
     const selected = checks.filter(c => c.checked).map(c => Number(c.dataset.batchRow));
     const action = b.dataset.batchAction as RuleBatchAction;
+    const count = selected.reduce((sum, i) => sum + (rows[i].count ?? 1), 0);
     if (action === 'delete' && !await confirmSheet({
-      title: `删除 ${selected.length} 条规则？`, message: '这些规则将从当前配置中移除。', confirmLabel: '删除', danger: true,
+      title: `删除 ${count} 条规则？`, message: '这些规则将从当前配置中移除。', confirmLabel: '删除', danger: true,
     })) return;
     closeSheet();
     apply(action, selected);
