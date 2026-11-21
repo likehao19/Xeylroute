@@ -89,7 +89,7 @@ pub(super) fn edit_shared(
         .transpose()?;
     let replacement = if let Some(c) = conditions {
         let (kind, target) = c.compile()?;
-        let exit = exit.ok_or("请选择共享出口")?;
+        let exit = exit.ok_or("请选择这条共享规则的出口")?;
         let view = scoped_profile(profile);
         let mapped = view["routepilot-shared-mapping"][&exit]
             .as_str()

@@ -62,6 +62,7 @@ export function initShell(): ShellController {
     else delete settings.dataset.detail;
     if (viewId !== currentView) syncSearch('');
     currentView = viewId;
+    $('searchWrap').hidden = viewId === 'split';
     if (isTauri()) {
       const input = $<HTMLInputElement>('globalSearchInput');
       input.placeholder = { connect: '搜索节点或应用', nodes: '搜索节点、分组或网站', split: '搜索当前列表',

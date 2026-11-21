@@ -160,7 +160,7 @@ export const DEFAULT_DEMO_STATE: DemoState = {
     { id: 's-2', name: '备用订阅', kind: '本地 YAML', url: 'backup-nodes-2026.yaml', used: 22.8, quota: 200, expires: '长期有效', updated: '昨天 21:40', active: false },
   ],
   logs: [
-    { time: '22:18:41', app: 'Codex.exe', host: 'api.openai.com', capture: '系统代理', action: '新加坡 01', match: 'Codex · 开发工具', reason: '按软件长期规则命中共享出口', tone: 'blue' },
+    { time: '22:18:41', app: 'Codex.exe', host: 'api.openai.com', capture: '系统代理', action: '新加坡 01', match: 'Codex · 开发工具', reason: '按软件长期规则使用首页默认节点', tone: 'blue' },
     { time: '22:18:22', app: 'Claude.exe', host: 'api.anthropic.com', capture: '指定目标 TUN', action: '日本 01', match: 'Claude · AI 服务', reason: '软件独立出口覆盖组设置', tone: 'blue' },
     { time: '22:17:58', app: 'chrome.exe', host: 'github.com', capture: '系统代理', action: '新加坡 01', match: 'GitHub · 开发工具', reason: '按域名规则匹配 *.github.com', tone: 'blue' },
     { time: '22:17:19', app: 'WeChat.exe', host: 'weixin.qq.com', capture: '系统代理', action: 'DIRECT', match: '国内直连', reason: '显式 DIRECT 规则优先直连', tone: 'green' },

@@ -124,7 +124,7 @@ export function evaluateRoute(state, conn) {
   };
 
   if (state.mode === 'global') {
-    return finalize(state.selectedNodeId, '全局模式', '全局模式统一使用全局出口');
+    return finalize(state.selectedNodeId, '全局模式', '全局模式统一使用首页默认节点');
   }
 
   const wilds = matched

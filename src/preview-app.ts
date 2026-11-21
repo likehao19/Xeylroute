@@ -77,12 +77,18 @@ export function mountPreviewApp(shell: ShellController): void {
   }
 
   function exitName(id: string): string {
-    if (id === 'global-follow' || !id) return '跟随共享出口';
+    if (id === 'global-follow' || !id) return '跟随首页节点';
     if (id === 'domain-rules') return '按域名规则';
     if (id === 'auto') return `AUTO (${bestAuto().name})`;
     if (id === 'direct') return 'DIRECT · 直连';
     if (id === 'reject') return 'REJECT · 阻断';
     return state.nodes.find(n => n.id === id)?.name || id;
+  }
+
+  function appExitLabel(id: string): string {
+    if (!id) return '按分流规则';
+    const node = state.nodes.find(n => n.id === id);
+    return node ? `指定节点：${node.name}` : exitName(id);
   }
 
   function resolvedExit(id: string): string {
@@ -102,7 +108,7 @@ export function mountPreviewApp(shell: ShellController): void {
 
   function exitMenuItems(includeDomainRules = false): PopupMenuItem[] {
     const items: PopupMenuItem[] = [
-      { value: 'global-follow', label: '跟随共享出口', meta: currentNode().name },
+      { value: 'global-follow', label: `${exitName('global-follow')}（当前：${exitName(state.selectedNodeId)}）` },
       ...(includeDomainRules ? [{ value: 'domain-rules', label: '按域名规则' }] : []),
       { value: 'auto', label: 'AUTO · 自动优选', meta: `${bestAuto().delay} ms` },
       { value: 'direct', label: 'DIRECT · 直连' },
@@ -199,7 +205,7 @@ export function mountPreviewApp(shell: ShellController): void {
               <span class="mac-row-sub"><i class="mini-dot"></i> ${esc(app.exe)} · PID ${app.pid}</span>
             </div>
           </div>
-          ${macPopupBtnHtml({ value: val, label: val ? exitName(val) : '按分流规则', width: 128, popupKind: 'app-exit', popupKey: app.exe })}
+          ${macPopupBtnHtml({ value: val, label: appExitLabel(val), width: 128, popupKind: 'app-exit', popupKey: app.exe })}
         </div>
       `;
     }).join('');
@@ -255,7 +261,7 @@ export function mountPreviewApp(shell: ShellController): void {
     }[] = [
       {
         id: 'SHARED',
-        name: '全局出口',
+        name: '默认节点',
         sub: `当前使用 ${exitName(state.selectedNodeId)}`,
         selected: state.selectedNodeId,
         nodes: [
@@ -272,7 +278,7 @@ export function mountPreviewApp(shell: ShellController): void {
         selected: g.exit,
         isGroup: true,
         nodes: [
-          { id: 'global-follow', name: '跟随共享出口', proto: currentNode().name, tone: 'blue', delay: currentNode().delay, builtin: true },
+          { id: 'global-follow', name: exitName('global-follow'), proto: currentNode().name, tone: 'blue', delay: currentNode().delay, builtin: true },
           ...live.slice(0, 5),
         ],
       })),
@@ -342,7 +348,7 @@ export function mountPreviewApp(shell: ShellController): void {
 
   function renderSplit(): void {
     const search = $<HTMLInputElement>('ruleSearch');
-    search.placeholder = { rules: '搜索应用、网站、IP 或出口', groups: '搜索分组或出口', procs: '搜索应用、进程或 PID' }[splitSub];
+    search.placeholder = { rules: '搜索规则', groups: '搜索分组', procs: '搜索运行中的程序' }[splitSub];
     search.setAttribute('aria-label', { rules: '搜索分流规则', groups: '搜索策略分组', procs: '搜索运行中的程序' }[splitSub]);
     $('splitRulesPane').hidden = splitSub !== 'rules';
     $('bulkRulesBtn').hidden = splitSub !== 'rules';
@@ -394,7 +400,7 @@ export function mountPreviewApp(shell: ShellController): void {
               </div>
               <div class="rule-right-cols">
                 <span class="pill">${esc(groupById(r.group)?.name || '未分组')}</span>
-                <span class="pill ${tone}">${esc(resolvedExit(eff))}</span>
+                <span class="pill ${tone}">${esc(exitName(eff))}</span>
                 <label class="mac-switch"><input type="checkbox" data-toggle-rule="${esc(r.id)}" ${r.on ? 'checked' : ''}><i></i></label>
                 <button type="button" class="sf-icon-btn danger" data-del-rule="${esc(r.id)}" data-tip="删除规则">${SF_TRASH}</button>
               </div>
@@ -467,7 +473,7 @@ export function mountPreviewApp(shell: ShellController): void {
                 <span class="pill">${esc(groupById(r?.group || '')?.name || '未分组')}</span>
                 <span class="pill blue">${esc(eff)}</span>
                 <span class="pill ${tunOn ? 'green' : ''}">TUN ${tunOn ? '开' : '关'}</span>
-                ${macPopupBtnHtml({ value: val, label: val ? exitName(val) : '按分流规则', width: 136, popupKind: 'app-exit', popupKey: p.exe })}
+                ${macPopupBtnHtml({ value: val, label: appExitLabel(val), width: 136, popupKind: 'app-exit', popupKey: p.exe })}
               </div>
             </div>
           `;
@@ -563,11 +569,14 @@ export function mountPreviewApp(shell: ShellController): void {
     save();
   }
 
-  shell.onSearchChange(() => {
-    renderConnect();
-    renderNodes();
-    renderSplit();
-  });
+  function renderSearchResults(): void {
+    const view = shell.getView();
+    if (view === 'connect') renderConnect();
+    else if (view === 'nodes') renderNodes();
+    else if (view === 'split') renderSplit();
+  }
+  shell.onSearchChange(renderSearchResults);
+  shell.onViewChange(renderSearchResults);
 
   document.querySelectorAll<HTMLElement>('.mode-pill button').forEach(b => {
     b.addEventListener('click', () => {
@@ -692,7 +701,7 @@ export function mountPreviewApp(shell: ShellController): void {
         openMacMenu(popTrigger, exitMenuItems(false), val, nextVal => {
           state.defaultRuleExit = nextVal;
           renderAll();
-          notify(`默认出口已设为 ${exitName(nextVal)}`);
+          notify(`未命中规则时：${exitName(nextVal)}`);
         });
         return;
       }

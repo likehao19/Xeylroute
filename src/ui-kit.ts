@@ -84,7 +84,7 @@ export function macPopupBtnHtml(opts: {
       aria-haspopup="menu" aria-expanded="false"
       ${opts.disabled ? 'disabled' : ''}>
       <span class="mac-popup-dot ${dot}"></span>
-      <span class="mac-popup-label">${esc(opts.label)}</span>
+      <span class="mac-popup-label" title="${esc(opts.label)}">${esc(opts.label)}</span>
       ${SF_CHEVRON_UD}
     </button>
   `;
@@ -119,7 +119,7 @@ export function openMacMenu(
     return `
       <button type="button" class="mac-menu-item ${sel ? 'selected' : ''}" data-menu-idx="${idx}" role="menuitemradio" aria-checked="${sel}">
         <span class="mac-menu-check">${SF_CHECK}</span>
-        <span class="mac-menu-item-text">${esc(item.label)}</span>
+        <span class="mac-menu-item-text" title="${esc(item.label)}">${esc(item.label)}</span>
         ${item.meta ? `<span class="mac-menu-meta">${esc(item.meta)}</span>` : ''}
       </button>
     `;

@@ -844,7 +844,7 @@ export function mountDesktopApp(shell: ShellController): void {
       saveMap(KEY_SUB_EXITS, subscriptionSelections);
       localStorage.setItem(KEY_PENDING_NODE, JSON.stringify([selectedSubscription, name]));
       renderAllSafe();
-      notify(`已预选全局出口：${name}（启动代理后自动生效）`);
+      notify(`已预选默认节点：${name}（启动代理后自动生效）`);
       return;
     }
     const global = liveCore.proxies?.proxies?.GLOBAL;
@@ -861,7 +861,7 @@ export function mountDesktopApp(shell: ShellController): void {
       subscriptionSelections.set(selectedSubscription, name);
       saveMap(KEY_SUB_EXITS, subscriptionSelections);
       localStorage.removeItem(KEY_PENDING_NODE);
-      notify(currentMode() === 'rule' ? `共享全局出口已更新为 ${name}` : `全局出口已切换至 ${name}`);
+      notify(`默认节点已切换至 ${name}`);
       await refreshLiveState(true);
     } catch (err) {
       if (fromTray) await tauriApi.showWindow().catch(() => {});
@@ -1082,8 +1082,12 @@ export function mountDesktopApp(shell: ShellController): void {
 
   function appExitLabel(paths: string[], rules: Map<string, string>): string {
     const values = paths.map(path => rules.get(programRuleKey(path)));
-    if (values.every(value => value === values[0])) return values[0] ? exitDisplayLabel(values[0]) : '按分流规则';
-    if (values[0] && values.slice(1).every(value => !value)) return `${exitDisplayLabel(values[0])}（主程序）`;
+    const exit = values[0];
+    if (!exit) return values.some(Boolean) ? '多项规则' : '按分流规则';
+    const isNode = liveProfile?.nodePins?.[exit] || liveProfile?.nodes.some(n => n.name === exit);
+    const label = isNode ? `指定节点：${exitDisplayLabel(exit)}` : exitDisplayLabel(exit);
+    if (values.every(value => value === exit)) return label;
+    if (values.slice(1).every(value => !value)) return `${label}（主程序）`;
     return '多项规则';
   }
 
@@ -1225,7 +1229,7 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   function exitDisplayLabel(name: string): string {
-    if (!name || name === 'GLOBAL') return '跟随全局出口';
+    if (!name || name === 'GLOBAL') return '跟随首页节点';
     if (name === 'DIRECT') return 'DIRECT · 直连';
     if (name === 'REJECT') return 'REJECT · 阻断';
     if (name === 'PASS') return '跟随其余规则';
@@ -1278,7 +1282,7 @@ export function mountDesktopApp(shell: ShellController): void {
     }[] = [
       {
         id: 'SHARED',
-        name: '全局出口',
+        name: '默认节点',
         sub: `当前使用 ${exitDisplayLabel(activeExit)}`,
         selected: activeExit,
         canPick: true,
@@ -1415,7 +1419,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   function renderSplit(): void {
     const search = $<HTMLInputElement>('ruleSearch');
-    search.placeholder = { rules: '搜索应用、网站、IP 或出口', groups: '搜索分组或出口', procs: '搜索应用、进程或 PID' }[splitSub];
+    search.placeholder = { rules: '搜索规则', groups: '搜索分组', procs: '搜索运行中的程序' }[splitSub];
     search.setAttribute('aria-label', { rules: '搜索分流规则', groups: '搜索策略分组', procs: '搜索运行中的程序' }[splitSub]);
     $('splitRulesPane').hidden = splitSub !== 'rules';
     $('ruleOrderBtn').hidden = splitSub !== 'rules' || !liveProfile;
@@ -1591,7 +1595,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           </div>
           <div class="rule-right-cols live-cols">
-            <span class="pill ${r.active ? tone : 'orange'}">${esc(liveProfile?.nodePins?.[r.exit] || r.exit)}${r.active ? '' : ' · 停用'}</span>
+            <span class="pill ${r.active ? tone : 'orange'}">${esc(exitDisplayLabel(r.exit))}${r.active ? '' : ' · 停用'}</span>
             <label class="mac-switch">
               <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
               <i></i>
@@ -2559,7 +2563,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const primary = paths.indexOf(app.path);
     const helpers = paths.map((path, idx) => idx !== primary ? pathRow(path, idx) : '').join('');
     openSheet({
-      title: `${exit ? '设置软件出口' : '恢复默认出口'} · ${app.name}`,
+      title: `${exit ? '设置软件出口' : '恢复按分流规则'} · ${app.name}`,
       subtitle: exit ? `默认只选择主程序，可另外勾选辅助程序 · 出口：${exitDisplayLabel(exit)}` : `将清除已勾选的程序规则（共 ${paths.length} 条可选），恢复后按其余规则处理。`,
       iconHtml: renderProgramIcon(app.icon, app.name),
       size: 'wide',
@@ -2663,7 +2667,10 @@ export function mountDesktopApp(shell: ShellController): void {
     const groups = exits.filter(x => groupNames.has(x) && !builtins.includes(x));
     const nodes = exits.filter(x => !builtins.includes(x) && !groups.includes(x));
 
-    const items: PopupMenuItem[] = builtins.map(v => ({ value: v, label: exitDisplayLabel(v) }));
+    const items: PopupMenuItem[] = builtins.map(v => ({
+      value: v,
+      label: v === 'GLOBAL' ? `${exitDisplayLabel(v)}（当前：${exitDisplayLabel(activeGlobalExit())}）` : exitDisplayLabel(v),
+    }));
     if (groups.length) {
       items.push({ sep: true });
       items.push(...groups.map(g => ({ value: g, label: g, meta: '分组' })));
@@ -2883,7 +2890,7 @@ export function mountDesktopApp(shell: ShellController): void {
             category: 'MATCH',
             target: '',
             exit: nextVal,
-          }, `默认出口已设为 ${exitDisplayLabel(nextVal)}`);
+          }, `未命中规则时：${exitDisplayLabel(nextVal)}`);
         });
         return;
       }
