@@ -1042,15 +1042,10 @@
       flex-direction: column;
       min-height: 100%;
     }
-    #view-connect .telemetry-bottom {
-      flex: 1;
-      max-height: 330px;
-    }
     @media (min-width: 1320px) {
       .glass-toolbar { padding: 6px 24px 0; }
       .views-host { padding: 0 24px 18px; }
-      .connect-grid { gap: 16px; margin-bottom: 16px; }
-      .telemetry-bottom { gap: 16px; }
+      .connect-grid { --home-gap: 16px; }
       .telemetry-capsule { margin-bottom: 16px; }
       #homeQuickNodes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .node-pills-grid.cols-3 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1297,16 +1292,16 @@
     .connect-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.36fr) minmax(0, 1fr);
-      gap: 14px;
-      margin-bottom: 14px;
-      align-items: start;
+      flex: 1;
+      gap: var(--home-gap, 14px);
     }
     .connect-col {
+      gap: var(--home-gap, 14px);
       display: flex;
       flex-direction: column;
       min-width: 0;
     }
-    #homeSubCard { margin-top: 12px; }
+
     #heroNodeName, #homeAutoFoot, #homeSubCard small {
       display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
@@ -1464,18 +1459,12 @@
     .mini-dot.off { background: var(--subtle); }
     .mini-dot.red { background: var(--red); }
 
-    /* Bottom Telemetry: Same Exact 1.36fr / 1fr Column Axis as Above! */
-    .telemetry-bottom {
-      display: grid;
-      grid-template-columns: minmax(0, 1.36fr) minmax(0, 1fr);
-      gap: 14px;
-      align-items: stretch;
-    }
-    .telemetry-bottom > .mac-card {
+    .home-chart {
+      flex: 1;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      min-height: 228px;
+      min-height: clamp(200px, 27vh, 300px);
     }
     .chart-shell {
       position: relative;
@@ -2310,8 +2299,7 @@
       .glass-toolbar { padding: 6px 24px 0; }
       .views-host { padding: 0 24px 18px; }
       .telemetry-capsule { margin-bottom: 16px; }
-      .connect-grid { gap: 16px; margin-bottom: 16px; }
-      .telemetry-bottom { gap: 16px; }
+      .connect-grid { --home-gap: 16px; }
       #homeQuickNodes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .node-pills-grid.cols-3 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .grid-2col { gap: 16px; }
@@ -2323,8 +2311,17 @@
     /* Medium-Narrow Stage (<= 820px detail width) */
     @container stage (max-width: 820px) {
       .online-pill { display: none; }
-      .connect-grid { grid-template-columns: minmax(0, 1fr); }
-      .home-apps { grid-row: 1; }
+      .connect-grid {
+        flex: none;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "apps" "nodes" "subscription" "traffic" "connections";
+      }
+      .connect-col { display: contents; }
+      .home-apps { grid-area: apps; }
+      .home-nodes { grid-area: nodes; }
+      #homeSubCard { grid-area: subscription; }
+      .home-traffic { grid-area: traffic; }
+      .home-connections { grid-area: connections; }
       .mac-window:not(:has(#searchWrap.has-value)) #homeQuickNodes { display: none; }
       .mac-window:not(:has(#searchWrap.has-value)) .spotlight-bar {
         margin-bottom: 0;
@@ -2332,8 +2329,6 @@
         padding-bottom: 0;
       }
       .mac-window:not(:has(#searchWrap.has-value)) .node-card-foot { margin-top: 10px; }
-      .telemetry-bottom { grid-template-columns: minmax(0, 1fr); }
-      #view-connect .telemetry-bottom { flex: none; max-height: none; }
       .node-pills-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .t-cell strong { font-size: var(--type-body); }
       .t-cell span { font-size: var(--type-caption); }
