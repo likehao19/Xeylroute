@@ -326,7 +326,7 @@ pub async fn mihomo_delay(
     let url = match target.as_deref().unwrap_or("google") {
         "google" => "https://www.gstatic.com/generate_204",
         "cloudflare" => "https://cp.cloudflare.com/generate_204",
-        "microsoft" => "https://www.msftconnecttest.com/connecttest.txt",
+        "microsoft" => "http://www.msftconnecttest.com/connecttest.txt",
         _ => return Err("不支持的延迟测试服务".into()),
     };
     let timeout = match timeout_ms.unwrap_or(5000) {
