@@ -62,7 +62,7 @@ export function renderProgramIcon(icon?: string | null, name = '', fallbackTone?
     return `<span class="sq md ${tone}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${fallbackGlyph}</svg></span>`;
   }
   const letter = (name.trim().slice(0, 1) || 'A').toUpperCase();
-  return `<span class="sq md ${tone}" style="font-weight:700;font-size:12px">${letter.replace(/[<>&]/g, '')}</span>`;
+  return `<span class="sq md ${tone}" style="font-weight:700;font-size:var(--type-label)">${letter.replace(/[<>&]/g, '')}</span>`;
 }
 
 const KNOWN_SITE_ICONS = new Set([
@@ -84,5 +84,5 @@ export function renderSiteIcon(host: string, label: string, tone: string): strin
     return `<span class="app-native-icon site"><img src="/site-icons/${clean}.ico" alt=""></span>`;
   }
   const initial = (label.trim().slice(0, 1) || clean.slice(0, 1) || 'W').toUpperCase();
-  return `<span class="sq md ${tone}" style="font-weight:700;font-size:12px">${initial.replace(/[<>&]/g, '')}</span>`;
+  return `<span class="sq md ${tone}" style="font-weight:700;font-size:var(--type-label)">${initial.replace(/[<>&]/g, '')}</span>`;
 }

@@ -116,6 +116,7 @@ export function mountPreviewApp(shell: ShellController): void {
   function renderHeaderState(): void {
     const active = currentNode();
     const cap = captureSummary();
+    $('captureIdleBanner').hidden = !!cap || !activeNodes().length;
     const modeLabel = { rule: '规则模式', global: '全局模式', direct: '直连模式' }[state.mode];
     const modeIdx = { rule: 0, global: 1, direct: 2 }[state.mode] || 0;
 
@@ -131,7 +132,7 @@ export function mountPreviewApp(shell: ShellController): void {
     $('navSubBadge').textContent = String(state.subscriptions.length);
 
     const pill = $('topOnlinePill');
-    pill.className = 'online-pill lg-track' + (!state.connected ? ' off' : !cap ? ' warn' : '');
+    pill.className = 'online-pill' + (!state.connected ? ' off' : !cap ? ' warn' : '');
     $('topStatusText').textContent = !state.connected
       ? '已断开'
       : !cap
@@ -211,14 +212,14 @@ export function mountPreviewApp(shell: ShellController): void {
           <div style="display:flex;align-items:center;gap:10px">
             <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
             <div>
-              <strong style="display:block;font-size:13px;font-weight:620">${esc(sub.name)}</strong>
-              <small style="color:var(--muted);font-size:11px">更新于 ${esc(sub.updated)}</small>
+              <strong class="card-title" style="display:block">${esc(sub.name)}</strong>
+              <small style="color:var(--muted);font-size:var(--type-caption)">更新于 ${esc(sub.updated)}</small>
             </div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
+        <div style="display:flex;justify-content:space-between;font-size:var(--type-caption);color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
           <span>已用 ${sub.used} GB / ${sub.quota} GB</span>
-          <span style="color:var(--ink-2);font-weight:600">${pct}%</span>
+          <span style="color:var(--ink-2);font-weight:var(--weight-title)">${pct}%</span>
         </div>
         <div class="mac-progress"><span style="width:${pct}%"></span></div>
       `;
@@ -283,8 +284,8 @@ export function mountPreviewApp(shell: ShellController): void {
         <div class="group-drawer ${open ? 'open' : ''}">
           <button type="button" class="group-drawer-head" aria-expanded="${open}" data-toggle-drawer="${esc(d.id)}">
             <span>
-              <strong style="font-size:14px;font-weight:650;display:block">${esc(d.name)}</strong>
-              <small style="color:var(--muted);font-size:11.5px">${esc(d.sub)}</small>
+              <strong class="card-title" style="display:block">${esc(d.name)}</strong>
+              <small style="color:var(--muted);font-size:var(--type-label)">${esc(d.sub)}</small>
             </span>
             <svg class="drawer-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
           </button>
@@ -410,8 +411,8 @@ export function mountPreviewApp(shell: ShellController): void {
                 <div style="display:flex;align-items:center;gap:10px">
                   <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
                   <div>
-                    <strong style="font-size:13.5px;font-weight:650;display:block">${esc(g.name)}</strong>
-                    <small style="color:var(--muted);font-size:11px">${members.length} 个成员 · ${esc(g.type)}</small>
+                    <strong class="card-title" style="display:block">${esc(g.name)}</strong>
+                    <small style="color:var(--muted);font-size:var(--type-caption)">${members.length} 个成员 · ${esc(g.type)}</small>
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -421,13 +422,13 @@ export function mountPreviewApp(shell: ShellController): void {
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
                 ${macPopupBtnHtml({ value: g.exit, label: exitName(g.exit), width: 158, popupKind: 'group-exit', popupKey: g.id })}
-                <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer">
+                <label style="display:inline-flex;align-items:center;gap:7px;font-size:var(--type-label);color:var(--muted);cursor:pointer">
                   <span>组 TUN</span>
                   <span class="mac-switch"><input type="checkbox" data-group-tun="${esc(g.id)}" ${g.tun ? 'checked' : ''}><i></i></span>
                 </label>
               </div>
-              <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:12px">
-                <summary style="cursor:pointer;color:var(--accent);font-weight:580">管理组成员 (${members.length})</summary>
+              <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:var(--type-label)">
+                <summary style="cursor:pointer;color:var(--accent);font-weight:var(--weight-control)">管理组成员 (${members.length})</summary>
                 <div style="margin-top:8px;display:grid;gap:6px">
                   ${members.map(m => `
                     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -487,7 +488,7 @@ export function mountPreviewApp(shell: ShellController): void {
     $('logsListCard').innerHTML = state.logs.map(l => `
       <div class="mac-row">
         <div class="mac-row-left">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);width:58px;flex:none">${esc(l.time)}</span>
+          <span style="font-family:var(--font-mono);font-size:var(--type-caption);color:var(--muted);width:58px;flex:none">${esc(l.time)}</span>
           <div style="min-width:0">
             <span class="mac-row-title">${esc(l.app)} <span style="color:var(--muted);font-weight:400">→</span> <span style="font-family:var(--font-mono)">${esc(l.host)}</span></span>
             <span class="mac-row-sub">${esc(l.match)} · ${esc(l.reason)}</span>
@@ -511,18 +512,18 @@ export function mountPreviewApp(shell: ShellController): void {
             <div style="display:flex;align-items:center;gap:10px">
               <span class="sq md ${sub.active ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
               <div>
-                <strong style="font-size:14px;font-weight:650;display:block">${esc(sub.name)}</strong>
-                <small style="color:var(--muted);font-size:11px">${esc(sub.kind)} · ${cnt} 个节点</small>
+                <strong class="card-title" style="display:block">${esc(sub.name)}</strong>
+                <small style="color:var(--muted);font-size:var(--type-caption)">${esc(sub.kind)} · ${cnt} 个节点</small>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:4px">
-              <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(sub.id)}">刷新</button>
+              <button type="button" class="glass-btn-soft" data-ref-sub="${esc(sub.id)}">刷新</button>
               <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(sub.id)}" data-tip="移除订阅">${SF_TRASH}</button>
             </div>
           </div>
-          <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sub.url)}</div>
+          <div style="font-family:var(--font-mono);font-size:var(--type-caption);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sub.url)}</div>
           <div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
+            <div style="display:flex;justify-content:space-between;font-size:var(--type-caption);color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
               <span>已用 ${sub.used} GB / ${sub.quota} GB (${pct}%)</span>
               <span>到期 ${esc(sub.expires)}</span>
             </div>
@@ -575,6 +576,7 @@ export function mountPreviewApp(shell: ShellController): void {
 
   const setSysProxy = (v: boolean) => { state.systemProxy = v; if (v) state.connected = true; renderAll(); notify(v ? '系统代理已开启' : '系统代理已关闭'); };
   const setTun = (v: boolean) => { state.tun = v; if (v) state.connected = true; renderAll(); notify(v ? '虚拟网卡 (TUN) 已开启' : '虚拟网卡 (TUN) 已关闭'); };
+  $('enableSystemProxyBtn').addEventListener('click', () => setSysProxy(true));
   $('sideSysProxy').addEventListener('change', e => setSysProxy((e.target as HTMLInputElement).checked));
   $('sideTunToggle').addEventListener('change', e => setTun((e.target as HTMLInputElement).checked));
   $('setFallbackToggle').addEventListener('change', e => {
@@ -864,8 +866,8 @@ export function mountPreviewApp(shell: ShellController): void {
       actionsSplit: true,
       actionsHtml: `
         <button type="button" class="glass-btn-soft" id="sheetImportFileBtn">从文件导入…</button>
-        <div class="sheet-actions-group"><button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport" disabled>导入</button></div>
+        <div class="sheet-actions-group"><button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
+        <button type="button" class="glass-btn-primary compact" id="sheetConfirmImport" disabled>导入</button></div>
       `,
     });
     const input = $<HTMLTextAreaElement>('sheetImportVal');
@@ -892,8 +894,8 @@ export function mountPreviewApp(shell: ShellController): void {
           </div>
         `,
         actionsHtml: `
-          <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-          <button type="button" class="glass-btn-primary compact lg-track" id="shGrpSave">创建</button>
+          <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
+          <button type="button" class="glass-btn-primary compact" id="shGrpSave">创建</button>
         `,
       });
       $('sheetCancel').onclick = closeSheet;
@@ -918,8 +920,8 @@ export function mountPreviewApp(shell: ShellController): void {
           </div>
         `,
         actionsHtml: `
-          <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-          <button type="button" class="glass-btn-primary compact lg-track" id="shRuleSave">保存规则</button>
+          <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
+          <button type="button" class="glass-btn-primary compact" id="shRuleSave">保存规则</button>
         `,
       });
       $('sheetCancel').onclick = closeSheet;
@@ -978,6 +980,7 @@ export function mountPreviewApp(shell: ShellController): void {
       $('sideDownRate').textContent = '0.0 MB/s ↓';
       $('sideUpRate').textContent = '0.0 MB/s ↑';
       telemetry.pushSample(0, 0);
+      if (state.connected) telemetry.pushConnectionCount(0, { down: 0, up: 0 });
       return;
     }
     state.elapsed++;
@@ -992,9 +995,10 @@ export function mountPreviewApp(shell: ShellController): void {
     $('sideDownRate').textContent = `${d.toFixed(1)} MB/s ↓`;
     $('sideUpRate').textContent = `${u.toFixed(1)} MB/s ↑`;
     telemetry.pushSample(d, u);
+    telemetry.pushConnectionCount(Math.round(d * 2), { down: d, up: u });
   }, 1000);
 
-  telemetry.renderHeatmap();
+  telemetry.renderConnections();
   telemetry.paintChart();
   renderAll();
 }

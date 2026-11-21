@@ -116,7 +116,7 @@
       <!-- Bottom Live Telemetry Pod -->
       <div class="sidebar-live-card">
         <div class="sidebar-live-top">
-          <span style="font-size:11.5px;font-weight:600;color:var(--muted)">实时流量</span>
+          <span style="font-size:var(--type-label);font-weight:var(--weight-title);color:var(--muted)">实时流量</span>
           <div class="sidebar-speeds">
             <div class="up" id="sideUpRate">—</div>
             <div class="down" id="sideDownRate">—</div>
@@ -144,13 +144,13 @@
     <div class="detail-stage">
       <header class="glass-toolbar" data-tauri-drag-region>
         <div class="toolbar-left">
-          <button type="button" class="glass-circle lg-track toolbar-sidebar-btn" id="sidebarExpandBtn" aria-label="显示边栏" data-tip="显示边栏 (⌘S)">
+          <button type="button" class="glass-circle toolbar-sidebar-btn" id="sidebarExpandBtn" aria-label="显示边栏" data-tip="显示边栏 (⌘S)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
           </button>
 
           <h1 class="stage-title" id="stageTitle" data-tauri-drag-region>连接</h1>
 
-          <div class="online-pill lg-track" id="topOnlinePill">
+          <div class="online-pill" id="topOnlinePill">
             <span class="dot"></span>
             <span id="topStatusText">准备就绪</span>
           </div>
@@ -159,23 +159,23 @@
         <div class="toolbar-drag-spacer" id="toolbarDragSpacer" data-tauri-drag-region></div>
 
         <div class="toolbar-right" id="toolbarActions">
-          <div class="page-actions" data-page-actions="nodes" id="nodeTestActions" data-glass-control hidden>
+          <div class="page-actions" data-page-actions="nodes" id="nodeTestActions" hidden>
             <button type="button" class="glass-btn-soft compact" id="nodesBandwidthBtn" data-tip="逐个下载 1 MB 样本，避免节点之间争抢带宽" hidden>测全部带宽</button>
-            <button type="button" class="glass-btn-primary compact lg-track" id="nodesActionBtn">全部节点测速</button>
+            <button type="button" class="glass-btn-primary compact" id="nodesActionBtn">全部节点测速</button>
             <button type="button" class="glass-btn-primary compact" id="nodesImportBtn" hidden>导入节点或订阅</button>
           </div>
           <div class="page-actions" data-page-actions="split" hidden>
             <button type="button" class="glass-btn-soft compact" id="ruleOrderBtn" hidden>生效顺序</button>
             <button type="button" class="glass-btn-soft compact" id="bulkRulesBtn" hidden>批量管理</button>
-            <button type="button" class="glass-btn-primary compact lg-track" id="splitPrimaryAddBtn">+ 添加规则</button>
-            <button type="button" class="glass-btn-soft lg-track" id="refreshProcsBtn" hidden>刷新程序</button>
+            <button type="button" class="glass-btn-primary compact" id="splitPrimaryAddBtn">+ 添加规则</button>
+            <button type="button" class="glass-btn-soft" id="refreshProcsBtn" hidden>刷新程序</button>
           </div>
           <div class="page-actions" data-page-actions="logs" hidden>
             <label class="probe-field">
               <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.35"><circle cx="10" cy="10" r="7"/><ellipse cx="10" cy="10" rx="3" ry="7"/><path d="M3 10h14"/></svg>
               <input type="text" class="sheet-input" id="simHostInput" form="simForm" aria-label="测试域名" value="github.com" placeholder="输入测试域名…" required>
             </label>
-            <button type="submit" form="simForm" class="glass-btn-primary compact lg-track" id="simSubmitBtn">测试走向</button>
+            <button type="submit" form="simForm" class="glass-btn-primary compact" id="simSubmitBtn">测试走向</button>
           </div>
           <div class="page-actions" data-page-actions="subs" hidden>
             <button type="button" class="glass-btn-soft compact" id="refreshAllSubsBtn" hidden>全部刷新</button>
@@ -183,14 +183,14 @@
             <button type="button" class="glass-btn-primary compact" id="subImportBtn">导入订阅或节点…</button>
           </div>
           <div class="page-actions" data-page-actions="settings" hidden>
-            <button type="button" class="glass-btn-soft lg-track" id="exportBackupBtn">保存备份</button>
-            <button type="button" class="glass-btn-soft lg-track" id="resetStateBtn">恢复备份</button>
-            <button type="button" class="glass-circle lg-track" style="width:28px;height:28px;font-size:12px;font-weight:700" id="helpInfoBtn" aria-label="路由优先级与快捷键说明" data-tip="路由优先级与快捷键说明">?</button>
+            <button type="button" class="glass-btn-soft" id="exportBackupBtn">保存备份</button>
+            <button type="button" class="glass-btn-soft" id="resetStateBtn">恢复备份</button>
+            <button type="button" class="glass-circle" style="width:28px;height:28px;font-size:var(--type-label);font-weight:700" id="helpInfoBtn" aria-label="路由优先级与快捷键说明" data-tip="路由优先级与快捷键说明">?</button>
           </div>
           <div class="page-actions" data-page-actions="network-detail" hidden>
             <button type="button" class="glass-btn-soft" id="allNetworkSettings">全部设置</button>
           </div>
-          <div class="glass-capsule lg-track win-controls" id="winControls" aria-label="窗口控制">
+          <div class="glass-capsule win-controls" id="winControls" aria-label="窗口控制">
             <button type="button" id="winMinBtn" data-tip="最小化" aria-label="最小化">
               <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 7h8"/></svg>
             </button>
@@ -212,6 +212,13 @@
              =============================================================== -->
         <section class="view active" id="view-connect">
           <div class="desktop-banner mac-card" id="desktopStatusBanner" hidden></div>
+          <div class="desktop-banner mac-card" id="captureIdleBanner" hidden>
+            <div class="desktop-banner-text">
+              <strong>尚未接管系统流量</strong>
+              <small>开启系统代理后，使用系统代理设置的应用将按当前配置连接。</small>
+            </div>
+            <button type="button" class="glass-btn-primary compact" id="enableSystemProxyBtn">开启系统代理</button>
+          </div>
 
           <div class="telemetry-capsule">
             <div class="t-cell">
@@ -248,16 +255,16 @@
                     <span class="flag-box lg" id="heroFlag"></span>
                     <div style="min-width:0">
                       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                        <strong style="font-size:15.5px;font-weight:680;letter-spacing:-0.015em" id="heroNodeName">—</strong>
+                        <strong style="font-size:var(--type-heading);font-weight:700;letter-spacing:-0.015em" id="heroNodeName">—</strong>
                         <span class="pill" id="heroNodeProto">—</span>
-                        <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11.5px;font-weight:600;color:var(--green)" id="heroNodeDelay"></span>
+                        <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:var(--type-label);font-weight:var(--weight-title);color:var(--green)" id="heroNodeDelay"></span>
                       </div>
-                      <div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="heroNodeMeta">
+                      <div style="font-size:var(--type-label);color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="heroNodeMeta">
                         —
                       </div>
                     </div>
                   </div>
-                  <button type="button" class="glass-btn-soft lg-track" id="heroProbeBtn">重测</button>
+                  <button type="button" class="glass-btn-soft" id="heroProbeBtn">重测</button>
                 </div>
 
                 <div class="node-pills-grid" id="homeQuickNodes"></div>
@@ -285,10 +292,10 @@
             <div class="mac-card">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <div style="display:flex;align-items:center;gap:8px">
-                  <strong style="font-size:13px;font-weight:650">已接管流量波形</strong>
+                  <strong class="card-title">已接管流量波形</strong>
                   <span class="pill" id="chartModeBadge">规则模式 · 未接管</span>
                 </div>
-                <div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">
+                <div style="display:flex;gap:12px;font-size:var(--type-caption);color:var(--muted)">
                   <span style="display:inline-flex;align-items:center;gap:4px"><i class="mini-dot" style="background:var(--accent)"></i> 下载</span>
                   <span style="display:inline-flex;align-items:center;gap:4px"><i class="mini-dot" style="background:var(--mint)"></i> 上传</span>
                 </div>
@@ -336,16 +343,16 @@
             </div>
 
             <div class="mac-card">
-              <div>
+              <div class="connection-panel">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                  <strong style="font-size:13px;font-weight:650">活跃连接数</strong>
-                  <span style="font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums" id="heatmapReadout">最近 96 次采样</span>
+                  <strong class="card-title">活跃连接数</strong>
+                  <span style="font-size:var(--type-caption);color:var(--muted);font-variant-numeric:tabular-nums" id="connectionReadout">等待连接采样</span>
                 </div>
-                <div class="heatmap-grid" id="activityHeatmap" role="group" tabindex="0" aria-label="活跃连接数，可用左右方向键查看采样"></div>
+                <div class="connection-history" id="connectionHistory" aria-describedby="connectionReadout" role="group" tabindex="0" aria-label="最近 96 次连接采样，从左到右按时间排列。可用左右方向键查看"></div>
               </div>
               <div class="telemetry-foot">
                 <span id="homePortFoot">127.0.0.1:7890</span>
-                <span class="heatmap-legend">少 <i style="background:var(--cell-0)"></i><i style="background:var(--cell-1)"></i><i style="background:var(--cell-2)"></i><i style="background:var(--cell-3)"></i><i style="background:var(--cell-4)"></i> 多</span>
+                <span id="connectionFoot">较早 → 最新</span>
               </div>
             </div>
           </div>
@@ -388,7 +395,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <div id="splitDefaultWrap" style="display:flex;align-items:center;gap:8px">
-                <span style="font-size:12px;color:var(--muted)">未命中规则时</span>
+                <span style="font-size:var(--type-label);color:var(--muted)">未命中规则时</span>
                 <div id="defaultExitSelectHost"></div>
               </div>
               <div id="procToolsWrap" style="display:none;align-items:center;gap:8px">
@@ -436,7 +443,7 @@
           <div id="standaloneNodesSection" hidden style="margin-top:18px">
             <div class="section-head">
               <span class="section-label">直接导入的独立节点</span>
-              <span style="font-size:11.5px;color:var(--muted)" id="standaloneNodesCount"></span>
+              <span style="font-size:var(--type-label);color:var(--muted)" id="standaloneNodesCount"></span>
             </div>
             <div class="mac-card flush" id="standaloneNodesList"></div>
           </div>
@@ -461,7 +468,6 @@
           <div class="mac-card flush" data-detail-for="system tun" style="margin-bottom:18px">
             <div class="mac-row" data-detail-for="tun">
               <div class="mac-row-left">
-                <span class="sq md indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span>
                 <div>
                   <span class="mac-row-title">TUN 接管范围</span>
                   <span class="mac-row-sub" id="tunScopeHelp">仅指定目标模式只在规则模式下对开启 TUN 的组/程序生效</span>
@@ -472,7 +478,6 @@
 
             <div class="mac-row" data-detail-for="system">
               <div class="mac-row-left">
-                <span class="sq md green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M15 15h2"/></svg></span>
                 <div>
                   <span class="mac-row-title">本地监听端口</span>
                   <span class="mac-row-sub" id="portHintSub">绑定 127.0.0.1 · 保存前自动校验端口冲突</span>
@@ -482,13 +487,12 @@
                 <label class="port-chip"><small>MIX</small><input type="number" id="portMixedInput" value="7890" min="0" max="65535"></label>
                 <label class="port-chip"><small>HTTP</small><input type="number" id="portHttpInput" value="0" min="0" max="65535"></label>
                 <label class="port-chip"><small>SOCKS</small><input type="number" id="portSocksInput" value="0" min="0" max="65535"></label>
-                <button type="button" class="glass-btn-soft lg-track" id="savePortsBtn">保存</button>
+                <button type="button" class="glass-btn-soft" id="savePortsBtn">保存</button>
               </div>
             </div>
 
             <div class="mac-row" id="setFallbackRow">
               <div class="mac-row-left">
-                <span class="sq md orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span>
                 <div>
                   <span class="mac-row-title">代理故障时恢复直连</span>
                   <span class="mac-row-sub">节点故障自动回退 DIRECT（显式 REJECT 始终阻断）</span>
@@ -557,15 +561,14 @@
           <div class="mac-card flush" data-detail-for="system" style="margin-bottom:18px">
             <div class="mac-row" data-detail-for="system">
               <div class="mac-row-left">
-                <span class="sq md purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"/><path d="M2 12h20"/></svg></span>
                 <div>
                   <span class="mac-row-title">出口 IP 与终端代理变量</span>
                   <span class="mac-row-sub" id="setExitIpSub">未检测 · 正在读取本机网络…</span>
                 </div>
               </div>
               <div style="display:flex;gap:8px;flex:none">
-                <button type="button" class="glass-btn-soft lg-track" id="copyEnvBtn">复制代理变量</button>
-                <button type="button" class="glass-btn-soft lg-track" id="probeIpBtn">检测 IP</button>
+                <button type="button" class="glass-btn-soft" id="copyEnvBtn">复制代理变量</button>
+                <button type="button" class="glass-btn-soft" id="probeIpBtn">检测 IP</button>
               </div>
             </div>
 
@@ -575,7 +578,6 @@
             </div>
             <div class="mac-row" id="setCoreRow">
               <div class="mac-row-left">
-                <span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg></span>
                 <div style="min-width:0">
                   <span class="mac-row-title" id="setCoreTitle">代理内核状态</span>
                   <span class="mac-row-sub" id="setCoreSub">—</span>

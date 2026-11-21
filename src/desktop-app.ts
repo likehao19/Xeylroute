@@ -593,7 +593,8 @@ export function mountDesktopApp(shell: ShellController): void {
       ? conn?.memory ? formatBytes(conn.memory) : `${conn?.count ?? 0} 连接`
       : stopped ? '未运行' : '暂无采样';
     $('chartLossFoot').textContent = rates ? '约每 2 秒采样' : stopped ? '内核已停止' : current ? '等待下次采样' : '采样不可用';
-    if (rates) telemetry.pushSample(rates.down, rates.up, conn?.count ?? 0);
+    if (rates) telemetry.pushSample(rates.down, rates.up);
+    if (typeof conn?.count === 'number') telemetry.pushConnectionCount(conn.count, rates);
   }
 
   async function refreshNetworkDetails(force = false): Promise<void> {
@@ -993,6 +994,8 @@ export function mountDesktopApp(shell: ShellController): void {
     const tunInput = $<HTMLInputElement>('sideTunToggle');
     sysInput.checked = Boolean(liveStatus?.systemProxy);
     tunInput.checked = Boolean(liveStatus?.tun);
+    $('captureIdleBanner').hidden = !liveStatus?.configured || !liveStatus.available || !!liveError || sysInput.checked || tunInput.checked;
+    $<HTMLButtonElement>('enableSystemProxyBtn').disabled = networkUpdating || changingSubscription;
     sysInput.disabled = networkUpdating || changingSubscription;
     tunInput.disabled = networkUpdating || changingSubscription;
 
@@ -1005,7 +1008,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const activeExit = activeGlobalExit();
     const activeCapture = Boolean(liveStatus?.systemProxy || liveStatus?.tun);
     const pill = $('topOnlinePill');
-    pill.className = 'online-pill lg-track' + (networkUpdating ? ' warn' : !liveStatus?.running ? ' off' : !activeCapture ? ' warn' : '');
+    pill.className = 'online-pill' + (networkUpdating ? ' warn' : !liveStatus?.running ? ' off' : !activeCapture ? ' warn' : '');
     $('topStatusText').textContent = networkUpdating
       ? '正在更新代理…'
       : !liveStatus?.running
@@ -1043,7 +1046,7 @@ export function mountDesktopApp(shell: ShellController): void {
           <strong>尚未添加节点或订阅配置</strong>
           <small>粘贴 HTTPS 订阅链接、vless:// / trojan:// / ss:// / hy2:// 节点链接，或导入本地 YAML / JSON 配置即可开始代理。</small>
         </div>
-        <button type="button" class="glass-btn-primary compact lg-track" id="bannerImportBtn">立即导入</button>
+        <button type="button" class="glass-btn-primary compact" id="bannerImportBtn">立即导入</button>
       `;
       return;
     }
@@ -1054,7 +1057,7 @@ export function mountDesktopApp(shell: ShellController): void {
           <strong style="color:var(--orange)">内核状态提示</strong>
           <small>${esc(liveError)}</small>
         </div>
-        <button type="button" class="glass-btn-soft lg-track" id="bannerRetryBtn">重试</button>
+        <button type="button" class="glass-btn-soft" id="bannerRetryBtn">重试</button>
       `;
       return;
     }
@@ -1163,7 +1166,7 @@ export function mountDesktopApp(shell: ShellController): void {
             </div>
           `;
         }).join('')
-      : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:12px">${processStatus}</div>`;
+      : `<div style="padding:26px 14px;text-align:center;color:var(--muted);font-size:var(--type-label)">${processStatus}</div>`;
 
     // Right Active Subscription Card
     const activeSub = liveProfile?.providers.find(p => p.name === selectedSubscription) || liveProfile?.providers[0];
@@ -1179,19 +1182,19 @@ export function mountDesktopApp(shell: ShellController): void {
           <div style="display:flex;align-items:center;gap:10px;min-width:0">
             <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
             <div style="min-width:0">
-              <strong style="display:block;font-size:13px;font-weight:620;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(activeSub.name)}</strong>
-              <small style="color:var(--muted);font-size:11px">${esc(activeSub.source || (activeSub.type === 'http' ? '远程订阅' : '本地订阅'))} · ${esc(updated)}</small>
+              <strong class="card-title" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(activeSub.name)}</strong>
+              <small style="color:var(--muted);font-size:var(--type-caption)">${esc(activeSub.source || (activeSub.type === 'http' ? '远程订阅' : '本地订阅'))} · ${esc(updated)}</small>
             </div>
           </div>
         </div>
         ${hasQuota ? `
-          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
+          <div style="display:flex;justify-content:space-between;font-size:var(--type-caption);color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
             <span>已用 ${esc(formatBytes(used))} / ${esc(formatBytes(usage!.Total!))}</span>
-            <span style="color:var(--ink-2);font-weight:600">${pct}%</span>
+            <span style="color:var(--ink-2);font-weight:var(--weight-title)">${pct}%</span>
           </div>
           <div class="mac-progress"><span style="width:${pct}%"></span></div>
         ` : `
-          <div style="font-size:11.5px;color:var(--muted)">当前订阅共 ${activeSubscriptionNodes().length} 个可用节点</div>
+          <div style="font-size:var(--type-label);color:var(--muted)">当前订阅共 ${activeSubscriptionNodes().length} 个可用节点</div>
         `}
       `;
     } else {
@@ -1201,8 +1204,8 @@ export function mountDesktopApp(shell: ShellController): void {
           <div style="display:flex;align-items:center;gap:10px">
             <span class="sq md orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 12.5 12 17.5 21 12.5"/></svg></span>
             <div>
-              <strong style="display:block;font-size:13px;font-weight:620">${staticCount ? `独立导入节点 (${staticCount})` : '暂无远程订阅'}</strong>
-              <small style="color:var(--muted);font-size:11px">${staticCount ? '已导入节点可直接代理或加入分组' : '支持 HTTPS 订阅与单节点分享链接'}</small>
+              <strong class="card-title" style="display:block">${staticCount ? `独立导入节点 (${staticCount})` : '暂无远程订阅'}</strong>
+              <small style="color:var(--muted);font-size:var(--type-caption)">${staticCount ? '已导入节点可直接代理或加入分组' : '支持 HTTPS 订阅与单节点分享链接'}</small>
             </div>
           </div>
 
@@ -1302,8 +1305,8 @@ export function mountDesktopApp(shell: ShellController): void {
         <div class="group-drawer ${open ? 'open' : ''}">
           <button type="button" class="group-drawer-head" aria-expanded="${open}" data-toggle-drawer="${esc(d.id)}">
             <span>
-              <strong style="font-size:14px;font-weight:650;display:block">${esc(d.name)}</strong>
-              <small style="color:var(--muted);font-size:11.5px">${esc(d.sub)}</small>
+              <strong class="card-title" style="display:block">${esc(d.name)}</strong>
+              <small style="color:var(--muted);font-size:var(--type-label)">${esc(d.sub)}</small>
             </span>
             <svg class="drawer-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
           </button>
@@ -1584,8 +1587,8 @@ export function mountDesktopApp(shell: ShellController): void {
                   <div style="display:flex;align-items:center;gap:10px">
                     <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
                     <div>
-                      <strong style="font-size:13.5px;font-weight:650;display:block">${esc(g.name)}</strong>
-                      <small style="color:var(--muted);font-size:11px">${members.length} 个目标 · ${esc(g.type)}${g.enabled ? '' : ' · 已停用'}</small>
+                      <strong class="card-title" style="display:block">${esc(g.name)}</strong>
+                      <small style="color:var(--muted);font-size:var(--type-caption)">${members.length} 个目标 · ${esc(g.type)}${g.enabled ? '' : ' · 已停用'}</small>
                     </div>
                   </div>
                   <div style="display:flex;align-items:center;gap:6px">
@@ -1599,8 +1602,8 @@ export function mountDesktopApp(shell: ShellController): void {
                     ? macPopupBtnHtml({ value: curExit, label: curExit, width: 162, popupKind: 'group-exit', popupKey: g.name })
                     : `<span class="pill blue">${esc(curExit)}</span>`}
                 </div>
-                <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:12px">
-                  <summary style="cursor:pointer;color:var(--accent);font-weight:580">管理组成员 (${members.length})</summary>
+                <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:var(--type-label)">
+                  <summary style="cursor:pointer;color:var(--accent);font-weight:var(--weight-control)">管理组成员 (${members.length})</summary>
                   <div style="margin-top:8px;display:grid;gap:6px">
                     ${members.map(({ line, index }) => {
                       const [, target] = line.split(',');
@@ -1731,7 +1734,7 @@ export function mountDesktopApp(shell: ShellController): void {
           return `
             <div class="mac-row">
               <div class="mac-row-left">
-                <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);width:66px;flex:none">${esc(row.time.slice(-8))}</span>
+                <span style="font-family:var(--font-mono);font-size:var(--type-caption);color:var(--muted);width:66px;flex:none">${esc(row.time.slice(-8))}</span>
                 <div style="min-width:0">
                   <span class="mac-row-title">${esc(row.app || '未识别进程')} <span style="color:var(--muted);font-weight:400">→</span> <span style="font-family:var(--font-mono)">${esc(row.target)}</span></span>
                   <span class="mac-row-sub">${esc(row.decision || '—')}</span>
@@ -1827,26 +1830,26 @@ export function mountDesktopApp(shell: ShellController): void {
                 <div style="display:flex;align-items:center;gap:10px;min-width:0">
                   <span class="sq md ${selected ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
                   <div style="min-width:0">
-                    <strong style="font-size:14px;font-weight:650;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(saved.name)}</strong>
-                    <small style="color:var(--muted);font-size:11px">${remote ? 'HTTPS 远程订阅' : '本地订阅文件'} · ${nodeCount} 个节点${selected ? ' · 当前生效' : ''}</small>
+                    <strong class="card-title" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(saved.name)}</strong>
+                    <small style="color:var(--muted);font-size:var(--type-caption)">${remote ? 'HTTPS 远程订阅' : '本地订阅文件'} · ${nodeCount} 个节点${selected ? ' · 当前生效' : ''}</small>
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex:none">
                   ${remote || saved.type === 'file' ? `<button type="button" class="sf-icon-btn" data-edit-sub="${esc(saved.name)}" aria-label="编辑订阅" data-tip="编辑订阅">${SF_EDIT}</button>` : ''}
-                  <button type="button" class="glass-btn-soft lg-track" data-ref-sub="${esc(saved.name)}" ${providerRefresh || changingSubscription || networkUpdating ? 'disabled' : ''}>刷新</button>
+                  <button type="button" class="glass-btn-soft" data-ref-sub="${esc(saved.name)}" ${providerRefresh || changingSubscription || networkUpdating ? 'disabled' : ''}>刷新</button>
                   <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(saved.name)}" data-tip="移除订阅">${SF_TRASH}</button>
                 </div>
               </div>
-              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted)">
+              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:var(--type-caption);color:var(--muted)">
                 <span>${esc(saved.source || (remote ? '远程来源' : '本地存储'))}</span>
                 <span>更新 ${esc(updated)}</span>
               </div>
               ${saved.ruleExitDisabled ? `<button type="button" class="glass-btn-soft" data-restore-sub-exit="${esc(saved.name)}">恢复规则出口</button>` : ''}
-              ${pendingSubscription === saved.name ? `<span style="font-size:11.5px;color:var(--accent)">正在切换订阅配置…</span>` : ''}
+              ${pendingSubscription === saved.name ? `<span style="font-size:var(--type-label);color:var(--accent)">正在切换订阅配置…</span>` : ''}
               ${result ? `<span class="sub-refresh-result${result.failed ? ' failed' : ''}">${esc(result.message)}</span>` : ''}
               ${hasQuota ? `
                 <div>
-                  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
+                  <div style="display:flex;justify-content:space-between;font-size:var(--type-caption);color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
                     <span>已用 ${esc(formatBytes(used))} / ${esc(formatBytes(usage!.Total!))} (${pct}%)</span>
                     <span>到期 ${esc(expiry)}</span>
                   </div>
@@ -2070,16 +2073,16 @@ export function mountDesktopApp(shell: ShellController): void {
           subtitle: file.name,
           iconHtml: `<span class="sq md orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 12.5 12 17.5 21 12.5"/></svg></span>`,
           bodyHtml: `
-            <p class="sheet-hint" style="margin:0;color:var(--ink-2);font-size:12.5px;line-height:1.6">
+            <p class="sheet-hint" style="margin:0;color:var(--ink-2);font-size:var(--type-body);line-height:1.6">
               该文件包含规则或代理组定义。选择「替换完整配置」时会自动剥离外部控制口、锁定 127.0.0.1 并保留有效 DNS 配置；也可仅将其作为本地订阅导入。
             </p>
           `,
           actionsSplit: true,
           actionsHtml: `
-            <button type="button" class="glass-btn-soft lg-track" id="fileImportCancel">取消</button>
+            <button type="button" class="glass-btn-soft" id="fileImportCancel">取消</button>
             <div class="sheet-actions-group">
-              <button type="button" class="glass-btn-soft lg-track" id="fileImportAsSub">作为本地订阅</button>
-              <button type="button" class="glass-btn-primary compact lg-track" id="fileImportAsFull">替换完整配置</button>
+              <button type="button" class="glass-btn-soft" id="fileImportAsSub">作为本地订阅</button>
+              <button type="button" class="glass-btn-primary compact" id="fileImportAsFull">替换完整配置</button>
             </div>
           `,
         });
@@ -2142,11 +2145,11 @@ export function mountDesktopApp(shell: ShellController): void {
       `,
       actionsSplit: true,
       actionsHtml: `
-        <div class="sheet-actions-group"><button type="button" class="glass-btn-soft lg-track" id="sheetImportFileBtn">从文件导入…</button>
+        <div class="sheet-actions-group"><button type="button" class="glass-btn-soft" id="sheetImportFileBtn">从文件导入…</button>
         <button type="button" class="glass-btn-soft" id="sheetNewYaml">新建 YAML…</button></div>
         <div class="sheet-actions-group">
-          <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-          <button type="button" class="glass-btn-primary compact lg-track" id="sheetConfirmImport">导入</button>
+          <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
+          <button type="button" class="glass-btn-primary compact" id="sheetConfirmImport">导入</button>
         </div>
       `,
     });
@@ -2310,7 +2313,7 @@ export function mountDesktopApp(shell: ShellController): void {
                 <span class="mac-check"><input type="checkbox" class="gs-member-chk" value="${esc(item)}" ${chosenMembers.has(item) ? 'checked' : ''}></span>
                 <span class="picker-meta"><strong>${esc(exitDisplayLabel(item))}</strong></span>
               </label>
-            `).join('') || `<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">暂无可选成员</div>`}
+            `).join('') || `<div style="padding:14px;text-align:center;color:var(--muted);font-size:var(--type-label)">暂无可选成员</div>`}
           </div>
         </div>
         ${providers.length ? `
@@ -2329,8 +2332,8 @@ export function mountDesktopApp(shell: ShellController): void {
         <p class="sheet-error" id="gsError"></p>
       `,
       actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="gsSubmit">${existing ? '保存修改' : '创建分组'}</button>
+        <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
+        <button type="button" class="glass-btn-primary compact" id="gsSubmit">${existing ? '保存修改' : '创建分组'}</button>
       `,
     });
     $('sheetCancel').onclick = closeSheet;
@@ -2415,8 +2418,8 @@ export function mountDesktopApp(shell: ShellController): void {
         </div>
       `,
       actionsHtml: `
-        <button type="button" class="glass-btn-soft lg-track" id="sheetCancel">取消</button>
-        <button type="button" class="glass-btn-primary compact lg-track" id="apSave">${exit ? '应用规则' : '恢复默认'}</button>
+        <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
+        <button type="button" class="glass-btn-primary compact" id="apSave">${exit ? '应用规则' : '恢复默认'}</button>
       `,
     });
     $('sheetCancel').onclick = closeSheet;
@@ -2443,10 +2446,10 @@ export function mountDesktopApp(shell: ShellController): void {
           <dt>可执行文件</dt><dd>${esc(proc.path)}</dd>
         </dl>
         <div class="thread-table-wrap" id="procThreadView">
-          <p style="padding:14px;margin:0;color:var(--muted);font-size:12px">正在读取线程列表…</p>
+          <p style="padding:14px;margin:0;color:var(--muted);font-size:var(--type-label)">正在读取线程列表…</p>
         </div>
       `,
-      actionsHtml: `<button type="button" class="glass-btn-primary compact lg-track" id="sheetCloseProc">关闭</button>`,
+      actionsHtml: `<button type="button" class="glass-btn-primary compact" id="sheetCloseProc">关闭</button>`,
     });
     $('sheetCloseProc').onclick = closeSheet;
     try {
@@ -2455,10 +2458,10 @@ export function mountDesktopApp(shell: ShellController): void {
       if (!view) return;
       view.innerHTML = threads.length
         ? `<table class="thread-table"><thead><tr><th>线程 ID</th><th>基础优先级</th></tr></thead><tbody>${threads.map(t => `<tr><td style="font-family:var(--font-mono)">${Number(t.tid)}</td><td>${Number(t.basePriority)}</td></tr>`).join('')}</tbody></table>`
-        : `<p style="padding:14px;margin:0;color:var(--muted);font-size:12px">没有可读取的线程</p>`;
+        : `<p style="padding:14px;margin:0;color:var(--muted);font-size:var(--type-label)">没有可读取的线程</p>`;
     } catch (err) {
       const view = document.getElementById('procThreadView');
-      if (view) view.innerHTML = `<p style="padding:14px;margin:0;color:var(--red);font-size:12px">${esc(cleanError(err))}</p>`;
+      if (view) view.innerHTML = `<p style="padding:14px;margin:0;color:var(--red);font-size:var(--type-label)">${esc(cleanError(err))}</p>`;
     }
   }
 
@@ -2485,7 +2488,7 @@ export function mountDesktopApp(shell: ShellController): void {
           </table>
         </div>
       `,
-      actionsHtml: `<button type="button" class="glass-btn-primary compact lg-track" id="sheetCloseApp">关闭</button>`,
+      actionsHtml: `<button type="button" class="glass-btn-primary compact" id="sheetCloseApp">关闭</button>`,
     });
     $('sheetCloseApp').onclick = closeSheet;
     $('sheetContent').querySelectorAll<HTMLElement>('[data-inspect-member-pid]').forEach(btn => {
@@ -2544,6 +2547,7 @@ export function mountDesktopApp(shell: ShellController): void {
     });
   });
 
+  $('enableSystemProxyBtn').addEventListener('click', () => void performNetworkControl({ control: 'system', enabled: true }));
   $('sideSysProxy').addEventListener('change', e => {
     const input = e.target as HTMLInputElement;
     const enabled = input.checked;
@@ -2998,7 +3002,7 @@ export function mountDesktopApp(shell: ShellController): void {
   });
 
   // Bootstrap & Polling
-  telemetry.renderHeatmap();
+  telemetry.renderConnections();
   telemetry.paintChart();
   void reloadProfile();
   void refreshProcesses(false);

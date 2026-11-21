@@ -263,7 +263,7 @@ export function confirmSheet(opts: {
       : tone === 'cyan'
         ? `<path d="M12 3 4 7v5c0 5 3.5 8.5 8 9.8 4.5-1.3 8-4.8 8-9.8V7l-8-4Z"/>`
         : `<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`;
-    const primaryCls = opts.danger ? 'glass-btn-danger lg-track' : 'glass-btn-primary compact lg-track';
+    const primaryCls = opts.danger ? 'glass-btn-danger' : 'glass-btn-primary compact';
 
     const content = $('sheetContent');
     content.classList.remove('sheet-wide');
@@ -281,7 +281,7 @@ export function confirmSheet(opts: {
         </div>
       </div>
       <div class="sheet-actions">
-        ${opts.inform ? '' : `<button type="button" class="glass-btn-soft lg-track" id="sheetConfirmCancel">${esc(opts.cancelLabel || '取消')}</button>`}
+        ${opts.inform ? '' : `<button type="button" class="glass-btn-soft" id="sheetConfirmCancel">${esc(opts.cancelLabel || '取消')}</button>`}
         <button type="button" class="${primaryCls}" id="sheetConfirmOk">${esc(opts.confirmLabel || '确定')}</button>
       </div>
     `;
@@ -300,12 +300,13 @@ export function confirmSheet(opts: {
 }
 
 /* =========================================================================
-   Smooth Monotone Cubic Bézier Chart & 96-Cell Activity Heatmap
+   Traffic and connection history
    ========================================================================= */
 export class TelemetryVisualizer {
   readonly down: number[];
   readonly up: number[];
-  readonly heat: { cls: string; down: number; up: number; conns: number }[];
+  private readonly connections: ({ count: number; time: number; rates?: { down: number; up: number } | null } | null)[] = Array(96).fill(null);
+  private peakConnections = 0;
   private hoverCell = -1;
   private selectedCell = -1;
   private samples: number;
@@ -319,23 +320,14 @@ export class TelemetryVisualizer {
         Number((7.2 + Math.sin(i * 0.42) * 3.6 + Math.cos(i * 0.23) * 1.8).toFixed(1))
       );
       this.up = this.down.map((v, i) => Number((v * (0.13 + (i % 3) * 0.02)).toFixed(1)));
-      this.heat = Array.from({ length: 96 }, (_, i) => {
-        const row = Math.floor(i / 16);
-        const col = i % 16;
-        const weight = row * 0.45 + col * 0.14;
-        const lvl = weight < 1.8 ? ((i * 3) % 7 === 0 ? 1 : 0) : weight < 3.1 ? ((i * 5) % 3) : 1 + ((i * 7 + row) % 4);
-        const mb = lvl === 0 ? 0.4 : Number((lvl * 4.1 + (i % 5) * 0.6).toFixed(1));
-        const conns = lvl === 0 ? 2 : lvl * 8 + (i % 6);
-        return { cls: lvl ? `l${lvl}` : '', down: mb * 0.8, up: mb * 0.2, conns };
-      });
+      const now = Date.now();
+      this.connections = this.connections.map((_, i) => ({
+        count: Math.round(18 + 12 * Math.sin(i * .14) + 5 * Math.cos(i * .36)),
+        time: now - (95 - i) * 1000,
+      }));
     } else {
       this.down = Array.from({ length: 32 }, () => 0);
       this.up = Array.from({ length: 32 }, () => 0);
-      this.heat = Array.from({ length: 96 }, () => ({
-        cls: '',
-        down: 0, up: 0,
-        conns: 0,
-      }));
     }
   }
 
@@ -356,18 +348,18 @@ export class TelemetryVisualizer {
       $('chartTooltip').classList.remove('show');
     });
 
-    const grid = $('activityHeatmap');
+    const grid = $('connectionHistory');
     const cellIndex = (event: Event) => {
-      const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-hm]');
-      return cell ? Number(cell.dataset.hm) : -1;
+      const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-sample]');
+      return cell ? Number(cell.dataset.sample) : -1;
     };
     grid.addEventListener('pointerover', e => {
       this.hoverCell = cellIndex(e);
-      this.showHeatReading();
+      this.showConnectionReading();
     });
     grid.addEventListener('pointerleave', () => {
       this.hoverCell = -1;
-      this.showHeatReading();
+      this.showConnectionReading();
     });
     grid.addEventListener('click', e => {
       const i = cellIndex(e);
@@ -384,22 +376,34 @@ export class TelemetryVisualizer {
   }
 
   private selectCell(index: number): void {
-    const cells = $('activityHeatmap').children;
+    const cells = $('connectionHistory').children;
     cells[this.selectedCell]?.removeAttribute('data-selected');
     this.selectedCell = index;
     cells[index]?.setAttribute('data-selected', '');
-    this.showHeatReading();
+    this.showConnectionReading();
   }
 
-  private showHeatReading(): void {
+  private showConnectionReading(): void {
     const i = this.selectedCell >= 0 ? this.selectedCell : this.hoverCell;
-    const sample = this.heat[i];
-    $('heatmapReadout').textContent = !sample ? '最近 96 次采样'
-      : i < this.heat.length - this.samples ? '尚未采样'
-      : `${sample.conns} 个连接 · ↓ ${formatRate(sample.down)} · ↑ ${formatRate(sample.up)}`;
+    const sample = this.connections[i];
+    const latest = this.connections[this.connections.length - 1];
+    let text = latest ? `最新 ${latest.count} 个 · 峰值 ${this.peakConnections} 个` : '等待连接采样';
+    if (i >= 0) {
+      text = sample ? `${new Date(sample.time).toLocaleTimeString('zh-CN', { hour12: false })} · ${sample.count} 个连接` : '尚未采样';
+    }
+    $('connectionReadout').textContent = text;
+    $('connectionFoot').textContent = sample?.rates
+      ? `↓ ${formatRate(sample.rates.down)} · ↑ ${formatRate(sample.rates.up)}` : '较早 → 最新';
   }
 
-  pushSample(downMBs: number, upMBs: number, activeConns?: number): void {
+  pushConnectionCount(count: number, rates: { down: number; up: number } | null): void {
+    this.connections.shift();
+    this.connections.push({ count, time: Date.now(), rates });
+    if (this.selectedCell >= 0) this.selectCell(this.selectedCell - 1);
+    this.renderConnections();
+  }
+
+  pushSample(downMBs: number, upMBs: number): void {
     const d = Math.max(0, downMBs);
     const u = Math.max(0, upMBs);
     this.samples = Math.min(96, this.samples + 1);
@@ -407,18 +411,6 @@ export class TelemetryVisualizer {
     this.down.shift();
     this.up.push(u);
     this.up.shift();
-    if (typeof activeConns === 'number') {
-      const lvl = activeConns >= 36 ? 4 : activeConns >= 18 ? 3 : activeConns >= 8 ? 2 : activeConns > 0 ? 1 : 0;
-      this.heat.shift();
-      this.heat.push({
-        cls: lvl ? `l${lvl}` : '',
-        down: d, up: u,
-        conns: activeConns,
-      });
-      this.renderHeatmap();
-      if (this.selectedCell >= 0) this.selectCell(this.selectedCell - 1);
-      else this.showHeatReading();
-    }
     this.paintChart();
   }
 
@@ -505,19 +497,21 @@ export class TelemetryVisualizer {
     tip.classList.add('show');
   }
 
-  renderHeatmap(): void {
-    const grid = $('activityHeatmap');
-    if (grid.childElementCount === this.heat.length) {
-      this.heat.forEach((sample, i) => {
-        const cell = grid.children[i];
-        const cls = `hm-cell ${sample.cls}`;
-        if (cell.className !== cls) cell.className = cls;
-      });
-      return;
+  renderConnections(): void {
+    const plot = $('connectionHistory');
+    if (!plot.childElementCount) {
+      plot.innerHTML = this.connections.map((_, i) => `<span data-sample="${i}"></span>`).join('');
     }
-    grid.innerHTML = this.heat
-      .map((s, i) => `<span class="hm-cell ${s.cls}" data-hm="${i}"></span>`)
-      .join('');
+    this.peakConnections = Math.max(...this.connections.map(s => s?.count ?? 0));
+    this.connections.forEach((sample, i) => {
+      const bar = plot.children[i] as HTMLElement;
+      if (sample) {
+        bar.style.setProperty('--bar-height', sample.count === 0 ? '1px' : `max(2px, ${100 * sample.count / this.peakConnections}%)`);
+      } else {
+        bar.style.removeProperty('--bar-height');
+      }
+    });
+    this.showConnectionReading();
   }
 }
 
