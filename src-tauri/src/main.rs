@@ -1260,6 +1260,7 @@ async fn set_subscription_scope(app: AppHandle, name: Option<String>, mapping: O
 async fn edit_core_profile(
     app: AppHandle,
     edit: profile::Edit,
+    node_pins: Option<std::collections::BTreeMap<String, String>>,
     expected_scope: Option<String>,
 ) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -1269,6 +1270,7 @@ async fn edit_core_profile(
             }) {
                 return Err("订阅配置已切换，请刷新后重试。".into());
             }
+            profile::bind_subscription_nodes(config, node_pins.unwrap_or_default())?;
             profile::edit_active(config, edit)
         })
     })

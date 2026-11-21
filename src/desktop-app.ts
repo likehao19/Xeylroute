@@ -445,7 +445,9 @@ export function mountDesktopApp(shell: ShellController): void {
     if (profileBusy) return null;
     profileBusy = true;
     try {
-      const profile = await tauriApi.editProfile(edit, scope);
+      const exit = 'exit' in edit ? edit.exit : undefined;
+      const node = exit && editorNodePins().get(exit);
+      const profile = await tauriApi.editProfile(edit, scope, exit && node ? { [exit]: node } : undefined);
       applyProfile(profile);
       renderAllSafe();
       if (successMsg) notify(successMsg);
@@ -1223,7 +1225,7 @@ export function mountDesktopApp(shell: ShellController): void {
       const now = liveCore?.proxies?.proxies?.AUTO?.now;
       return now ? `AUTO (${now})` : 'AUTO · 自动优选';
     }
-    return name;
+    return liveProfile?.nodePins?.[name] || name;
   }
 
   function renderNodes(): void {
@@ -1552,7 +1554,7 @@ export function mountDesktopApp(shell: ShellController): void {
                 </div>
               </div>
               <div class="rule-right-cols live-cols">
-                <span class="pill ${r.active ? tone : 'orange'}">${esc(r.exit)}${r.active ? '' : ' · 停用'}</span>
+                <span class="pill ${r.active ? tone : 'orange'}">${esc(liveProfile?.nodePins?.[r.exit] || r.exit)}${r.active ? '' : ' · 停用'}</span>
                 <label class="mac-switch">
                   <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
                   <i></i>
@@ -1599,8 +1601,8 @@ export function mountDesktopApp(shell: ShellController): void {
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
                   ${live?.type === 'Selector' && live.all?.length
-                    ? macPopupBtnHtml({ value: curExit, label: curExit, width: 162, popupKind: 'group-exit', popupKey: g.name })
-                    : `<span class="pill blue">${esc(curExit)}</span>`}
+                    ? macPopupBtnHtml({ value: curExit, label: exitDisplayLabel(curExit), width: 162, popupKind: 'group-exit', popupKey: g.name })
+                    : `<span class="pill blue">${esc(exitDisplayLabel(curExit))}</span>`}
                 </div>
                 <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:var(--type-label)">
                   <summary style="cursor:pointer;color:var(--accent);font-weight:var(--weight-control)">管理组成员 (${members.length})</summary>
@@ -2177,6 +2179,31 @@ export function mountDesktopApp(shell: ShellController): void {
     input.focus();
   }
 
+  async function loadEditorNodes(scope: string): Promise<void> {
+    if (!scope || activeSubscriptionNodes().length) return;
+    await readOfflineNodes(scope);
+    if (selectedSubscription === scope && !activeSubscriptionNodes().length &&
+        liveProfile?.providers.some(p => p.name === scope && p.type === 'http')) {
+      await loadSubscriptionMeta(scope, true);
+    }
+  }
+
+  function editorNodePins(): Map<string, string> {
+    const pins = new Map(Object.entries(liveProfile?.nodePins || {}));
+    const savedNodes = new Set(pins.values());
+    const used = new Set(liveProfile?.exits);
+    for (const node of activeSubscriptionNodes()) {
+      if (savedNodes.has(node.name)) continue;
+      const base = '节点 · ' + node.name.trim().replaceAll('%', '%25').replaceAll(',', '%2C');
+      let alias = base;
+      for (let n = 2; used.has(alias); n++) alias = base + ' (' + n + ')';
+      pins.set(alias, node.name);
+      used.add(alias);
+      savedNodes.add(node.name);
+    }
+    return pins;
+  }
+
   function openRuleEditor(index?: number, seed?: Partial<RuleConditions>, shared?: SharedRule): void {
     const profile = liveProfile;
     if (!profile) return;
@@ -2185,23 +2212,34 @@ export function mountDesktopApp(shell: ShellController): void {
     if (original && !existing) { editDocument('config'); return; }
     const scope = profile.subscriptionScope ?? '';
     const initial = { program: '', target: '', port: '', suffix: false, ...existing };
+    type RuleTab = 'website' | 'app' | 'ip' | 'compound';
+    const isIp = (v: string) => /^[\d.]+(?:\/\d+)?$/.test(v) || (!v.includes('://') && v.includes(':'));
+    let tab: RuleTab = initial.port || (initial.program && initial.target) ? 'compound'
+      : initial.program ? 'app' : isIp(initial.target) ? 'ip' : 'website';
+    const targetDraft = { website: '', ip: '', compound: initial.target, app: '' };
+    targetDraft[tab] = initial.target;
     let exit = index === undefined ? shared?.exit || 'DIRECT' : profile.ruleExits?.[index] || 'DIRECT';
     openSheet({
       title: original || shared ? '编辑分流规则' : '添加分流规则',
       size: 'wide',
       bodyHtml: `
-        <div class="sheet-field"><label for="ruleProgram">软件</label>
+        <div class="sheet-field"><span class="sheet-field-label">匹配类型</span>
+          <div class="sub-seg full" id="ruleTabs" role="group" aria-label="匹配类型">
+            <button type="button" data-kind="website">网站</button><button type="button" data-kind="app">软件</button>
+            <button type="button" data-kind="ip">IP / 网段</button><button type="button" data-kind="compound">组合条件</button>
+          </div></div>
+        <div class="sheet-field" id="programFields"><label for="ruleProgram">软件</label>
           <div class="rule-input-row"><input id="ruleProgram" class="sheet-input" placeholder="任意软件" value="${esc(initial.program)}" list="runningExecutables">
           <button class="glass-btn-soft" id="ruleBrowse" type="button">浏览…</button></div>
           <datalist id="runningExecutables"></datalist>
           <select class="sheet-input" id="ruleRunning" aria-label="选择运行中的程序"><option value="">选择运行中的程序…</option></select>
-          ${index === undefined && !shared ? '<details><summary>批量选择软件及辅助进程</summary><div class="sheet-picker" id="ruleAppList"></div></details>' : ''}
+          ${index === undefined && !shared ? '<details id="ruleBatchPrograms"><summary>批量选择软件及辅助进程</summary><div class="sheet-picker" id="ruleAppList"></div></details>' : ''}
         </div>
-        <div class="sheet-field"><label for="ruleTarget">目标网站或 IP</label>
+        <div class="sheet-field" id="targetFields"><label for="ruleTarget" id="ruleTargetLabel">目标网站或 IP</label>
           <input class="sheet-input" id="ruleTarget" placeholder="任意目标，支持域名、网址、IP 或网段" value="${esc(initial.target)}">
-          <label><input type="checkbox" id="ruleSuffix" ${initial.suffix ? 'checked' : ''}> 包含子域名</label>
+          <label id="suffixField"><input type="checkbox" id="ruleSuffix" ${initial.suffix ? 'checked' : ''}> 包含子域名</label>
           <small id="ruleHostPreview"></small></div>
-        <div class="sheet-field"><label for="rulePort">目标端口</label>
+        <div class="sheet-field" id="portFields"><label for="rulePort">目标端口</label>
           <input class="sheet-input" id="rulePort" placeholder="任意端口，例如 443 或 8000-8080" value="${esc(initial.port)}"></div>
         ${scope && !original && !shared ? '<div class="sheet-field"><label for="ruleCoverage">应用范围</label><select class="sheet-input" id="ruleCoverage"><option value="local">仅当前订阅</option><option value="shared">所有订阅</option></select></div>' : ''}
         <div class="sheet-field"><span class="sheet-field-label">匹配时使用</span><div class="sheet-popup-full" id="ruleExit"></div></div>
@@ -2250,12 +2288,45 @@ export function mountDesktopApp(shell: ShellController): void {
       suffix.disabled = !host || host.includes(':') || host.includes('/') || /^[0-9.]+$/.test(host);
       $('ruleHostPreview').textContent = url ? `匹配 ${host}${suffix.checked && !suffix.disabled ? ' 及其子域名' : ''} 的所有路径，端口以端口栏为准` : '';
     };
-    target.oninput = describe; suffix.onchange = describe; describe();
+    function renderTab(): void {
+      $('programFields').hidden = tab !== 'app' && tab !== 'compound';
+      program.placeholder = tab === 'app' ? '输入或浏览可执行文件路径' : '任意软件';
+      const batch = document.querySelector<HTMLDetailsElement>('#ruleBatchPrograms');
+      if (batch) batch.open = tab === 'app';
+      $('targetFields').hidden = tab === 'app';
+      $('portFields').hidden = tab !== 'compound';
+      $('suffixField').hidden = tab === 'ip';
+      $('ruleTargetLabel').textContent = tab === 'website' ? '域名或网址' : tab === 'ip' ? 'IP 地址或网段' : '目标网站或 IP';
+      target.placeholder = tab === 'website' ? '例如 github.com 或 *.github.com' : tab === 'ip' ? '例如 192.0.2.1 或 2001:db8::/32' : '任意目标';
+      $('ruleTabs').querySelectorAll<HTMLButtonElement>('button').forEach(b => {
+        b.classList.toggle('active', b.dataset.kind === tab);
+        b.setAttribute('aria-pressed', String(b.dataset.kind === tab));
+      });
+      describe();
+    }
+    $('ruleTabs').onclick = e => {
+      const next = (e.target as HTMLElement).closest('button')?.dataset.kind as RuleTab | undefined;
+      if (!next || next === tab) return;
+      targetDraft[tab] = target.value;
+      tab = next;
+      target.value = targetDraft[tab];
+      error.textContent = '';
+      renderTab();
+    };
+    target.oninput = describe; suffix.onchange = describe; renderTab();
+    const loadingNodes = loadEditorNodes(scope);
+    let pins = editorNodePins();
     const renderExit = () => {
-      $('ruleExit').innerHTML = macPopupBtnHtml({ id: 'ruleExitButton', value: exit, label: exitDisplayLabel(exit), popupKind: 'sheet-custom' });
-      $('ruleExitButton').onclick = e => {
+      $('ruleExit').innerHTML = macPopupBtnHtml({ id: 'ruleExitButton', value: exit, label: pins.get(exit) || exitDisplayLabel(exit), popupKind: 'sheet-custom' });
+      $('ruleExitButton').onclick = async e => {
         e.stopPropagation();
-        openMacMenu($('ruleExitButton'), buildExitPopupItems(), exit, value => { exit = value; renderExit(); });
+        const trigger = e.currentTarget as HTMLButtonElement;
+        trigger.disabled = true;
+        try { await loadingNodes; }
+        finally { trigger.disabled = false; }
+        if (!trigger.isConnected || !isSheetOpen()) return;
+        pins = editorNodePins();
+        openMacMenu($('ruleExitButton'), buildExitPopupItems(pins), exit, value => { exit = value; renderExit(); });
       };
     };
     renderExit();
@@ -2265,13 +2336,24 @@ export function mountDesktopApp(shell: ShellController): void {
       if (save.disabled) return;
       save.disabled = true;
       try {
-        const conditions = { program: program.value.trim(), target: target.value.trim(), suffix: !suffix.disabled && suffix.checked, port: $<HTMLInputElement>('rulePort').value.trim() };
+        const withProgram = tab === 'app' || tab === 'compound';
+        const paths = withProgram ? [...selectedPaths] : [];
+        const raw = tab === 'app' ? '' : target.value.trim();
+        const wildcard = raw.startsWith('*.');
+        const host = wildcard ? raw.slice(2) : raw;
+        let hostname = host;
+        if (/^https?:\/\//i.test(host)) hostname = new URL(host).hostname;
+        if (tab === 'website' && (!host || isIp(hostname))) throw new Error('请输入域名或网址');
+        if (tab === 'ip' && (!isIp(raw) || wildcard)) throw new Error('请输入 IPv4、IPv6 地址或网段');
+        if (tab === 'app' && !program.value.trim() && !paths.length) throw new Error('请选择软件或输入可执行文件路径');
+        const conditions = { program: withProgram ? program.value.trim() : '', target: host,
+          suffix: tab !== 'ip' && (wildcard || (!suffix.disabled && suffix.checked)), port: tab === 'compound' ? $<HTMLInputElement>('rulePort').value.trim() : '' };
         const global = shared || (document.getElementById('ruleCoverage') as HTMLSelectElement | null)?.value === 'shared';
-        const targets = [...new Set([...selectedPaths, conditions.program].filter(Boolean))];
-        const mutation: ProfileEdit = selectedPaths.size ? {kind:'addProgramMatches',targets,conditions,exit,shared:Boolean(global)} :
+        const targets = [...new Set([...paths, conditions.program].filter(Boolean))];
+        const mutation: ProfileEdit = paths.length ? {kind:'addProgramMatches',targets,conditions,exit,shared:Boolean(global)} :
           global ? {kind:'sharedRule',expected:shared?.source,conditions,exit} :
           {kind:'matchRule', conditions,exit,index,expected:original};
-        const updated = await tauriApi.editProfile(mutation, scope);
+        const updated = await tauriApi.editProfile(mutation, scope, pins.has(exit) ? { [exit]: pins.get(exit)! } : undefined);
         if (save.isConnected) closeSheet();
         applyProfile(updated); renderAllSafe(); void refreshLiveState(true);
       } catch (e) { error.textContent = cleanError(e); }
@@ -2280,7 +2362,8 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   function openGroupSheet(existing?: ProfileGroup): void {
-    const exits = (liveProfile?.exits || []).filter(item => item !== existing?.name);
+    let pins = editorNodePins();
+    const exits = () => [...new Set([...(liveProfile?.exits || []), ...pins.keys()])].filter(item => item !== existing?.name);
     const scope = liveProfile?.subscriptionScope;
     const providers = (liveProfile?.providers || []).filter(p => !scope || p.name === scope);
     let selectedPolicy = existing?.type && ['select', 'url-test', 'fallback'].includes(existing.type) ? existing.type : 'select';
@@ -2307,14 +2390,7 @@ export function mountDesktopApp(shell: ShellController): void {
         </div>
         <div class="sheet-field">
           <span class="sheet-field-label">成员节点 / 策略（勾选至少一项成员或订阅源）</span>
-          <div class="sheet-picker" style="max-height:150px">
-            ${exits.map(item => `
-              <label class="sheet-picker-row">
-                <span class="mac-check"><input type="checkbox" class="gs-member-chk" value="${esc(item)}" ${chosenMembers.has(item) ? 'checked' : ''}></span>
-                <span class="picker-meta"><strong>${esc(exitDisplayLabel(item))}</strong></span>
-              </label>
-            `).join('') || `<div style="padding:14px;text-align:center;color:var(--muted);font-size:var(--type-label)">暂无可选成员</div>`}
-          </div>
+          <div class="sheet-picker" id="gsMembers" style="max-height:150px"></div>
         </div>
         ${providers.length ? `
           <div class="sheet-field">
@@ -2337,6 +2413,17 @@ export function mountDesktopApp(shell: ShellController): void {
       `,
     });
     $('sheetCancel').onclick = closeSheet;
+    const picker = $('gsMembers');
+    function addMembers(): void {
+      const listed = new Set([...picker.querySelectorAll<HTMLInputElement>('input')].map(c => c.value));
+      pins = editorNodePins();
+      picker.insertAdjacentHTML('beforeend', exits().filter(v => !listed.has(v)).map(v => `
+        <label class="sheet-picker-row"><span class="mac-check"><input type="checkbox" class="gs-member-chk"
+          value="${esc(v)}" ${chosenMembers.has(v) ? 'checked' : ''}></span>
+          <span class="picker-meta"><strong>${esc(pins.get(v) || exitDisplayLabel(v))}</strong></span></label>`).join(''));
+    }
+    addMembers();
+    void loadEditorNodes(scope || '').then(() => { if (picker.isConnected && liveProfile?.subscriptionScope === scope) addMembers(); });
     $('gsPolicySeg').onclick = ev => {
       const b = (ev.target as HTMLElement).closest<HTMLElement>('[data-gs-policy]');
       if (!b?.dataset.gsPolicy) return;
@@ -2358,7 +2445,7 @@ export function mountDesktopApp(shell: ShellController): void {
           policy: selectedPolicy,
           members,
           providers: provs,
-        }, liveProfile?.subscriptionScope ?? '');
+        }, scope ?? '', Object.fromEntries(members.filter(m => pins.has(m)).map(m => [m, pins.get(m)!])));
         applyProfile(profile);
         closeSheet();
         renderAllSafe();
@@ -2502,11 +2589,11 @@ export function mountDesktopApp(shell: ShellController): void {
   /* =========================================================================
      Pop-Up Menu Builders & Event Wiring
      ========================================================================= */
-  function buildExitPopupItems(): PopupMenuItem[] {
+  function buildExitPopupItems(pins = editorNodePins()): PopupMenuItem[] {
     const groupNames = new Set((liveProfile?.groups || []).map(g => g.name));
-    const exits = [...new Set(['GLOBAL', ...(liveProfile?.exits || ['DIRECT', 'REJECT'])])];
+    const exits = [...new Set(['GLOBAL', ...(liveProfile?.exits || ['DIRECT', 'REJECT']), ...pins.keys()])];
     const builtins = exits.filter(x => ['GLOBAL', 'AUTO', 'DIRECT', 'REJECT', 'PASS'].includes(x));
-    const groups = exits.filter(x => groupNames.has(x));
+    const groups = exits.filter(x => groupNames.has(x) && !builtins.includes(x));
     const nodes = exits.filter(x => !builtins.includes(x) && !groups.includes(x));
 
     const items: PopupMenuItem[] = builtins.map(v => ({ value: v, label: exitDisplayLabel(v) }));
@@ -2516,7 +2603,7 @@ export function mountDesktopApp(shell: ShellController): void {
     }
     if (nodes.length) {
       items.push({ sep: true });
-      items.push(...nodes.slice(0, 12).map(n => ({ value: n, label: n })));
+      items.push(...nodes.map(n => ({ value: n, label: pins.get(n) || n })));
     }
     return items;
   }
@@ -2740,7 +2827,7 @@ export function mountDesktopApp(shell: ShellController): void {
       if (kind === 'group-exit') {
         const live = liveCore?.proxies?.proxies?.[key];
         if (!live?.all?.length) return;
-        const items: PopupMenuItem[] = live.all.map(m => ({ value: m, label: m }));
+        const items: PopupMenuItem[] = live.all.map(m => ({ value: m, label: exitDisplayLabel(m) }));
         openMacMenu(popTrigger, items, val, async nextVal => {
           try {
             await tauriApi.mihomoSelectGroup(key, nextVal);

@@ -76,6 +76,7 @@ export type ProfileSummary = {
   groups: ProfileGroup[];
   providers: ProfileProvider[];
   exits: string[];
+  nodePins?: Record<string, string>;
   nodes: ProfileNode[];
   processRules?: ProfileProcessRule[];
   tunScope: TunScope;
@@ -275,8 +276,8 @@ export const tauriApi = {
   setSystemProxy: (enabled: boolean) => invoke<CoreStatus>('set_system_proxy', { enabled }),
   importCoreConfig: (content: string, expected?: string) => invoke<CoreStatus>('import_core_config', { content, expected }),
   profileSummary: () => invoke<ProfileSummaryResponse>('configured_profile_summary'),
-  editProfile: (edit: ProfileEdit, expectedScope?: string) =>
-    invoke<ProfileSummary>('edit_core_profile', { edit, expectedScope: expectedScope ?? '' }),
+  editProfile: (edit: ProfileEdit, expectedScope?: string, nodePins?: Record<string, string>) =>
+    invoke<ProfileSummary>('edit_core_profile', { edit, expectedScope: expectedScope ?? '', nodePins }),
   subscriptionMapping: (name: string) => invoke<ScopeMapping>('subscription_mapping', { name }),
   setSubscriptionScope: (name: string | null, mapping?: Record<string,string>) =>
     invoke<ProfileSummary>('set_subscription_scope', { name, mapping }),

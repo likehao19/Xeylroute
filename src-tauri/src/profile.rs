@@ -90,6 +90,42 @@ fn scoped_profile(profile: &Value) -> std::borrow::Cow<'_, Value> {
     std::borrow::Cow::Owned(view)
 }
 
+/// Provider proxies are not top-level Mihomo outbounds. Bind a selected node by
+/// name inside its subscription, so provider refreshes also refresh its credentials.
+pub fn bind_subscription_nodes(profile: &mut Value, pins: std::collections::BTreeMap<String, String>) -> Result<(), String> {
+    if pins.is_empty() { return Ok(()); }
+    let scope = active_subscription(profile).ok_or("请选择节点所属的订阅")?.to_owned();
+    let view = scoped_profile(profile);
+    let mut groups: Vec<_> = entries(&view, "proxy-groups").cloned().collect();
+    let available = exits(&view);
+    for (alias, node) in pins {
+        if !clean(&alias) || node.trim().is_empty() || node.chars().any(char::is_control) {
+            return Err("节点名称无效".into());
+        }
+        if let Some(group) = groups.iter().find(|g| g["name"] == alias) {
+            if group["x-routepilot-node"] == node && group["use"] == json!([scope]) { continue; }
+            return Err("节点出口与现有分组重名，请重新打开选择器".into());
+        }
+        if alias == "GLOBAL" || available.contains(&alias.as_str()) {
+            return Err("节点出口名称冲突，请重新打开选择器".into());
+        }
+        let mut filter = String::from("^");
+        for c in node.chars() {
+            if c == '`' {
+                filter.push_str(r"\x60");
+            } else {
+                if r"\.^$|?*+()[]{}".contains(c) { filter.push('\\'); }
+                filter.push(c);
+            }
+        }
+        filter.push('$');
+        groups.push(json!({"name":alias, "type":"select", "use":[scope], "filter":filter,
+            "hidden":true, "empty-fallback":"REJECT", "x-routepilot-node":node}));
+    }
+    profile["routepilot-subscription-scopes"][scope]["proxy-groups"] = json!(groups);
+    Ok(())
+}
+
 pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     if matches!(&mutation, Edit::SharedRule { .. } | Edit::AddProgramMatches { shared: true, .. }) {
         return edit(profile, mutation);
@@ -434,9 +470,12 @@ pub fn runtime_profile(profile: &Value) -> Value {
         }
     }
     if has_auto && !names(profile, "proxy-groups").any(|name| name == "GLOBAL") {
+        let pinned: std::collections::HashSet<_> = entries(profile, "proxy-groups")
+            .filter(|g| g["x-routepilot-node"].is_string())
+            .filter_map(|g| g["name"].as_str()).collect();
         let members = std::iter::once("AUTO")
             .chain(exits(profile).into_iter().filter(|name| *name != "AUTO"))
-            .filter(|name| !["PASS", "COMPATIBLE", "REJECT-DROP"].contains(name))
+            .filter(|name| !pinned.contains(name) && !["PASS", "COMPATIBLE", "REJECT-DROP"].contains(name))
             .collect::<Vec<_>>();
         if let Ok(groups) = array(&mut runtime, "proxy-groups") {
             groups.push(
@@ -605,8 +644,11 @@ pub fn summary(profile: &Value) -> Value {
             Some(json!({"kind":kind,"target":target.trim(),"exit":rule_exit(line)?}))
         })
         .collect::<Vec<_>>();
+    let node_pins: serde_json::Map<String, Value> = entries(profile, "proxy-groups")
+        .filter_map(|g| Some((g["name"].as_str()?.to_owned(), json!(g["x-routepilot-node"].as_str()?))))
+        .collect();
     let groups = entries(profile, "proxy-groups")
-        .filter(|group| group["name"] != "GLOBAL" && !is_subscription_exit(profile, group))
+        .filter(|group| group["x-routepilot-node"].is_null() && group["name"] != "GLOBAL" && !is_subscription_exit(profile, group))
         .map(|group| {
             json!({
                 "name":group.get("name"), "type":group.get("type"),
@@ -646,7 +688,7 @@ pub fn summary(profile: &Value) -> Value {
             let (kind,target) = prefix.split_once(',')?;
             crate::rule_conditions::decode(kind,target)
         }).collect::<Vec<_>>(),
-        "rules":profile.get("rules"), "groups":groups, "providers":providers, "exits":exits(profile),
+        "rules":profile.get("rules"), "groups":groups, "providers":providers, "nodePins":node_pins, "exits":exits(profile),
         "disabledRules":profile.get("routepilot-disabled-rules"), "disabledGroups":profile.get("routepilot-disabled-groups"),
         "tunScope": tun_scope(catalog),
         "tunGroups": profile.get("routepilot-tun-groups").cloned().unwrap_or_else(|| json!([])),
@@ -1086,6 +1128,9 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
             members,
             providers,
         } => {
+            if entries(profile, "proxy-groups").any(|g| g["name"] == name && g["x-routepilot-node"].is_string()) {
+                return Err("该名称已用于节点出口，请使用其他分组名称".into());
+            }
             if entries(profile, "proxy-groups").any(|group| {
                 group["name"].as_str() == Some(&name) && is_subscription_exit(profile, group)
             }) {
@@ -1258,6 +1303,34 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subscription_node_exit_roundtrips_rules_and_group_members_in_its_scope() {
+        let mut catalog = json!({"proxy-providers":{"A":{"type":"inline"},"B":{"type":"inline"}},
+            "routepilot-active-subscription":"A"});
+        let node = "香港 [01] | A+B";
+        let alias = format!("节点 · {node}");
+        let pins = std::collections::BTreeMap::from([(alias.clone(), node.to_owned())]);
+        bind_subscription_nodes(&mut catalog, pins.clone()).unwrap();
+        bind_subscription_nodes(&mut catalog, pins).unwrap();
+        edit_active(&mut catalog, Edit::MatchRule { index: None, expected: None,
+            conditions: crate::rule_conditions::Conditions {target:"example.test".into(), ..Default::default()}, exit:alias.clone() }).unwrap();
+        edit_active(&mut catalog, Edit::Group {name:"工作".into(), policy:"select".into(),
+            members:vec![alias.clone()], providers:vec![]}).unwrap();
+        let restored: Value = serde_json::from_slice(&serde_json::to_vec(&catalog).unwrap()).unwrap();
+        let view = summary(&restored);
+        assert_eq!(view["nodePins"][&alias], node);
+        assert_eq!(view["groups"].as_array().unwrap().len(), 1);
+        assert_eq!(view["groups"][0]["proxies"], json!([alias]));
+        let runtime = effective_config(&restored);
+        assert!(entries(&runtime, "rules").any(|r| r == &format!("DOMAIN,example.test,{alias}")));
+        let pin = entries(&runtime, "proxy-groups").find(|g| g["name"] == alias).unwrap();
+        assert_eq!(pin["filter"], r"^香港 \[01\] \| A\+B$");
+        assert_eq!(pin["use"], json!(["A"]));
+        assert_eq!(pin["empty-fallback"], "REJECT");
+        select_subscription(&mut catalog, Some("B".into())).unwrap();
+        assert!(!entries(&effective_config(&catalog), "proxy-groups").any(|g| g["name"] == alias));
+    }
 
     #[test]
     fn adding_compound_rules_to_multiple_helpers_is_atomic() {

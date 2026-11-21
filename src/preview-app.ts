@@ -108,7 +108,7 @@ export function mountPreviewApp(shell: ShellController): void {
       { value: 'direct', label: 'DIRECT · 直连' },
       { value: 'reject', label: 'REJECT · 阻断' },
       { sep: true },
-      ...activeNodes().slice(0, 8).map(n => ({ value: n.id, label: n.name, meta: `${n.delay} ms` })),
+      ...activeNodes().map(n => ({ value: n.id, label: n.name, meta: `${n.delay} ms` })),
     ];
     return items;
   }
@@ -881,6 +881,12 @@ export function mountPreviewApp(shell: ShellController): void {
     $<HTMLTextAreaElement>('sheetImportVal').focus();
   });
 
+  function demoExitField(): string {
+    const options = exitMenuItems().map(item => item.sep ? '' :
+      `<option value="${esc(item.value)}">${esc(item.label)}</option>`).join('');
+    return `<div class="sheet-field"><label for="demoExit">分流出口</label><select id="demoExit" class="sheet-input">${options}</select></div>`;
+  }
+
   $('splitPrimaryAddBtn').addEventListener('click', () => {
     if (splitSub === 'groups') {
       openSheet({
@@ -892,6 +898,7 @@ export function mountPreviewApp(shell: ShellController): void {
             <label for="shGrpName">分组名称</label>
             <input type="text" class="sheet-input" id="shGrpName" placeholder="例如：流媒体或办公工具">
           </div>
+          ${demoExitField()}
         `,
         actionsHtml: `
           <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
@@ -902,7 +909,7 @@ export function mountPreviewApp(shell: ShellController): void {
       $('shGrpSave').onclick = () => {
         const name = $<HTMLInputElement>('shGrpName').value.trim();
         if (!name) return;
-        state.groups.push({ id: 'g-' + Date.now(), name, type: 'Selector', exit: 'global-follow', tun: false, on: true });
+        state.groups.push({ id: 'g-' + Date.now(), name, type: 'Selector', exit: $<HTMLSelectElement>('demoExit').value, tun: false, on: true });
         renderAll();
         closeSheet();
         notify(`已创建分组「${name}」`);
@@ -911,13 +918,21 @@ export function mountPreviewApp(shell: ShellController): void {
     } else {
       openSheet({
         title: '添加分流规则',
-        subtitle: '支持精确域名或通配域名（*.example.com）',
         iconHtml: `<span class="sq md purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v2a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-2M12 14.5v1"/></svg></span>`,
         bodyHtml: `
           <div class="sheet-field">
-            <label for="shRuleDomain">网站域名</label>
+            <div class="sub-seg full" id="demoRuleKind" role="group" aria-label="匹配类型">
+              <button type="button" data-kind="website" class="active" aria-pressed="true">网站</button>
+              <button type="button" data-kind="app" aria-pressed="false">软件</button>
+            </div>
+          </div>
+          <div class="sheet-field" id="demoWebsite"><label for="shRuleDomain">网站域名</label>
             <input type="text" class="sheet-input" id="shRuleDomain" placeholder="例如 openai.com 或 *.github.com">
           </div>
+          <div class="sheet-field" id="demoSoftware" hidden><label for="shRuleApp">软件</label>
+            <select id="shRuleApp" class="sheet-input">${DEMO_RUNNING.map((app,i) => `<option value="${i}">${esc(app.name)} · ${esc(app.exe)}</option>`).join('')}</select>
+          </div>
+          ${demoExitField()}
         `,
         actionsHtml: `
           <button type="button" class="glass-btn-soft" id="sheetCancel">取消</button>
@@ -925,13 +940,28 @@ export function mountPreviewApp(shell: ShellController): void {
         `,
       });
       $('sheetCancel').onclick = closeSheet;
+      let software = false;
+      $('demoRuleKind').onclick = event => {
+        const button = (event.target as HTMLElement).closest('button');
+        if (!button) return;
+        software = button.dataset.kind === 'app';
+        $('demoWebsite').hidden = software;
+        $('demoSoftware').hidden = !software;
+        $('demoRuleKind').querySelectorAll('button').forEach(b => {
+          b.classList.toggle('active', b === button);
+          b.setAttribute('aria-pressed', String(b === button));
+        });
+      };
       $('shRuleSave').onclick = () => {
         const d = $<HTMLInputElement>('shRuleDomain').value.trim().toLowerCase();
-        if (!d) return;
-        state.rules.unshift({ id: 'r-' + Date.now(), kind: 'website', label: d, value: d, group: state.groups[0]?.id || '', exit: '', tun: 'inherit', on: true });
+        if (!software && !d) return;
+        const app = DEMO_RUNNING[Number($<HTMLSelectElement>('shRuleApp').value)];
+        const fields = software ? { kind: 'app' as const, label: app.name, value: app.exe, path: app.path }
+          : { kind: 'website' as const, label: d, value: d };
+        state.rules.unshift({ ...fields, id: 'r-' + Date.now(), group: '', exit: $<HTMLSelectElement>('demoExit').value, tun: 'inherit', on: true });
         renderAll();
         closeSheet();
-        notify(`已添加规则 ${d}`);
+        notify(`已添加规则 ${fields.label}`);
       };
       $<HTMLInputElement>('shRuleDomain').focus();
     }
