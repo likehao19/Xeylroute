@@ -311,7 +311,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const key = delayKey(node.provider, node.name);
     if (liveTesting.has(key)) return { text: '测速中', cls: 'mid' };
     const cached = liveDelays.get(key);
-    if (typeof cached === 'string') return { text: '超时', cls: 'slow' };
+    if (typeof cached === 'string') return { text: '测速失败', cls: 'slow' };
     if (cached && typeof cached.delay === 'number') {
       const ms = cached.delay;
       return {
@@ -384,7 +384,7 @@ export function mountDesktopApp(shell: ShellController): void {
       const data = await tauriApi.subscriptionCardMetadata(name);
       if (!liveProfile?.providers.some(p => p.name === name)) return '';
       saveCardMeta(name, data.updatedAt ? data.updatedAt * 1000 : 0, data.usage);
-      if (Array.isArray(data.nodes) && data.nodes.length) {
+      if (Array.isArray(data.nodes) && !data.error) {
         subscriptionNodes.set(name, data.nodes);
         saveMap(KEY_SUB_NODES, subscriptionNodes);
       }
@@ -1144,7 +1144,7 @@ export function mountDesktopApp(shell: ShellController): void {
               <span class="cp-node-sub">${esc(n.type)}${n.standalone ? ' · 独立节点' : ''}</span>
             </div>
           </div>
-          <span class="cp-node-ms ${d.cls}">${esc(d.text)}${d.raw ? '<small>ms</small>' : ''}</span>
+          <span class="cp-node-ms ${d.cls}">${esc(d.text)}${d.raw !== undefined ? '<small>ms</small>' : ''}</span>
         </button>
       `;
     }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted)">${realNodes.length ? '没有匹配的节点' : '暂无可用代理节点'}</div>`;
@@ -1346,7 +1346,7 @@ export function mountDesktopApp(shell: ShellController): void {
                           <span class="cp-node-sub">${esc(n.now ? `当前 ${n.now}` : n.type)}${esc(speedText)}</span>
                         </div>
                       </div>
-                      <span class="cp-node-ms ${dInfo.cls}">${esc(dInfo.text)}${dInfo.raw ? '<small>ms</small>' : ''}</span>
+                      <span class="cp-node-ms ${dInfo.cls}">${esc(dInfo.text)}${dInfo.raw !== undefined ? '<small>ms</small>' : ''}</span>
                     </button>
                   `;
                   if (!testable) return btnHtml;
@@ -1893,7 +1893,7 @@ export function mountDesktopApp(shell: ShellController): void {
                   <span class="sq md ${selected ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
                   <div style="min-width:0">
                     <strong class="card-title" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(saved.name)}</strong>
-                    <small style="color:var(--muted);font-size:var(--type-caption)">${remote ? 'HTTPS 远程订阅' : '本地订阅文件'} · ${nodeCount} 个节点${selected ? ' · 当前生效' : ''}</small>
+                    <small style="color:var(--muted);font-size:var(--type-caption)">${remote ? '远程订阅' : '本地订阅文件'} · ${nodeCount} 个节点${selected ? ' · 当前生效' : ''}</small>
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex:none">
@@ -2840,6 +2840,11 @@ export function mountDesktopApp(shell: ShellController): void {
   });
 
   $('resetStateBtn').addEventListener('click', async () => {
+    if (liveStatus?.running) {
+      notify('请先停止内核，再恢复备份。');
+      $('coreControlBtn').focus();
+      return;
+    }
     const ok = await confirmSheet({
       title: '恢复配置备份',
       message: '恢复备份会替换当前的代理配置，是否继续？',

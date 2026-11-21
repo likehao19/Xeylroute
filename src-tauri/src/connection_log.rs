@@ -90,9 +90,6 @@ pub async fn collect(app: AppHandle, mut response: reqwest::Response) {
         let Ok(mut rows) = state.0.lock() else { return };
         for line in buffer[..last].split(|byte| *byte == b'\n') {
             if let Some(row) = serde_json::from_slice(line).ok().and_then(route_event) {
-                if rows.back() == Some(&row) {
-                    continue;
-                }
                 rows.push_back(row);
                 if rows.len() > 500 {
                     rows.pop_front();

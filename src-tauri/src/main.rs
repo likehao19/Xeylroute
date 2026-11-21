@@ -49,7 +49,10 @@ fn platform_name() -> &'static str {
 struct Core(Mutex<Option<CoreProcess>>);
 
 enum CoreProcess {
+    #[cfg(not(target_os = "macos"))]
     Local(tun_worker::ManagedChild),
+    #[cfg(target_os = "macos")]
+    Local(std::process::Child),
     Tun(tun_worker::Worker),
 }
 
@@ -447,16 +450,12 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
     *process = Some(if tun {
         CoreProcess::Tun(tun_worker::Worker::launch(&dir, runtime.as_bytes())?)
     } else {
-        let log = fs::File::create(dir.join("mihomo.log")).map_err(|err| err.to_string())?;
-        let stderr = log.try_clone().map_err(|err| err.to_string())?;
-        let mut command = mihomo_command(&dir);
-        command
-            .arg("-f")
-            .arg(preview)
-            .stdin(Stdio::null())
-            .stdout(log)
-            .stderr(stderr);
-        let managed = tun_worker::spawn_managed_core(command).map_err(|err| err.to_string())?;
+        #[cfg(target_os = "macos")]
+        let managed = Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+            .arg("--routepilot-local-worker").arg(&dir).stdin(Stdio::piped())
+            .spawn().map_err(|e| e.to_string())?;
+        #[cfg(not(target_os = "macos"))]
+        let managed = spawn_local_core(&dir).map_err(|e| e.to_string())?;
         CoreProcess::Local(managed)
     });
     let deadline = Instant::now() + Duration::from_secs(if tun { 12 } else { 3 });
@@ -512,6 +511,38 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
     .into())
 }
 
+fn spawn_local_core(dir: &Path) -> std::io::Result<tun_worker::ManagedChild> {
+    let log = fs::File::create(dir.join("mihomo.log"))?;
+    let mut command = mihomo_command(dir);
+    command.arg("-f").arg(dir.join("routepilot-validated.json"))
+        .stdin(Stdio::null()).stderr(log.try_clone()?).stdout(log);
+    tun_worker::spawn_managed_core(command)
+}
+
+#[cfg(target_os = "macos")]
+fn local_worker(dir: &Path) -> std::io::Result<()> {
+    use std::io::Read;
+    use std::sync::mpsc::{channel, RecvTimeoutError};
+    let mut core = spawn_local_core(dir)?;
+    // The desktop owns the only writer. Even SIGKILL closes it, allowing this
+    // process to reap its own child without persisting or guessing any PIDs.
+    let (tx, rx) = channel();
+    thread::spawn(move || {
+        let _ = std::io::stdin().read(&mut [0]);
+        let _ = tx.send(());
+    });
+    while rx.recv_timeout(Duration::from_millis(200)) == Err(RecvTimeoutError::Timeout) {
+        if core.try_wait()?.is_some() { break; }
+    }
+    core.terminate()?;
+    let lock = fs::File::options().read(true).write(true).open(dir.join("routepilot.lock"))?;
+    if lock.try_lock().is_ok() {
+        // When the desktop is alive it handles recovery under its existing lock.
+        system_proxy::restore(dir).map_err(std::io::Error::other)?;
+    }
+    Ok(())
+}
+
 fn global_tun_config(configured: &Value) -> Result<Value, String> {
     if profile::tun_scope(configured) == "selected" {
         return Err("此内核支持全局 TUN。仅指定程序接管暂不可用，请在设置中明确选择全局范围。".into());
@@ -544,6 +575,9 @@ fn terminate(process: &mut Option<CoreProcess>) -> Result<(), String> {
     if running(process)? {
         match process.as_mut().expect("a running process is present") {
             CoreProcess::Local(managed) => {
+                #[cfg(target_os = "macos")]
+                managed.wait().map_err(|err| err.to_string())?;
+                #[cfg(not(target_os = "macos"))]
                 managed.terminate().map_err(|err| err.to_string())?;
             }
             CoreProcess::Tun(worker) => worker.stop().map_err(|err| err.to_string())?,
@@ -720,7 +754,7 @@ fn subscription_usage(header: &str) -> Value {
 
 #[tauri::command]
 async fn subscription_card_metadata(app: AppHandle, name: String) -> Result<Value, String> {
-    let (provider, cached_date) = tauri::async_runtime::spawn_blocking(move || {
+    let (provider, cached_date, cached_nodes) = tauri::async_runtime::spawn_blocking(move || {
         require_core_access(&app)?;
         let dir = core_dir(&app)?;
         let config = configured_profile(&dir)?;
@@ -730,15 +764,20 @@ async fn subscription_card_metadata(app: AppHandle, name: String) -> Result<Valu
             .ok_or("订阅已移除。")?;
         let cached = subscription_cache_path(&dir, &provider)
             .and_then(|path| fs::metadata(path).ok()?.modified().ok());
-        Ok::<_, String>((provider, cached))
+        let read_local = provider["type"] != "http" || provider["url"].as_str().is_some_and(|url| url.starts_with("http://"));
+        let nodes = if read_local { Some(cached_provider_nodes(&dir, &provider)?) } else { None };
+        Ok::<_, String>((provider, cached, nodes))
     })
     .await
     .map_err(|error| error.to_string())??;
     let mut updated = cached_date;
     let mut usage = Value::Null;
-    let mut nodes = Value::Null;
+    let fetch_metadata = cached_nodes.is_none();
+    let mut nodes = cached_nodes.unwrap_or(Value::Null);
     let mut error = None;
-    if provider["type"] == "http" {
+    // Imported configurations can also use HTTP sources. Mihomo owns that download;
+    // show the local copy just as we do for file providers.
+    if fetch_metadata {
         let url = provider["url"]
             .as_str()
             .and_then(|url| reqwest::Url::parse(url).ok())
@@ -822,28 +861,32 @@ async fn subscription_nodes(app: AppHandle, name: String) -> Result<Value, Strin
         let dir = core_dir(&app)?;
         let config = configured_profile(&dir)?;
         let provider = &config["proxy-providers"][&name];
-        if let Some(nodes) = provider["payload"].as_array() {
-            return Ok(profile::node_metadata(nodes));
-        }
-        let Some(path) = subscription_cache_path(&dir, provider) else {
-            return Ok(Value::Null);
-        };
-        use std::io::Read;
-        const LIMIT: u64 = 4 * 1024 * 1024;
-        let mut contents = String::new();
-        fs::File::open(path)
-            .map_err(|err| err.to_string())?
-            .take(LIMIT + 1)
-            .read_to_string(&mut contents)
-            .map_err(|err| err.to_string())?;
-        Ok(if contents.len() as u64 > LIMIT {
-            Value::Null
-        } else {
-            profile::subscription_metadata(&contents)
-        })
+        cached_provider_nodes(&dir, provider)
     })
     .await
     .map_err(|err| err.to_string())?
+}
+
+fn cached_provider_nodes(dir: &Path, provider: &Value) -> Result<Value, String> {
+    if let Some(nodes) = provider["payload"].as_array() {
+        return Ok(profile::node_metadata(nodes));
+    }
+    let Some(path) = subscription_cache_path(dir, provider) else {
+        return Ok(Value::Null);
+    };
+    use std::io::Read;
+    const LIMIT: u64 = 4 * 1024 * 1024;
+    let mut contents = String::new();
+    fs::File::open(path)
+        .map_err(|err| err.to_string())?
+        .take(LIMIT + 1)
+        .read_to_string(&mut contents)
+        .map_err(|err| err.to_string())?;
+    Ok(if contents.len() as u64 > LIMIT {
+        Value::Null
+    } else {
+        profile::subscription_metadata(&contents)
+    })
 }
 
 fn save_profile(dir: &Path, config: &Value) -> Result<(), String> {
@@ -1212,7 +1255,7 @@ fn core_profile_backup(
     let backup = dir.join("mihomo.backup.json");
     if restore {
         if running(&mut process)? {
-            return Err("请先关闭首页的接管总开关，再恢复配置。".into());
+            return Err("请先在「网络与设置」中停止内核，再恢复备份。".into());
         }
         let data = fs::read_to_string(&backup).map_err(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
@@ -1529,7 +1572,13 @@ fn window_set_theme(window: tauri::WebviewWindow, theme: Option<String>) -> Resu
 
 fn main() {
     let mut args = std::env::args_os().skip(1);
-    if args.next().is_some_and(|arg| arg == tun_worker::ARG) {
+    let action = args.next();
+    #[cfg(target_os = "macos")]
+    if action.as_deref() == Some(std::ffi::OsStr::new("--routepilot-local-worker")) {
+        let ok = args.next().is_some_and(|dir| local_worker(Path::new(&dir)).is_ok());
+        std::process::exit(if ok { 0 } else { 1 });
+    }
+    if action.is_some_and(|arg| arg == tun_worker::ARG) {
         std::process::exit(if tun_worker::run(args).is_ok() { 0 } else { 1 });
     }
     tauri::Builder::default()
