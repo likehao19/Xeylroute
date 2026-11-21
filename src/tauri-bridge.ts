@@ -56,7 +56,10 @@ export type RuleConditions = { program: string; target: string; suffix: boolean;
 export type SharedRule = { source: string; line: string; exit: string; conditions: RuleConditions };
 export type ScopeMapping = { missing: string[]; available: string[] };
 
+export type FixedSocksBinding = { port: number; node: string; provider: string | null };
+
 export type ProfileSummary = {
+  fixedSocks?: FixedSocksBinding[] | null;
   sharedRules?: SharedRule[];
   managedOrder?: boolean;
   manualOrder?: boolean;
@@ -213,6 +216,7 @@ export type ProfileEdit =
   | { kind: 'mode'; mode: RoutingMode }
   | { kind: 'coreSetting'; key: keyof CoreSettings; value: string | boolean }
   | { kind: 'providerInterval'; name: string; seconds: number }
+  | { kind: 'fixedSocks'; binding: FixedSocksBinding; remove: boolean }
   | { kind: 'ports'; http: number; socks: number; mixed: number }
   | { kind: 'rule'; index?: number; expected?: string; category: string; target: string; exit: string }
   | { kind: 'ruleOrder'; expected: string[]; order: string[] | null }

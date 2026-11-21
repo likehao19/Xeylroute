@@ -123,11 +123,12 @@ impl Controller {
             .as_array_mut()
             .ok_or("Invalid proxy-groups")?
             .push(json!({"name":PROBE_GROUP, "type":"select", "proxies":members, "use":providers}));
-        config["listeners"] = json!([{
+        config.as_object_mut().ok_or("无效配置")?.entry("listeners").or_insert_with(|| json!([]))
+            .as_array_mut().ok_or("无效的监听列表")?.push(json!({
             "name":"RoutePilot-SpeedTest", "type":"http", "listen":"127.0.0.1",
             "port":self.probe_port, "proxy":PROBE_GROUP,
             "users":[{"username":"routepilot", "password":self.token}]
-        }]);
+        }));
         Ok(())
     }
 

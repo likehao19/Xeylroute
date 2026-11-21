@@ -207,7 +207,7 @@ export function mountDesktopApp(shell: ShellController): void {
   let trayChain: Promise<void> = Promise.resolve();
 
   // Sub-view states
-  let nodesSub: 'groups' | 'sites' = 'groups';
+  let nodesSub: 'groups' | 'sites' | 'ports' = 'groups';
   let splitSub: 'rules' | 'groups' | 'procs' = 'rules';
   let procScanType: 'app' | 'process' = 'app';
   const expandedGroups = new Set<string>(['SHARED']);
@@ -1254,6 +1254,16 @@ export function mountDesktopApp(shell: ShellController): void {
     bandwidth.hidden = nodesSub !== 'groups' || needsImport;
     bandwidth.disabled = actBtn.disabled;
 
+    $('fixedSocksTab').hidden = false;
+    $('fixedSocksPane').hidden = nodesSub !== 'ports';
+    if (nodesSub === 'ports') {
+      $('nodesScopePill').hidden = true;
+      actBtn.textContent = '添加固定入口';
+      actBtn.disabled = !liveProfile || needsImport || profileBusy || changingSubscription;
+      renderFixedSocks();
+      return;
+    }
+
     const scopePill = $('nodesScopePill');
     if (selectedSubscription) {
       scopePill.hidden = false;
@@ -1370,6 +1380,83 @@ export function mountDesktopApp(shell: ShellController): void {
       `;
     }).join('') || '<div class="rule-empty">没有匹配的节点或分组</div>';
 
+  }
+
+  function renderFixedSocks(): void {
+    const bindings = liveProfile?.fixedSocks || [];
+    const pane = $('fixedSocksPane');
+    const query = shell.getSearch().trim().toLowerCase();
+    const rows = bindings.filter(b => [b.node, b.provider, b.port].join(' ').toLowerCase().includes(query));
+    pane.innerHTML = `
+      <p class="section-label">本机 SOCKS5 · ${liveStatus?.running ? '内核运行中' : '内核已停止'}</p>
+      <div class="mac-card flush">${rows.map(b => `
+        <div class="mac-row"><div class="mac-row-left"><div><span class="mac-row-title">${esc(b.node)}</span>
+          <div class="mac-row-sub selectable">127.0.0.1:${b.port} · ${esc(b.provider || '本地节点')}</div></div></div>
+          <button type="button" class="glass-btn-soft compact" data-clash="${b.port}">Clash 配置…</button>
+          <button type="button" class="sf-icon-btn" data-remove-port="${b.port}" aria-label="移除端口 ${b.port}">${SF_TRASH}</button></div>`).join('') ||
+        `<div class="rule-empty">${bindings.length ? '没有匹配的入口' : '添加固定入口，让 Clash 将选定应用转到指定节点。'}</div>`}</div>
+      ${bindings.length && !liveStatus?.running ? '<button type="button" class="glass-btn-soft" id="startSocksCore">启动本地监听</button>' : ''}`;
+    const start = pane.querySelector<HTMLButtonElement>('#startSocksCore');
+    if (start) start.onclick = () => void performNetworkControl({ control: 'core', enabled: true });
+    pane.onclick = async event => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-clash], [data-remove-port]');
+      if (!button) return;
+      const binding = bindings.find(b => b.port === Number(button.dataset.clash || button.dataset.removePort));
+      if (!binding) return;
+      if (button.dataset.removePort) {
+        if (await confirmSheet({ title: '移除固定入口', message: `使用 127.0.0.1:${binding.port} 的客户端将无法再通过该端口连接。`, confirmLabel: '移除' })) {
+          await commitProfileEdit({ kind: 'fixedSocks', binding, remove: true }, '入口已移除');
+        }
+        return;
+      }
+      const alias = 'Xeylroute-' + binding.port;
+      const snippet = `proxies:
+  - { name: ${alias}, type: socks5, server: 127.0.0.1, port: ${binding.port}, udp: true }
+
+rules:
+  - PROCESS-NAME,${liveStatus?.platform === 'windows' ? 'ChatGPT.exe' : 'ChatGPT'},${alias}`;
+      openSheet({ title: '接入 Clash', subtitle: binding.node,
+        bodyHtml: `<p class="sheet-hint">将节点加入 Clash 的 proxies，把应用规则放在需要优先匹配的位置。保留其余规则和最后的 MATCH。在 Clash 规则模式下按进程匹配；示例使用 ChatGPT 主进程，可按连接记录补充实际联网的子进程。</p>
+          <textarea id="clashSocksYaml" class="sheet-textarea selectable" rows="7" aria-label="Clash YAML 配置片段" readonly></textarea>`,
+        actionsHtml: '<button class="glass-btn-soft" id="closeSocksYaml">完成</button><button class="glass-btn-primary" id="copySocksYaml">复制片段</button>' });
+      const yaml = $<HTMLTextAreaElement>('clashSocksYaml');
+      yaml.value = snippet;
+      $('closeSocksYaml').onclick = closeSheet;
+      $('copySocksYaml').onclick = async () => {
+        try { await navigator.clipboard.writeText(snippet); notify('已复制 Clash 配置片段'); }
+        catch { yaml.focus(); yaml.select(); notify('已选中片段，请复制'); }
+      };
+    };
+  }
+
+  async function openFixedSocksEditor(): Promise<void> {
+    const scope = liveProfile?.subscriptionScope ?? '';
+    await loadEditorNodes(scope);
+    if (scope !== (liveProfile?.subscriptionScope ?? '') || nodesSub !== 'ports' || shell.getView() !== 'nodes') return;
+    const nodes = [...activeSubscriptionNodes(), ...standaloneNodes()];
+    const used = new Set([liveProfile?.http, liveProfile?.mixed, liveProfile?.socks,
+      ...(liveProfile?.fixedSocks || []).map(b => b.port)]);
+    let port = 19081;
+    while (used.has(port)) port++;
+    openSheet({ title: '添加固定 SOCKS5 入口',
+      bodyHtml: `<div class="sheet-field"><label for="fixedNode">固定节点</label>
+        <select class="sheet-input" id="fixedNode">${nodes.map((n,i) => `<option value="${i}">${esc(n.name)} · ${esc(n.provider || '本地节点')}</option>`).join('') || '<option>当前没有可用节点</option>'}</select></div>
+        <div class="sheet-field"><label for="fixedPort">本机端口</label><input class="sheet-input" type="number" id="fixedPort" min="1" max="65535" value="${port}">
+          <small>仅监听 127.0.0.1，切换首页节点时仍使用此出口。</small></div>`,
+      actionsHtml: '<button class="glass-btn-soft" id="fixedCancel">取消</button><button class="glass-btn-primary" id="fixedSave">添加</button>' });
+    $('fixedCancel').onclick = closeSheet;
+    const save = $<HTMLButtonElement>('fixedSave');
+    save.disabled = !nodes.length;
+    save.onclick = async () => {
+      const input = $<HTMLInputElement>('fixedPort');
+      if (!input.value || !input.reportValidity()) { input.focus(); return; }
+      const node = nodes[Number($<HTMLSelectElement>('fixedNode').value)];
+      save.disabled = true;
+      const result = await commitProfileEdit({ kind: 'fixedSocks', remove: false,
+        binding: { node: node.name, provider: node.provider, port: input.valueAsNumber } }, '固定入口已保存', scope);
+      if (result && save.isConnected) closeSheet();
+      save.disabled = false;
+    };
   }
 
   function renderSiteTests(): void {
@@ -2744,11 +2831,11 @@ export function mountDesktopApp(shell: ShellController): void {
   $('nodesSubSeg').addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-nodes-sub]');
     if (!b?.dataset.nodesSub) return;
-    nodesSub = b.dataset.nodesSub as 'groups' | 'sites';
+    nodesSub = b.dataset.nodesSub as typeof nodesSub;
     $('nodesSubSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
     renderNodes();
   });
-  $('nodesActionBtn').addEventListener('click', () => void runBatch(nodesSub === 'groups' ? 'delay' : 'sites'));
+  $('nodesActionBtn').addEventListener('click', () => nodesSub === 'ports' ? void openFixedSocksEditor() : void runBatch(nodesSub === 'groups' ? 'delay' : 'sites'));
   $('nodesBandwidthBtn').addEventListener('click', () => void runBatch('download'));
 
   $('splitSubSeg').addEventListener('click', e => {

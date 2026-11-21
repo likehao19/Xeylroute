@@ -90,6 +90,20 @@ fn scoped_profile(profile: &Value) -> std::borrow::Cow<'_, Value> {
     std::borrow::Cow::Owned(view)
 }
 
+pub(crate) fn exact_node_filter(node: &str) -> String {
+    let mut filter = String::from("^");
+    for c in node.chars() {
+        if c == '`' {
+            filter.push_str(r"\x60");
+        } else {
+            if r"\.^$|?*+()[]{}".contains(c) { filter.push('\\'); }
+            filter.push(c);
+        }
+    }
+    filter.push('$');
+    filter
+}
+
 /// Provider proxies are not top-level Mihomo outbounds. Bind a selected node by
 /// name inside its subscription, so provider refreshes also refresh its credentials.
 pub fn bind_subscription_nodes(profile: &mut Value, pins: std::collections::BTreeMap<String, String>) -> Result<(), String> {
@@ -109,16 +123,7 @@ pub fn bind_subscription_nodes(profile: &mut Value, pins: std::collections::BTre
         if alias == "GLOBAL" || available.contains(&alias.as_str()) {
             return Err("节点出口名称冲突，请重新打开选择器".into());
         }
-        let mut filter = String::from("^");
-        for c in node.chars() {
-            if c == '`' {
-                filter.push_str(r"\x60");
-            } else {
-                if r"\.^$|?*+()[]{}".contains(c) { filter.push('\\'); }
-                filter.push(c);
-            }
-        }
-        filter.push('$');
+        let filter = exact_node_filter(&node);
         groups.push(json!({"name":alias, "type":"select", "use":[scope], "filter":filter,
             "hidden":true, "empty-fallback":"REJECT", "x-routepilot-node":node}));
     }
@@ -141,6 +146,7 @@ pub fn edit_active(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     if matches!(
         &mutation,
         Edit::Mode { .. }
+            | Edit::FixedSocks { .. }
             | Edit::Ports { .. }
             | Edit::CoreSetting { .. }
             | Edit::ProviderInterval { .. }
@@ -195,6 +201,7 @@ pub enum Edit {
         name: String,
         seconds: u64,
     },
+    FixedSocks { binding: crate::fixed_socks::Binding, remove: bool },
     Ports {
         http: u16,
         socks: u16,
@@ -436,6 +443,7 @@ pub fn runtime_profile(profile: &Value) -> Value {
         apply_rule_order(profile, rules);
     }
     if let Some(map) = runtime.as_object_mut() {
+        map.remove(crate::fixed_socks::KEY);
         map.remove("routepilot-disabled-rules");
         map.remove("routepilot-disabled-groups");
         map.remove("routepilot-imported-providers");
@@ -668,6 +676,7 @@ pub fn summary(profile: &Value) -> Value {
         }).collect::<Vec<_>>()
     }).unwrap_or_default();
     json!({
+        "fixedSocks":catalog.get(crate::fixed_socks::KEY),
         "subscriptionScope": active_subscription(catalog),
         "subscriptionScopeInitialized": catalog.get("routepilot-active-subscription").is_some(),
         "http":profile.get("port"), "socks":profile.get("socks-port"), "mixed":profile.get("mixed-port"), "mode":profile.get("mode"),
@@ -821,6 +830,7 @@ fn bind_subscription(profile: &mut Value, name: &str, first_profile: bool) -> Re
 
 pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
     match mutation {
+        Edit::FixedSocks { binding, remove } => return crate::fixed_socks::edit(profile, binding, remove),
         Edit::AddProgramMatches { targets, conditions, exit, shared } => {
             if !(1..=250).contains(&targets.len()) {
                 return Err("请选择 1 到 250 个可执行文件".into());
@@ -1368,7 +1378,7 @@ mod tests {
         assert_eq!(profile["proxy-providers"]["one"], expected);
         select_subscription(&mut profile, Some("two".into())).unwrap();
         let restored: Value = serde_json::from_str(&profile.to_string()).unwrap();
-        let runtime = crate::runtime_config(&restored, true);
+        let runtime = crate::runtime_config(&restored, true).unwrap();
         for key in ["ipv6", "tcp-concurrent", "unified-delay", "log-level"] {
             assert_eq!(runtime[key], restored[key]);
             assert_eq!(summary(&restored)["coreSettings"][key], restored[key]);

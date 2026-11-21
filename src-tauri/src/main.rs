@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod connection_log;
+mod fixed_socks;
 mod mihomo_api;
 mod processes;
 mod profile;
@@ -325,6 +326,12 @@ fn validate_config(input: &str) -> Result<Vec<u16>, String> {
     if ports.is_empty() {
         return Err("Configure at least one local proxy port".into());
     }
+    for binding in fixed_socks::bindings(&root)? {
+        if binding.port == 0 || ports.contains(&binding.port) {
+            return Err(format!("固定 SOCKS5 端口 {} 无效或与其他监听端口重复。", binding.port));
+        }
+        ports.push(binding.port);
+    }
     Ok(ports)
 }
 
@@ -409,14 +416,18 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
     let config = dir.join("mihomo.json");
     let contents = fs::read_to_string(&config).map_err(|err| err.to_string())?;
     let ports = validate_config(&contents)?;
+    let mut reservations = Vec::new();
     for &port in &ports {
-        TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).map_err(|err| {
+        reservations.push(TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).map_err(|err| {
             eprintln!("Local port {port} is unavailable: {err}");
             format!("本地代理端口 {port} 无法监听，请在设置中更换端口。")
-        })?;
+        })?);
     }
     let configured: Value = serde_json::from_str(&contents).map_err(|err| err.to_string())?;
-    let mut normalized = runtime_config(&configured, tun);
+    for binding in fixed_socks::bindings(&configured)? {
+        fixed_socks::check_udp_port(binding.port)?;
+    }
+    let mut normalized = runtime_config(&configured, tun)?;
     normalized["bind-address"] = Value::String("127.0.0.1".into());
     normalized["allow-lan"] = Value::Bool(false);
     if normalized.get("profile").is_none() {
@@ -445,6 +456,7 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
     let preview = dir.join("routepilot-validated.json");
     let runtime = normalized.to_string();
     fs::write(&preview, &runtime).map_err(|err| err.to_string())?;
+    drop(reservations);
     drop(management);
     drop(probe);
     *process = Some(if tun {
@@ -553,7 +565,7 @@ fn global_tun_config(configured: &Value) -> Result<Value, String> {
 /// The configuration Mihomo actually runs: the saved profile narrowed to the active subscription,
 /// plus runtime defaults. Starting, hot-reloading and offline validation all go through here so
 /// an edit made while the core runs cannot drop a setting that start-up added.
-fn runtime_config(configured: &Value, tun: bool) -> Value {
+fn runtime_config(configured: &Value, tun: bool) -> Result<Value, String> {
     let mut runtime = profile::effective_config(configured);
     if tun {
         if let Some(map) = runtime.as_object_mut() {
@@ -568,7 +580,8 @@ fn runtime_config(configured: &Value, tun: bool) -> Value {
                 .or_insert_with(runtime_tuning::tun_sniffer);
         }
     }
-    runtime
+    fixed_socks::apply(configured, &mut runtime)?;
+    Ok(runtime)
 }
 
 fn terminate(process: &mut Option<CoreProcess>) -> Result<(), String> {
@@ -613,7 +626,11 @@ async fn import_core_config(app: AppHandle, content: String, expected: Option<St
     }
     tauri::async_runtime::spawn_blocking(move || {
         let content = content.trim_start_matches('\u{feff}');
-        let config = sanitize_imported_config(content)?;
+        let mut config = sanitize_imported_config(content)?;
+        if expected.is_none() {
+            // External profiles cannot opt the user into additional listeners.
+            config.as_object_mut().unwrap().remove(fixed_socks::KEY);
+        }
         let normalized = serde_json::to_string(&config).map_err(|err| err.to_string())?;
         validate_config(&normalized)?;
         require_core_access(&app)?;
@@ -899,11 +916,12 @@ fn save_profile(dir: &Path, config: &Value) -> Result<(), String> {
 }
 
 fn validate_with_core(dir: &Path, config: &Value) -> Result<(), String> {
+    let runtime = runtime_config(config, false)?;
     if core_binary(dir).is_none() {
         return Ok(());
     }
     let path = dir.join("routepilot-profile-check.json");
-    fs::write(&path, runtime_config(config, false).to_string()).map_err(|err| err.to_string())?;
+    fs::write(&path, runtime.to_string()).map_err(|err| err.to_string())?;
     let result = (|| {
         let mut child = mihomo_command(dir)
             .arg("-t")
@@ -947,6 +965,15 @@ fn update_profile(
     let mut config = original.clone();
     mutate(&mut config, &dir, !dir.join("mihomo.json").exists())?;
     if config != original || !dir.join("mihomo.json").exists() {
+        // A core reload can report success even if a new listener could not bind.
+        let previous_bindings = fixed_socks::bindings(&original)?;
+        let new_ports: Vec<_> = fixed_socks::bindings(&config)?.into_iter()
+            .map(|b| b.port).filter(|port| !previous_bindings.iter().any(|old| old.port == *port)).collect();
+        for &port in &new_ports {
+            fixed_socks::check_udp_port(port)?;
+            TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+                .map_err(|_| format!("本地端口 {port} 无法监听，请选择其他端口。"))?;
+        }
         if is_running {
             if ["port", "mixed-port", "socks-port"]
                 .iter()
@@ -965,7 +992,6 @@ fn update_profile(
             let prepared = serde_json::to_string_pretty(&config).map_err(|err| err.to_string())?;
             validate_config(&prepared)?;
             let temporary = dir.join("mihomo.json.tmp");
-            fs::write(&temporary, prepared).map_err(|err| err.to_string())?;
             let mode_changed = config.get("mode") != original.get("mode");
             // Mihomo supports PATCH for these fields. Unified delay and providers need a reload.
             let patch_key = ["mode", "ipv6", "tcp-concurrent", "log-level"].into_iter().find(|&key| {
@@ -996,7 +1022,7 @@ fn update_profile(
                         ));
                     }
                     let mut runtime =
-                        runtime_config(raw, validated["tun"]["enable"] == true);
+                        runtime_config(raw, validated["tun"]["enable"] == true)?;
                     for key in [
                         "bind-address",
                         "allow-lan",
@@ -1021,11 +1047,16 @@ fn update_profile(
                         )
                     })
                 };
-                if let Err(error) = reload(&config, false)?.await {
+                let request = reload(&config, false)?;
+                fs::write(&temporary, prepared).map_err(|err| err.to_string())?;
+                if let Err(error) = request.await {
                     let _ = fs::remove_file(&temporary);
                     return Err(format!("内核未能应用配置：{error}"));
                 }
-                if let Err(error) = fs::rename(&temporary, dir.join("mihomo.json")) {
+                let persist = new_ports.iter().try_for_each(|port| fixed_socks::verify_listener(*port))
+                    .and_then(|()| fs::rename(&temporary, dir.join("mihomo.json")));
+                if let Err(error) = persist {
+                    let _ = fs::remove_file(&temporary);
                     let recovery = reload(&original, true)?.await;
                     return Err(match recovery {
                         Ok(_) => format!("保存失败，已恢复原配置：{error}"),
@@ -1807,6 +1838,48 @@ rules:
             subscription_usage("total=bad; expire=-1"),
             serde_json::json!({})
         );
+    }
+
+    #[test]
+    fn fixed_socks_ports_are_reserved_and_preserved_alongside_the_probe() {
+        let mut config = serde_json::json!({"mixed-port":7890,
+            "proxy-providers":{"A":{"type":"inline"}, "B":{"type":"inline"}},
+            "routepilot-active-subscription":"B",
+            "routepilot-fixed-socks":[{"port":19081,"node":"日本.1","provider":"A"}]});
+        assert_eq!(validate_config(&config.to_string()).unwrap(), vec![7890, 19081]);
+        let mut runtime = crate::runtime_config(&config, false).unwrap();
+        let controller = crate::Controller::new("127.0.0.1:54321".parse().unwrap(), "test".into(), 54322).unwrap();
+        controller.add_probe_listener(&mut runtime).unwrap();
+        let listeners = runtime["listeners"].as_array().unwrap();
+        assert_eq!(listeners.len(), 2);
+        let pin = &listeners[0];
+        assert_eq!(pin["listen"], "127.0.0.1");
+        assert_eq!(pin["type"], "socks");
+        let group = runtime["proxy-groups"].as_array().unwrap().iter().find(|g| g["name"] == pin["proxy"]).unwrap();
+        assert_eq!(group["use"], serde_json::json!(["A"]));
+        assert_eq!(group["filter"], r"^日本\.1$");
+        assert_eq!(group["empty-fallback"], "REJECT");
+        config["mixed-port"] = 19081.into();
+        assert!(validate_config(&config.to_string()).is_err());
+    }
+
+    #[test]
+    #[ignore = "requires MIHOMO_BIN, python3, curl and loopback sockets"]
+    fn fixed_socks_real_exits() {
+        use std::io::Write;
+        let mut profile = serde_json::json!({"mixed-port":7890,"mode":"rule",
+            "proxy-providers":{"sample":{"type":"inline","payload":[
+                {"name":"JP","type":"http","server":"127.0.0.1","port":1},
+                {"name":"US","type":"http","server":"127.0.0.1","port":2}]}},
+            "rules":["MATCH,GLOBAL"]});
+        let binding = crate::fixed_socks::Binding { port:19081, node:"JP".into(), provider:Some("sample".into()) };
+        crate::profile::edit_active(&mut profile, crate::profile::Edit::FixedSocks { binding, remove:false }).unwrap();
+        let runtime = crate::runtime_config(&profile, false).unwrap();
+        let mut child = std::process::Command::new("python3")
+            .args(["../scripts/smoke-fixed-socks.py", &std::env::var("MIHOMO_BIN").unwrap()])
+            .stdin(std::process::Stdio::piped()).spawn().unwrap();
+        child.stdin.take().unwrap().write_all(runtime.to_string().as_bytes()).unwrap();
+        assert!(child.wait().unwrap().success());
     }
 
     #[test]
