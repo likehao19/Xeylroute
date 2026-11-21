@@ -1,3 +1,4 @@
+import { bindRuleProgramPicker } from './rule-program-picker';
 import { openProfileEditor, type DocumentMode } from './profile-editor';
 import { openRuleBatch } from './rule-batch';
 import { createSiteCatalog } from './demo-state';
@@ -2229,11 +2230,14 @@ export function mountDesktopApp(shell: ShellController): void {
             <button type="button" data-kind="ip">IP / 网段</button><button type="button" data-kind="compound">组合条件</button>
           </div></div>
         <div class="sheet-field" id="programFields"><label for="ruleProgram">软件</label>
-          <div class="rule-input-row"><input id="ruleProgram" class="sheet-input" placeholder="任意软件" value="${esc(initial.program)}" list="runningExecutables">
+          <div class="rule-input-row"><input id="ruleProgram" class="sheet-input" placeholder="任意软件" value="${esc(initial.program)}" autocomplete="off" spellcheck="false">
           <button class="glass-btn-soft" id="ruleBrowse" type="button">浏览…</button></div>
-          <datalist id="runningExecutables"></datalist>
-          <select class="sheet-input" id="ruleRunning" aria-label="选择运行中的程序"><option value="">选择运行中的程序…</option></select>
-          ${index === undefined && !shared ? '<details id="ruleBatchPrograms"><summary>批量选择软件及辅助进程</summary><div class="sheet-picker" id="ruleAppList"></div></details>' : ''}
+          <details id="rulePrograms" class="rule-programs"><summary>从运行中的软件选择
+            <small id="ruleAppCount"></small><span class="rule-disclosure" aria-hidden="true">›</span></summary>
+            <input class="sheet-input" id="ruleAppSearch" type="search" aria-label="搜索软件或路径" placeholder="搜索软件名称或路径">
+            <div class="rule-program-list" id="ruleAppList"></div>
+            <p id="ruleAppEmpty" class="sheet-hint" hidden></p>
+          </details>
         </div>
         <div class="sheet-field" id="targetFields"><label for="ruleTarget" id="ruleTargetLabel">目标网站或 IP</label>
           <input class="sheet-input" id="ruleTarget" placeholder="任意目标，支持域名、网址、IP 或网段" value="${esc(initial.target)}">
@@ -2241,42 +2245,27 @@ export function mountDesktopApp(shell: ShellController): void {
           <small id="ruleHostPreview"></small></div>
         <div class="sheet-field" id="portFields"><label for="rulePort">目标端口</label>
           <input class="sheet-input" id="rulePort" placeholder="任意端口，例如 443 或 8000-8080" value="${esc(initial.port)}"></div>
+        <div class="rule-exit-fields">
         ${scope && !original && !shared ? '<div class="sheet-field"><label for="ruleCoverage">应用范围</label><select class="sheet-input" id="ruleCoverage"><option value="local">仅当前订阅</option><option value="shared">所有订阅</option></select></div>' : ''}
         <div class="sheet-field"><span class="sheet-field-label">匹配时使用</span><div class="sheet-popup-full" id="ruleExit"></div></div>
+        </div>
         <p class="sheet-error" id="ruleError" role="alert"></p>`,
       actionsHtml: '<button class="glass-btn-soft" id="ruleCancel">取消</button><button class="glass-btn-primary" id="ruleSave">保存规则</button>',
     });
     const program = $<HTMLInputElement>('ruleProgram');
     const target = $<HTMLInputElement>('ruleTarget');
     const suffix = $<HTMLInputElement>('ruleSuffix');
-    const running = $<HTMLSelectElement>('ruleRunning');
-    const appList = document.getElementById('ruleAppList');
-    const selectedPaths = new Set<string>();
+    const picker = bindRuleProgramPicker(program, index === undefined && !shared);
+    const { selectedPaths } = picker;
     const error = $('ruleError');
-    function fillPrograms(): void {
-      if (!running.isConnected) return;
-      const paths = new Map(liveProcesses.filter(p => p.path).map(p => [p.path, p.name]));
-      const options = [...paths].sort((a,b) => a[1].localeCompare(b[1])).map(([path,name]) => `<option value="${esc(path)}">${esc(name)} · ${esc(path)}</option>`).join('');
-      running.innerHTML = '<option value="">选择运行中的程序…</option>' + options;
-      $('runningExecutables').innerHTML = options;
-      if (appList) {
-        const apps = liveApps.filter(app => app.paths.length);
-        appList.innerHTML = apps.map((app, i) => `<label class="sheet-picker-row"><input type="checkbox" data-app="${i}">
-          ${renderProgramIcon(app.icon, app.name)}<span class="picker-meta"><strong>${esc(app.name)}</strong>
-          <small>${app.paths.length} 个可执行文件</small></span></label>`).join('') || '暂无运行中的软件';
-        appList.onchange = () => {
-          selectedPaths.clear();
-          appList.querySelectorAll<HTMLInputElement>('input:checked').forEach(box => {
-            apps[Number(box.dataset.app)].paths.forEach(path => selectedPaths.add(path));
-          });
-        };
-      }
-    }
+    const fillPrograms = () => picker.refresh(liveApps, processStatus);
     fillPrograms();
     if (!liveProcesses.length) void refreshProcesses(false).then(fillPrograms);
-    running.onchange = () => { if (running.value) program.value = running.value; };
     $('ruleBrowse').onclick = async () => {
-      try { const path = await tauriApi.chooseProgramPath(); if (path) program.value = path; }
+      try {
+        const path = await tauriApi.chooseProgramPath();
+        if (path && program.isConnected) { program.value = path; picker.syncSelection(); }
+      }
       catch (e) { error.textContent = cleanError(e); }
     };
     const describe = () => {
@@ -2290,9 +2279,8 @@ export function mountDesktopApp(shell: ShellController): void {
     };
     function renderTab(): void {
       $('programFields').hidden = tab !== 'app' && tab !== 'compound';
-      program.placeholder = tab === 'app' ? '输入或浏览可执行文件路径' : '任意软件';
-      const batch = document.querySelector<HTMLDetailsElement>('#ruleBatchPrograms');
-      if (batch) batch.open = tab === 'app';
+      program.placeholder = tab === 'app' ? '输入或浏览可执行文件路径' : '可选，输入可执行文件路径';
+      $<HTMLDetailsElement>('rulePrograms').open = tab === 'app';
       $('targetFields').hidden = tab === 'app';
       $('portFields').hidden = tab !== 'compound';
       $('suffixField').hidden = tab === 'ip';

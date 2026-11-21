@@ -2696,3 +2696,34 @@
 .rule-input-row { display: flex; gap: 8px; align-items: center; }
 .rule-input-row .sheet-input { flex: 1; min-width: 0; }
 .rule-input-row button { flex-shrink: 0; }
+
+.rule-programs {
+  min-width: 0; padding: 0 10px;
+  border: 1px solid var(--well-stroke); border-radius: var(--radius-control);
+}
+.rule-programs summary { cursor: pointer; list-style: none; }
+.rule-programs summary::-webkit-details-marker { display: none; }
+.rule-programs > summary, .rule-program-row summary {
+  display: flex; gap: 8px; align-items: center; min-height: 34px;
+}
+.rule-programs > summary { font-weight: var(--weight-control); }
+.rule-programs small { color: var(--muted); font-size: var(--type-caption); }
+.rule-programs > summary small, .rule-program-row summary small { margin-left: auto; white-space: nowrap; }
+.rule-disclosure { display: inline-grid; place-items: center; width: 14px; height: 14px; flex: none; line-height: 1; color: var(--muted); font-size: var(--type-heading); }
+details[open] > summary > .rule-disclosure { transform: rotate(90deg); }
+.rule-program-list { padding-inline: 3px; overflow-x: hidden; max-height: min(25vh, 190px); overflow-y: auto; overscroll-behavior: contain; }
+.rule-programs[open] { padding-bottom: 6px; }
+.rule-programs #ruleAppSearch { width: 100%; margin-bottom: 4px; }
+.rule-program-row { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 5px; }
+.rule-program-row + .rule-program-row { border-top: 1px solid var(--inset-divider); }
+.rule-program-row input[type=checkbox] { appearance: auto; accent-color: var(--accent); width: 14px; height: 14px; margin: 0; }
+.rule-program-row > input[type=checkbox] { margin-top: 10px; }
+.rule-program-row summary strong, .rule-program-file :is(strong,small) {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-control);
+}
+.rule-program-row summary :is(.app-native-icon,.sq) { width: 22px; height: 22px; flex: none; }
+.rule-program-file { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 6px; padding: 4px 0 4px 6px; }
+.rule-program-file :is(strong,small) { display: block; }
+.rule-program-file strong { font-size: var(--type-label); }
+.rule-exit-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.rule-exit-fields .sheet-field { min-width: 0; }
