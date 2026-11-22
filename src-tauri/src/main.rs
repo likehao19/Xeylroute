@@ -6,6 +6,7 @@ mod listener_ports;
 mod mihomo_api;
 mod processes;
 mod profile;
+mod profile_backup;
 mod rule_conditions;
 mod program_files;
 mod runtime_tuning;
@@ -1338,13 +1339,18 @@ fn prune_provider_revision(dir: &Path, old: &Path) {
         || old.parent() != dir.join("routepilot-providers").canonicalize().ok().as_deref() {
         return;
     }
-    for filename in ["mihomo.json", "mihomo.backup.json"] {
+    for filename in ["mihomo.json", profile_backup::FILENAME] {
         let contents = match fs::read(dir.join(filename)) {
             Ok(bytes) => bytes,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(_) => return,
         };
-        let Ok(config) = serde_json::from_slice::<Value>(&contents) else { return };
+        let config = if filename == profile_backup::FILENAME {
+            profile_backup::decode(&contents)
+        } else {
+            serde_json::from_slice(&contents).map_err(|err| err.to_string())
+        };
+        let Ok(config) = config else { return };
         if config["proxy-providers"].as_object().into_iter().flat_map(|m| m.values())
             .any(|p| subscription_cache_path(dir, p).as_deref() == Some(old)) {
             return;
@@ -1362,19 +1368,19 @@ fn core_profile_backup(
     require_core_access(&app)?;
     let dir = core_dir(&app)?;
     let mut process = state.0.lock().map_err(|err| err.to_string())?;
-    let backup = dir.join("mihomo.backup.json");
+    let backup = dir.join(profile_backup::FILENAME);
     if restore {
         if running(&mut process)? {
             return Err("请先在「网络与设置」中停止内核，再恢复备份。".into());
         }
-        let data = fs::read_to_string(&backup).map_err(|err| {
+        let data = fs::read(&backup).map_err(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
                 "暂无配置备份。".into()
             } else {
                 err.to_string()
             }
         })?;
-        let config = serde_json::from_str(&data).map_err(|err| err.to_string())?;
+        let config = profile_backup::decode(&data)?;
         save_profile(&dir, &config)?;
     } else {
         let data = fs::read_to_string(dir.join("mihomo.json")).map_err(|err| {
@@ -1386,7 +1392,7 @@ fn core_profile_backup(
         })?;
         validate_config(&data)?;
         let temporary = dir.join("mihomo.backup.json.tmp");
-        fs::write(&temporary, data).map_err(|err| err.to_string())?;
+        fs::write(&temporary, profile_backup::encode(&data)?).map_err(|err| err.to_string())?;
         fs::rename(temporary, backup).map_err(|err| err.to_string())?;
     }
     Ok(())
@@ -1816,6 +1822,30 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{log_tail, parse_runtime_facts, sanitize_imported_config, subscription_usage, tun_config, validate_config};
+
+    #[test]
+    fn backup_keeps_imported_provider_revision_until_reference_is_removed() {
+        use super::{fs, profile_backup, prune_provider_revision};
+        let mut random = [0; 16];
+        getrandom::fill(&mut random).unwrap();
+        let dir = std::env::temp_dir().join(format!("routepilot-backup-{:x}", u128::from_le_bytes(random)));
+        let relative = "routepilot-providers/0123456789abcdef0123456789abcdef.yaml";
+        let provider = dir.join(relative);
+        fs::create_dir_all(provider.parent().unwrap()).unwrap();
+        fs::write(&provider, "proxies: []").unwrap();
+        let provider = provider.canonicalize().unwrap();
+        let config = serde_json::json!({"proxy-providers":{"imported":{"path":relative}}});
+        let backup = dir.join(profile_backup::FILENAME);
+        fs::write(&backup, profile_backup::encode(&config.to_string()).unwrap()).unwrap();
+        prune_provider_revision(&dir, &provider);
+        let kept = provider.is_file();
+        fs::remove_file(backup).unwrap();
+        prune_provider_revision(&dir, &provider);
+        let removed = !provider.exists();
+        fs::remove_dir_all(dir).unwrap();
+        assert!(kept);
+        assert!(removed);
+    }
 
     #[test]
     fn tail_limits_large_logs_by_bytes_and_lines() {
