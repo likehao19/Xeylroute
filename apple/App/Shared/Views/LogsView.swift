@@ -18,6 +18,7 @@ public struct LogsView: View {
     @State private var filterText = ""
     @State private var probeHost = "github.com"
     @State private var probeSummary: String?
+    @State private var showProbe = false
     @State private var probing = false
     @State private var probeFailed = false
     @State private var prefillRule: RuleConditions?
@@ -41,6 +42,24 @@ public struct LogsView: View {
                     .frame(maxWidth: 220)
                 #endif
 
+                #if os(macOS)
+                Button {
+                    showProbe.toggle()
+                } label: { Label("检测连接…", systemImage: "waveform.path.ecg") }
+                .popover(isPresented: $showProbe) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("通过本地代理检测连接").font(.headline)
+                        TextField("域名或网址", text: $probeHost).textFieldStyle(.roundedBorder)
+                            .onSubmit { showProbe = false; runDomainProbe() }
+                        HStack {
+                            Spacer()
+                            Button("检测") { showProbe = false; runDomainProbe() }
+                                .disabled(probing || probeHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .keyboardShortcut(.defaultAction)
+                        }
+                    }.padding(16).frame(width: 280)
+                }
+                #else
                 HStack(spacing: 6) {
                     InlineSearchField(text: $probeHost, placeholder: "测试域名")
                         .frame(width: 160)
@@ -51,6 +70,7 @@ public struct LogsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
+                #endif
             }
             .workspaceControlBar()
 
@@ -74,8 +94,25 @@ public struct LogsView: View {
             #if os(macOS)
             switch selectedTab {
             case .history: logsHistoryContent
-            case .active: activeRoutesContent
+            case .active:
+                activeRoutesContent.task(id: appState.status.running) {
+                    while !Task.isCancelled {
+                        await appState.refreshActiveRoutes()
+                        guard appState.status.running else { break }
+                        do { try await Task.sleep(for: .seconds(2)) } catch { break }
+                    }
+                }
             }
+            HStack(spacing: 15) {
+                Label(appState.status.running ? "实时监听" : "已停止监听", systemImage: "waveform")
+                    .foregroundStyle(appState.status.running ? Color.teal : .secondary)
+                Spacer()
+                Label(TrafficTracker.formatRate(appState.currentDownRate), systemImage: "arrow.down")
+                Label(TrafficTracker.formatRate(appState.currentUpRate), systemImage: "arrow.up")
+            }
+            .monospacedDigit().font(.caption).foregroundStyle(.secondary)
+            .padding(.horizontal, 16).padding(.vertical, 8)
+
             #else
             ScrollView {
                 VStack(spacing: 14) {
@@ -112,11 +149,13 @@ public struct LogsView: View {
                 }
             }
         }
+        #if os(iOS)
         .onChange(of: selectedTab) { _, tab in
             if tab == .active {
                 Task { await appState.refreshActiveRoutes() }
             }
         }
+        #endif
         .sheet(item: Binding(
             get: { prefillRule.map(PrefillWrapper.init) },
             set: { prefillRule = $0?.conditions }
@@ -126,6 +165,7 @@ public struct LogsView: View {
         }
     }
 
+    @ViewBuilder
     private var logsHistoryContent: some View {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let rows = appState.connectionLogs.filter {
@@ -137,25 +177,23 @@ public struct LogsView: View {
         }
 
         #if os(macOS)
-        return Table(rows, selection: $selectedLog) {
-            TableColumn("时间", value: \.time).width(ideal: 78)
-            TableColumn("应用") { Text($0.app.isEmpty ? "系统" : $0.app) }
-            TableColumn("目标", value: \.target)
-            TableColumn("协议", value: \.protocolName).width(ideal: 56)
-            TableColumn("决策", value: \.decision)
-            TableColumn("出口") { row in
-                Text(row.exit).foregroundStyle(row.failed ? Color.red : .primary)
+        if rows.isEmpty {
+            activityPlaceholder("等待路由事件", detail: "应用通过代理访问网络时，时间、目标和匹配结果会出现在这里。", query: query)
+        } else {
+            Table(rows, selection: $selectedLog) {
+                TableColumn("时间", value: \.time).width(ideal: 78)
+                TableColumn("应用") { Text($0.app.isEmpty ? "系统" : $0.app) }
+                TableColumn("目标", value: \.target)
+                TableColumn("协议", value: \.protocolName).width(ideal: 56)
+                TableColumn("决策", value: \.decision)
+                TableColumn("出口") { row in
+                    Text(row.exit).foregroundStyle(row.failed ? Color.red : .primary)
+                }
             }
-        }
-        .alternatingRowBackgrounds(.disabled)
-        .overlay {
-            if rows.isEmpty {
-                CollectionEmptyState(title: "暂无连接记录", systemImage: "text.magnifyingglass",
-                                     description: "启动内核后，这里显示最近的路由事件。", query: query)
-            }
+            .alternatingRowBackgrounds(.enabled)
         }
         #else
-        return NativeCard(padding: 0) {
+        NativeCard(padding: 0) {
             if rows.isEmpty {
                 CollectionEmptyState(
                     title: "暂无连接记录",
@@ -194,6 +232,7 @@ public struct LogsView: View {
         #endif
     }
 
+    @ViewBuilder
     private var activeRoutesContent: some View {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let rows = appState.activeRoutes.filter {
@@ -204,26 +243,24 @@ public struct LogsView: View {
         }
 
         #if os(macOS)
-        return Table(rows, selection: $selectedRoute) {
-            TableColumn("应用", value: \.displayApp)
-            TableColumn("目标", value: \.displayTarget)
-            TableColumn("规则") { Text($0.rulePayload.isEmpty ? $0.rule : "\($0.rule) · \($0.rulePayload)") }
-            TableColumn("出口") { Text($0.chains.reversed().joined(separator: " → ")) }
-            TableColumn("操作") { route in
-                Button("新建规则…") { prepareRule(for: route) }
-                    .buttonStyle(.borderless)
+        if rows.isEmpty {
+            activityPlaceholder("当前没有活动连接", detail: "此列表每两秒更新，显示仍然打开的网络连接。", query: query)
+        } else {
+            Table(rows, selection: $selectedRoute) {
+                TableColumn("应用", value: \.displayApp)
+                TableColumn("目标", value: \.displayTarget)
+                TableColumn("规则") { Text($0.rulePayload.isEmpty ? $0.rule : "\($0.rule) · \($0.rulePayload)") }
+                TableColumn("出口") { Text($0.chains.reversed().joined(separator: " → ")) }
+                TableColumn("操作") { route in
+                    Button("新建规则…") { prepareRule(for: route) }
+                        .buttonStyle(.borderless)
+                }
+                .width(74)
             }
-            .width(74)
-        }
-        .alternatingRowBackgrounds(.disabled)
-        .overlay {
-            if rows.isEmpty {
-                CollectionEmptyState(title: "当前没有活动连接", systemImage: "network",
-                                     description: "通过代理建立的连接会出现在这里。", query: query)
-            }
+            .alternatingRowBackgrounds(.enabled)
         }
         #else
-        return NativeCard(padding: 0) {
+        NativeCard(padding: 0) {
             if rows.isEmpty {
                 Text("当前没有活动连接")
                     .font(.system(size: 12.5))
@@ -252,6 +289,27 @@ public struct LogsView: View {
         }
         #endif
     }
+
+    #if os(macOS)
+    @ViewBuilder
+    private func activityPlaceholder(_ title: String, detail: String, query: String) -> some View {
+        if !query.isEmpty {
+            ContentUnavailableView.search(text: filterText)
+        } else {
+            ContentUnavailableView {
+                Label(title, systemImage: "waveform.path.ecg")
+            } description: {
+                Text(detail)
+            } actions: {
+                if appState.status.running {
+                    Button("检测连接…") { showProbe = true }
+                } else {
+                    Button("前往连接概览") { appState.selectedDestination = .connect }
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+    #endif
 
     private func prepareRule(for route: ActiveRoute) {
         prefillRule = RuleConditions(

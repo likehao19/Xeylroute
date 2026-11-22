@@ -17,7 +17,7 @@ struct XeylrouteAppleApp: App {
                 }
         }
         .windowStyle(.automatic)
-        .windowToolbarStyle(.unified(showsTitle: true))
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .defaultSize(width: 1120, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {}

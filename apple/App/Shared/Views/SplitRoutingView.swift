@@ -10,7 +10,7 @@ public struct SplitRoutingView: View {
     enum SplitTab: String, CaseIterable, Identifiable {
         case rules = "分流规则"
         case groups = "策略分组"
-        case apps = "运行中的程序"
+        case apps = "运行中的应用"
         var id: String { rawValue }
     }
 
@@ -86,6 +86,8 @@ public struct SplitRoutingView: View {
             #if os(macOS)
             if selectedTab == .rules {
                 rulesListContent
+            } else if selectedTab == .apps {
+                processDirectory.task { await appState.refreshProcesses() }
             } else {
                 tabContent
             }
@@ -152,7 +154,11 @@ public struct SplitRoutingView: View {
                 case .groups:
                     groupsListContent
                 case .apps:
+                    #if os(iOS)
                     runningAppsContent
+                    #else
+                    EmptyView()
+                    #endif
                 }
             }
             .padding(20)
@@ -347,6 +353,93 @@ public struct SplitRoutingView: View {
 
     // MARK: - Running Applications (macOS)
 
+    #if os(macOS)
+    private var processDirectory: some View {
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apps = appState.groupedApps.filter {
+            query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.primaryPath.localizedCaseInsensitiveContains(query)
+        }
+        let processes = appState.runningProcesses.filter {
+            query.isEmpty || $0.path.localizedCaseInsensitiveContains(query) || String($0.pid).contains(query)
+        }
+        return VStack(spacing: 0) {
+            if appState.hasLimitedProcessMatching {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: "info.circle").foregroundStyle(.secondary)
+                    Text("当前内核在 macOS 27 上可能无法匹配应用。支持代理设置的应用可通过固定端口指定节点。")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Button("设置固定入口…") {
+                        appState.openFixedListeners = true
+                        appState.selectedDestination = .nodes
+                    }
+                }.padding(.horizontal, 18).padding(.vertical, 9)
+                Divider()
+            }
+            if scanByProcess && !processes.isEmpty {
+                Table(processes) {
+                    TableColumn("进程") { item in
+                        Text(item.executable).lineLimit(1).help(item.path)
+                    }
+                    TableColumn("PID") { Text(String($0.pid)).monospacedDigit() }.width(66)
+                    TableColumn("线程") { Text(String($0.threadCount)).monospacedDigit() }.width(46)
+                    TableColumn("出口策略") { item in exitMenu(paths: [item.path], name: item.name) }.width(min: 100, ideal: 145)
+                }
+            } else if !scanByProcess && !apps.isEmpty {
+                Table(apps) {
+                    TableColumn("应用") { app in
+                        HStack(spacing: 10) {
+                            AppIconThumbnail(path: app.bundlePath, size: 25)
+                            Text(app.name).lineLimit(1)
+                        }.padding(.vertical, 3).help(app.primaryPath)
+                    }
+                    TableColumn("进程数") { Text(String($0.instanceCount)).monospacedDigit() }.width(65)
+                    TableColumn("出口策略") { app in exitMenu(paths: app.paths, name: app.name) }.width(min: 100, ideal: 145)
+                }
+            } else if !query.isEmpty {
+                ContentUnavailableView.search(text: query)
+            } else if appState.scanningProcesses {
+                ProgressView("正在读取本机应用…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ContentUnavailableView {
+                    Label("未读取到运行中的应用", systemImage: "macwindow")
+                } description: {
+                    Text("可以重新读取，也可以在分流规则中选取应用。")
+                } actions: {
+                    Button("重新读取") { Task { await appState.refreshProcesses() } }
+                }
+            }
+            HStack {
+                Text(scanByProcess ? "\(processes.count) 个进程" : "\(apps.count) 个应用")
+                Spacer()
+                if appState.scanningProcesses { ProgressView().controlSize(.mini) }
+                Text("来自本机进程列表")
+            }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.vertical, 8)
+        }
+        .alternatingRowBackgrounds(.enabled)
+    }
+
+    private func exitMenu(paths: [String], name: String) -> some View {
+        Menu {
+            Button("跟随默认规则") {
+                Task { await appState.mutateProfile({
+                    try await appState.runtime.profileStore.setProgramExits(paths: paths, exit: nil)
+                }, successMessage: "已清除「\(name)」的专用规则") }
+            }
+            Divider()
+            ForEach(appState.profile.exits, id: \.self) { exit in
+                Button(exit) {
+                    Task { await appState.mutateProfile({
+                        try await appState.runtime.profileStore.setProgramExits(paths: paths, exit: exit)
+                    }, successMessage: "「\(name)」将使用 \(exit)") }
+                }
+            }
+        } label: { Text(currentExit(for: paths) ?? "默认规则").lineLimit(1) }
+        .menuStyle(.borderlessButton)
+    }
+    #endif
+
+    #if os(iOS)
     private var runningAppsContent: some View {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
@@ -431,6 +524,8 @@ public struct SplitRoutingView: View {
             }
         }
     }
+
+    #endif
 
     private func currentExit(for paths: [String]) -> String? {
         let set = Set(paths.map { RunningAppGrouper.normalizePath($0) })
@@ -523,6 +618,10 @@ public struct RuleEditorSheet: View {
                         }
                     }
                     .textFieldStyle(.roundedBorder)
+                    if appState.hasLimitedProcessMatching && !conditions.program.isEmpty {
+                        Label("当前内核在 macOS 27 上可能无法匹配应用。仅按地址分流时，请清空应用条件。", systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Divider()
                     HStack {
                         Label("出口策略", systemImage: "arrow.turn.up.right").font(.headline)
@@ -588,7 +687,7 @@ public struct RuleEditorSheet: View {
                                     conditions: conditions,
                                     exit: selectedExit
                                 )
-                                try? await appState.runtime.reloadIfRunning()
+                                try await appState.runtime.reloadIfRunning()
                                 await appState.refreshAll(fullSnapshot: true)
                                 appState.notify(existing == nil ? "已添加分流规则" : "规则已更新")
                                 dismiss()

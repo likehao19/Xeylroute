@@ -14,7 +14,6 @@ public struct NodesView: View {
 
     #if os(macOS)
     @State private var selectedGroup = "GLOBAL"
-    @State private var selectedNode: String?
     @State private var showImport = false
     #endif
     @State private var selectedTab: NodesTab = .groups
@@ -55,7 +54,7 @@ public struct NodesView: View {
                         set: { selectedGroup = $0 }
                     )) {
                         Text("默认出口").tag("GLOBAL")
-                        ForEach(appState.profile.groups) { Text($0.name).tag($0.name) }
+                        ForEach(appState.profile.groups.filter { $0.enabled && $0.name != "GLOBAL" }) { Text($0.name).tag($0.name) }
                     }
                     .frame(maxWidth: 210)
                 }
@@ -78,8 +77,8 @@ public struct NodesView: View {
                         if hasBindableNodes { showAddSocksSheet = true } else { showImport = true }
                     }
                 }
-            } else if selectedTab == .groups && appState.status.configured {
-                macNodeTable
+            } else if selectedTab == .groups && (hasBindableNodes || !appState.profile.groups.isEmpty) {
+                macNodeCatalog
             } else {
                 tabContent
             }
@@ -100,13 +99,13 @@ public struct NodesView: View {
                     Button("测全部带宽") {
                         Task { await appState.measureAllBandwidth() }
                     }
-                    .disabled(appState.isBatchProbing || !appState.status.configured)
+                    .disabled(appState.isBatchProbing || !hasBindableNodes)
 
                     Button(appState.isBatchProbing ? "测速中…" : "全部测延迟") {
                         Task { await appState.measureAllDelays() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(appState.isBatchProbing || !appState.status.configured)
+                    .disabled(appState.isBatchProbing || !hasBindableNodes)
 
                 case .sites:
                     Button("全部站点测速") {
@@ -126,6 +125,12 @@ public struct NodesView: View {
             }
         }
         #if os(macOS)
+        .onAppear {
+            if appState.openFixedListeners {
+                selectedTab = .socks
+                appState.openFixedListeners = false
+            }
+        }
         .sheet(isPresented: $showImport) { ImportSubscriptionSheet() }
         #endif
         .sheet(isPresented: $showAddSocksSheet) {
@@ -154,52 +159,95 @@ public struct NodesView: View {
     }
 
     #if os(macOS)
-    private var macNodeTable: some View {
+    private var macNodeCatalog: some View {
         let group = appState.profile.groups.first { $0.name == selectedGroup }
         let groupName = group?.name ?? "GLOBAL"
         let nodes = group.map(groupMembers) ?? appState.selectableNodes
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
         let rows = nodes.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.type.localizedCaseInsensitiveContains(query) }
         let active = appState.snapshot?.proxies[groupName]?.now
-
-        return VStack(spacing: 0) {
-            Table(rows, selection: $selectedNode) {
-                TableColumn("节点") { node in
-                    HStack(spacing: 8) {
-                        CountryBadge(nodeName: node.name, isPolicy: node.isPolicy)
-                        Text(node.name).lineLimit(1)
+        let policies = rows.filter(\.isPolicy)
+        let servers = rows.filter { !$0.isPolicy }
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                if rows.isEmpty {
+                    CollectionEmptyState(title: "分组中还没有节点", systemImage: "network",
+                                         description: "编辑策略组或切换到默认出口。", query: query)
+                }
+                if !policies.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("策略").font(.headline)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 122), spacing: 8)], spacing: 8) {
+                            ForEach(policies) { item in
+                                Button {
+                                    Task { await appState.selectNode(item.name, inGroup: groupName) }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: item.name == "DIRECT" ? "arrow.up.right" : item.name == "REJECT" ? "minus.circle" : "arrow.triangle.branch")
+                                            .foregroundStyle(.secondary)
+                                        Text(item.name).lineLimit(1)
+                                        Spacer(minLength: 2)
+                                        if item.name == active { Image(systemName: "checkmark").foregroundStyle(.teal) }
+                                    }
+                                    .padding(9).macPanel().contentShape(Rectangle())
+                                }.buttonStyle(.plain).help(item.type)
+                            }
+                        }
                     }
                 }
-                TableColumn("类型", value: \.type).width(ideal: 95)
-                TableColumn("延迟") { node in
-                    LatencyBadge(measurement: appState.nodeDelays[node.id], isTesting: appState.testingNodes.contains(node.id))
-                }
-                TableColumn("操作") { node in
-                    HStack {
-                        if node.name == active {
-                            Label("使用中", systemImage: "checkmark").foregroundStyle(.tint)
-                        } else {
-                            Button("使用") { Task { await appState.selectNode(node.name, inGroup: groupName) } }
-                                .help(appState.status.running ? "切换到这个节点" : "启动本地监听并切换到这个节点")
+                if !servers.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("可用节点").font(.headline)
+                            Text(String(servers.count)).monospacedDigit().foregroundStyle(.secondary)
                         }
-                        if !node.isPolicy || node.name == "AUTO" {
-                            Button("测速") { Task { await appState.measureDelay(for: node) } }
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 218), spacing: 10)], spacing: 10) {
+                            ForEach(servers) { node in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Button {
+                                        Task { await appState.selectNode(node.name, inGroup: groupName) }
+                                    } label: {
+                                        HStack(spacing: 9) {
+                                            CountryBadge(nodeName: node.name, isPolicy: false)
+                                            Text(node.name).font(.body.weight(.medium)).lineLimit(2)
+                                            Spacer(minLength: 2)
+                                            Image(systemName: node.name == active ? "checkmark.circle.fill" : "circle")
+                                                .foregroundStyle(node.name == active ? Color.teal : Color.secondary.opacity(0.4))
+                                        }.frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(appState.status.running ? "使用此节点" : "启动本地监听并切换至此节点")
+                                    HStack(spacing: 7) {
+                                        Text(node.type.uppercased()).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                        Spacer()
+                                        LatencyBadge(measurement: appState.nodeDelays[node.id], isTesting: appState.testingNodes.contains(node.id))
+                                        Button {
+                                            Task { await appState.measureDelay(for: node) }
+                                        } label: {
+                                            Image(systemName: "gauge.with.dots.needle.33percent")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .disabled(appState.testingNodes.contains(node.id))
+                                        .accessibilityLabel("测试节点延迟").help("测试延迟")
+                                    }
+                                }
+                                .padding(13)
+                                .macPanel()
+                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(node.name == active ? Color.teal : .clear, lineWidth: 1.4))
+                            }
                         }
                     }
-                    .buttonStyle(.borderless)
                 }
-                .width(110)
             }
-            .alternatingRowBackgrounds(.disabled)
-            .overlay {
-                if rows.isEmpty && !query.isEmpty { ContentUnavailableView.search(text: query) }
-            }
+            .padding(22)
         }
     }
     #endif
 
     private func groupMembers(_ group: PolicyGroup) -> [ProxyNode] {
-        let names = appState.snapshot?.proxies[group.name]?.all ?? group.proxies
+        let sourceNodes = appState.profile.providers.filter { group.use.contains($0.name) }.flatMap { $0.nodes.map(\.name) }
+        let names = appState.snapshot?.proxies[group.name]?.all ?? (group.proxies + sourceNodes.filter { !group.proxies.contains($0) })
         let available = appState.selectableNodes
         return names.map { name in
             available.first { $0.name == name }
@@ -216,7 +264,7 @@ public struct NodesView: View {
         }
 
         return VStack(spacing: 14) {
-            if !appState.status.configured {
+            if !hasBindableNodes && appState.profile.groups.isEmpty {
                 NativeCard(padding: 36) {
                     VStack(spacing: 10) {
                         Image(systemName: "point.3.connected.trianglepath.dotted")

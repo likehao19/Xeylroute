@@ -24,6 +24,19 @@ public enum AppDestination: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    #if os(macOS)
+    var desktopTitle: String {
+        switch self {
+        case .connect: "连接概览"
+        case .nodes: "代理节点"
+        case .logs: "网络活动"
+        case .subscriptions: "订阅来源"
+        case .split: "分流策略"
+        case .settings: "设置"
+        }
+    }
+    #endif
+
     public var shortTitle: String {
         switch self {
         case .connect: return "连接"
@@ -95,6 +108,13 @@ public final class AppState {
 
     // Navigation & Appearance
     public var selectedDestination: AppDestination = .connect
+    #if os(macOS)
+    var openFixedListeners = false
+    var hasLimitedProcessMatching: Bool {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion == 27
+            && status.coreVersionLabel == "Mihomo v1.19.34"
+    }
+    #endif
     public var searchText: String = ""
     public var appearance: AppearanceMode {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "xeylroute-apple-appearance") }
@@ -118,6 +138,7 @@ public final class AppState {
     public var probeConcurrency: Int {
         didSet { UserDefaults.standard.set(probeConcurrency, forKey: "xeylroute-probe-concurrency") }
     }
+    var inspectedSubscription: String?
     private var downloads: [String: Task<String, Error>] = [:]
     var refreshingProviders: Set<String> { Set(downloads.keys) }
     private(set) var subscriptionErrors: [String: String] = [:]
@@ -198,7 +219,11 @@ public final class AppState {
                     if let start = self.sessionStartDate {
                         self.elapsedSeconds = max(0, Int(Date().timeIntervalSince(start)))
                     }
-                    await self.refreshAll(fullSnapshot: self.tickCounter % 5 == 0)
+                    if self.tickCounter % 5 == 0 {
+                        await self.refreshAll(fullSnapshot: true)
+                    } else {
+                        await self.refreshSnapshot(full: false)
+                    }
                 }
             }
         }
@@ -276,6 +301,7 @@ public final class AppState {
         if status.tunEnabled { return "虚拟网卡运行中" }
         if status.systemProxyEnabled { return "系统代理已开启" }
         if status.running { return "仅本地监听" }
+        if !profile.providers.isEmpty && !selectableNodes.contains(where: { !$0.isPolicy }) { return "等待订阅节点" }
         if status.configured { return "未连接" }
         return profile.providers.isEmpty ? "待导入配置" : "等待订阅节点"
     }
@@ -286,26 +312,14 @@ public final class AppState {
         let newStatus = await runtime.status()
         let newProfile = await runtime.profileStore.summary()
         let wasRunning = status.running
-        status = newStatus
-        profile = newProfile
+        if status != newStatus { status = newStatus }
+        if profile != newProfile { profile = newProfile }
 
         if newStatus.running {
             if !wasRunning || sessionStartDate == nil {
                 sessionStartDate = Date()
             }
-            if let client = await runtime.activeClient(),
-               let snap = try? await client.fetchSnapshot(light: !fullSnapshot)
-            {
-                if fullSnapshot || snapshot == nil {
-                    snapshot = snap
-                } else {
-                    snapshot?.mode = snap.mode
-                    snapshot?.connections = snap.connections
-                }
-                let rates = trafficTracker.record(totals: snap.connections)
-                currentDownRate = rates.down
-                currentUpRate = rates.up
-            }
+            await refreshSnapshot(full: fullSnapshot)
             restartLogStreamIfNeeded()
         } else {
             sessionStartDate = nil
@@ -315,6 +329,22 @@ public final class AppState {
             currentUpRate = 0
             trafficTracker.reset()
             restartLogStreamIfNeeded()
+        }
+    }
+
+    private func refreshSnapshot(full: Bool) async {
+        if let client = await runtime.activeClient(),
+           let snap = try? await client.fetchSnapshot(light: !full)
+        {
+            if full || snapshot == nil {
+                snapshot = snap
+            } else {
+                snapshot?.mode = snap.mode
+                snapshot?.connections = snap.connections
+            }
+            let rates = trafficTracker.record(totals: snap.connections)
+            currentDownRate = rates.down
+            currentUpRate = rates.up
         }
     }
 

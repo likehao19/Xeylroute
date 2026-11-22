@@ -9,9 +9,9 @@ import UIKit
 extension View {
     func workspaceControlBar() -> some View {
         #if os(macOS)
-        self.padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(.bar)
+        self.padding(.horizontal, 24)
+            .padding(.bottom, 12)
+            .padding(.top, 2)
             .overlay(alignment: .bottom) { Divider() }
         #else
         self.padding(.horizontal, 20)
@@ -22,6 +22,13 @@ extension View {
 }
 
 #if os(macOS)
+extension View {
+    func macPanel() -> some View {
+        self.background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.09)))
+    }
+}
+
 struct WorkspaceSearch: View {
     @Binding var query: String
     let prompt: String
@@ -184,16 +191,15 @@ public struct LatencyBadge: View {
                 Text(err)
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.red)
-            } else if let ms = measurement?.delayMs {
-                HStack(spacing: 3) {
-                    Text("\(ms)")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(color(for: ms))
-                    Text("ms")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(color(for: ms).opacity(0.75))
-                    if let mbps = measurement?.mbps {
-                        Text("· \(String(format: "%.0f", mbps))M")
+            } else if let measurement, measurement.delayMs != nil || measurement.mbps != nil {
+                HStack(spacing: 4) {
+                    if let ms = measurement.delayMs {
+                        Text("\(ms) ms")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(color(for: ms))
+                    }
+                    if let mbps = measurement.mbps {
+                        Text("\(mbps, specifier: "%.1f") Mbps")
                             .font(.system(size: 10.5, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }

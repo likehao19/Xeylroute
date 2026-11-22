@@ -9,10 +9,19 @@ public struct SettingsView: View {
     @State private var httpPortText = "0"
     @State private var socksPortText = "0"
     @State private var coreLogSheetText: String?
+    @State private var confirmRestore = false
 
     #if os(macOS)
     private enum Category: String, CaseIterable {
         case general = "常规", network = "连接", tests = "测速", diagnostics = "诊断"
+        var symbol: String {
+            switch self {
+            case .general: "paintpalette"
+            case .network: "network"
+            case .tests: "speedometer"
+            case .diagnostics: "stethoscope"
+            }
+        }
     }
     @State private var category: Category = .general
     private var showGeneral: Bool { category == .general }
@@ -36,6 +45,15 @@ public struct SettingsView: View {
 
                 }
             }
+            .confirmationDialog("用备份替换当前配置？", isPresented: $confirmRestore) {
+                Button("恢复备份", role: .destructive) {
+                    Task {
+                        await appState.mutateProfile({
+                            try await appState.runtime.profileStore.restoreBackup()
+                        }, successMessage: "已从备份恢复配置")
+                    }
+                }
+            } message: { Text("当前规则、策略组和订阅来源将替换为上次保存的版本。") }
             .onAppear {
                 syncPortFields()
                 Task { await appState.refreshNetworkDetails() }
@@ -82,13 +100,7 @@ public struct SettingsView: View {
                 }
             }
         }
-        Button("恢复备份") {
-            Task {
-                await appState.mutateProfile({
-                    try await appState.runtime.profileStore.restoreBackup()
-                }, successMessage: "已从备份恢复配置")
-            }
-        }
+        Button("恢复备份…") { confirmRestore = true }
     }
 
     @ViewBuilder
@@ -96,16 +108,27 @@ public struct SettingsView: View {
         #if os(macOS)
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Picker("设置类别", selection: $category) {
-                    ForEach(Category.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                HStack(spacing: 6) {
+                    ForEach(Category.allCases, id: \.self) { item in
+                        Button {
+                            category = item
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: item.symbol)
+                                Text(item.rawValue)
+                            }.frame(maxWidth: .infinity).padding(.vertical, 8)
+                            .foregroundStyle(category == item ? Color.accentColor : .secondary)
+                            .background(category == item ? Color.accentColor.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(category == item ? .isSelected : [])
+                    }
+                }.padding(4).macPanel()
                 preferenceSections
             }
             .frame(maxWidth: 740, alignment: .leading)
-            .padding(24)
+            .padding(.horizontal, 24).padding(.bottom, 24)
             .frame(maxWidth: .infinity)
         }
         #else
@@ -122,6 +145,14 @@ public struct SettingsView: View {
     private var preferenceSections: some View {
         @Bindable var state = appState
         if showGeneral {
+            #if os(macOS)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("外观").font(.headline)
+                HStack(spacing: 13) {
+                    ForEach(AppearanceMode.allCases) { mode in appearanceSample(mode) }
+                }
+            }
+            #else
             preferenceSection("外观") {
                 preferenceRow(title: "外观模式", subtitle: "选择「跟随系统」可与设备外观同步。") {
                     settingsIcon("circle.lefthalf.filled", tint: .blue)
@@ -136,6 +167,7 @@ public struct SettingsView: View {
                     .frame(width: 220)
                 }
             }
+            #endif
 
             preferenceSection("网络接管") {
                 if appState.runtime.supportsSystemProxy {
@@ -173,6 +205,7 @@ public struct SettingsView: View {
                     .disabled(appState.isBusy)
                 }
 
+                #if os(iOS)
                 preferenceDivider(inset: 56)
                 preferenceRow(
                     title: "代理故障时恢复直连",
@@ -193,6 +226,7 @@ public struct SettingsView: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                 }
+                #endif
             }
         }
 
@@ -349,6 +383,44 @@ public struct SettingsView: View {
             }
         }
     }
+
+    #if os(macOS)
+    private func appearanceSample(_ mode: AppearanceMode) -> some View {
+        let dark = mode == .dark || (mode == .auto && colorScheme == .dark)
+        let ink: Color = dark ? .white : .black
+        let chosen = appState.appearance == mode
+        return Button {
+            appState.appearance = mode
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 2) {
+                            ForEach(0..<3) { _ in Circle().fill(ink.opacity(0.35)).frame(width: 3, height: 3) }
+                        }
+                        RoundedRectangle(cornerRadius: 2).fill(.teal.opacity(0.45)).frame(height: 5)
+                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.15)).frame(height: 3)
+                        Spacer(minLength: 0)
+                    }.padding(7).frame(width: 37).background(ink.opacity(0.06))
+                    VStack(alignment: .leading, spacing: 5) {
+                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.38)).frame(width: 23, height: 4)
+                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.12)).frame(height: 5)
+                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.10)).frame(height: 5)
+                    }.padding(8)
+                }
+                .frame(height: 46)
+                .background(dark ? Color(white: 0.17) : Color(white: 0.97))
+                .clipShape(RoundedRectangle(cornerRadius: 6)).accessibilityHidden(true)
+                HStack {
+                    Text(mode.title).font(.callout)
+                    Spacer()
+                    if chosen { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
+                }
+            }.padding(10).macPanel()
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(chosen ? Color.accentColor : .clear))
+        }.buttonStyle(.plain).accessibilityAddTraits(chosen ? .isSelected : [])
+    }
+    #endif
 
     @ViewBuilder
     private func preferenceSection<Rows: View>(_ title: String, @ViewBuilder rows: () -> Rows) -> some View {

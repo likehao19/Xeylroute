@@ -7,7 +7,7 @@ public struct SubscriptionsView: View {
 
     @State private var filterText = ""
     #if os(macOS)
-    @State private var expandedSources: Set<String> = []
+    @State private var addressEditor: SubscriptionProvider?
     #endif
     @State private var showImportSheet = false
     @State private var editorTarget: EditorTarget?
@@ -32,49 +32,7 @@ public struct SubscriptionsView: View {
 
         return Group {
             #if os(macOS)
-            if providers.isEmpty && standalone.isEmpty {
-                if query.isEmpty {
-                    ContentUnavailableView {
-                        Label("添加订阅或节点", systemImage: "square.stack.3d.up")
-                    } description: {
-                        Text("从订阅地址、分享链接或本地 YAML 文件导入。")
-                    } actions: {
-                        Button("导入订阅或节点…") { showImportSheet = true }
-                            .buttonStyle(.borderedProminent)
-                        Button("打开 YAML 文件…") { showFileImporter = true }
-                    }
-                } else {
-                    ContentUnavailableView.search(text: filterText)
-                }
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        if !providers.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text("订阅来源").font(.title2.weight(.semibold))
-                                    Text("\(providers.count)").foregroundStyle(.secondary).monospacedDigit()
-                                }
-                                ForEach(providers) { provider in
-                                    subscriptionDetails(provider)
-                                        .padding(16)
-                                        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-                                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
-                                }
-                            }
-                        }
-                        if !standalone.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("独立节点").font(.title2.weight(.semibold))
-                                ForEach(standalone) { node in standaloneRow(node) }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: 740, alignment: .leading)
-                    .padding(24)
-                    .frame(maxWidth: .infinity)
-                }
-            }
+            macSources(providers, standalone: standalone, query: query)
             #else
             ScrollView {
                 VStack(spacing: 18) {
@@ -193,6 +151,9 @@ public struct SubscriptionsView: View {
                 .buttonStyle(.borderedProminent)
             }
         }
+        #if os(macOS)
+        .sheet(item: $addressEditor) { provider in SubscriptionAddressEditor(provider: provider) }
+        #endif
         .sheet(isPresented: $showImportSheet) {
             ImportSubscriptionSheet()
                 .environment(appState)
@@ -221,6 +182,123 @@ public struct SubscriptionsView: View {
             }
         }
     }
+
+    #if os(macOS)
+    @ViewBuilder
+    private func macSources(_ providers: [SubscriptionProvider], standalone: [ProxyNode], query: String) -> some View {
+        if providers.isEmpty && standalone.isEmpty {
+            if query.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Label("导入订阅或本地节点", systemImage: "square.and.arrow.down").font(.title3.weight(.semibold))
+                        ConnectionSourceEditor()
+                    }.padding(20).macPanel().frame(maxWidth: 640).padding(24).frame(maxWidth: .infinity)
+                }
+            } else {
+                ContentUnavailableView.search(text: filterText)
+            }
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    if let provider = providers.first(where: { $0.name == appState.inspectedSubscription })
+                        ?? providers.first(where: { $0.name == appState.profile.subscriptionScope }) ?? providers.first {
+                        if providers.count > 1 {
+                            Picker("查看来源", selection: Binding(get: { provider.name }, set: { appState.inspectedSubscription = $0 })) {
+                                ForEach(providers) { Text($0.name).tag($0.name) }
+                            }.fixedSize()
+                        }
+                        providerInspector(provider, query: query)
+                    }
+                    if !standalone.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("独立节点").font(.headline)
+                            ForEach(standalone) { node in standaloneRow(node) }
+                        }
+                    }
+                }
+                .frame(maxWidth: 940, alignment: .leading)
+                .padding(.horizontal, 24).padding(.bottom, 20)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func providerInspector(_ provider: SubscriptionProvider, query: String) -> some View {
+        let selected = provider.name == appState.profile.subscriptionScope
+        let live = appState.snapshot?.providers[provider.name]
+        let nodes = sourceNodes(provider)
+        let matches = nodes.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let displayed = query.isEmpty || matches.isEmpty ? nodes : matches
+        let pending = appState.refreshingProviders.contains(provider.name)
+        return VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 11) {
+                    Image(systemName: provider.isRemote ? "icloud.and.arrow.down" : "doc.text")
+                        .font(.title2).foregroundStyle(.orange)
+                        .frame(width: 39, height: 39).background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(provider.name).font(.title3.weight(.semibold)).lineLimit(1).help(provider.name)
+                        Text(provider.isRemote ? "远程订阅" : "本地配置").foregroundStyle(.secondary).font(.callout)
+                    }
+                    Spacer(minLength: 6)
+                    sourceActions(provider, isSelected: selected)
+                }
+                Divider()
+                HStack(spacing: 14) {
+                    Label(selected ? "当前使用" : "备用来源", systemImage: selected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selected ? Color.teal : .secondary)
+                    Label("\(nodes.count) 个节点", systemImage: "network")
+                    Spacer()
+                    if let date = live?.updatedAt ?? provider.updatedAt {
+                        Text("更新于 " + date.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
+                    }
+                }.font(.callout)
+                if let usage = live?.usage ?? provider.usage, usage.total > 0 {
+                    ProgressView(value: usage.progress).tint(.teal)
+                    HStack {
+                        Text("\(TrafficTracker.formatBytes(usage.used)) / \(TrafficTracker.formatBytes(usage.total))")
+                        Spacer()
+                        if let expiry = usage.expireDate { Text("到期 " + expiry.formatted(date: .abbreviated, time: .omitted)) }
+                    }.font(.caption).foregroundStyle(.secondary)
+                }
+                if let error = appState.subscriptionErrors[provider.name] {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }.padding(17).macPanel()
+
+            if nodes.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(pending ? "正在下载节点" : "尚无缓存节点", systemImage: "tray")
+                        .font(.headline)
+                    Text(pending ? "完成后，节点列表会在此显示。" : (provider.isRemote ? "点「刷新订阅」获取节点，或在来源菜单中修改地址。" : "编辑本地配置以添加节点。"))
+                        .font(.callout).foregroundStyle(.secondary)
+                }.padding(.vertical, 6)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        Text("节点清单").font(.headline)
+                        Spacer()
+                        if selected {
+                            Button("管理节点") { appState.selectedDestination = .nodes }.buttonStyle(.link)
+                        }
+                    }
+                    ForEach(displayed) { node in
+                        HStack(spacing: 10) {
+                            CountryBadge(nodeName: node.name, isPolicy: false, size: .compact)
+                            Text(node.name).lineLimit(1)
+                            Spacer()
+                            Text(node.type.uppercased()).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 3)
+                        if node.id != displayed.last?.id { Divider() }
+                    }
+                }.padding(16).macPanel()
+            }
+        }
+    }
+    #endif
 
     private func standaloneRow(_ node: ProxyNode) -> some View {
         GroupedRow(title: node.name, subtitle: "\(node.type.uppercased()) · 独立节点") {
@@ -251,6 +329,7 @@ public struct SubscriptionsView: View {
         appState.snapshot?.providers[provider.name]?.nodes ?? provider.nodes
     }
 
+    #if os(iOS)
     private func subscriptionDetails(_ provider: SubscriptionProvider) -> some View {
         let isSelected = appState.profile.subscriptionScope == provider.name
         let live = appState.snapshot?.providers[provider.name]
@@ -284,9 +363,6 @@ public struct SubscriptionsView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                #if os(macOS)
-                sourceActions(provider, isSelected: isSelected)
-                #endif
             }
 
             if let error = appState.subscriptionErrors[provider.name] {
@@ -313,47 +389,14 @@ public struct SubscriptionsView: View {
 
             HairlineDivider(inset: 0)
 
-            #if os(macOS)
-            if nodes.isEmpty {
-                Label(appState.refreshingProviders.contains(provider.name) ? "正在获取节点…" : "尚无可用节点",
-                      systemImage: "network")
-                    .font(.callout).foregroundStyle(.secondary)
-            } else {
-                let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
-                let matches = query.isEmpty ? [] : nodes.filter { $0.name.localizedCaseInsensitiveContains(query) }
-                let expanded = expandedSources.contains(provider.name)
-                if matches.isEmpty {
-                    Button {
-                        if expanded { expandedSources.remove(provider.name) }
-                        else { expandedSources.insert(provider.name) }
-                    } label: {
-                        Label("\(nodeCount) 个节点", systemImage: expanded ? "chevron.down" : "chevron.right")
-                    }.buttonStyle(.plain).font(.callout.weight(.medium))
-                } else {
-                    Text("匹配 \(matches.count) 个节点").font(.callout.weight(.medium))
-                }
-                if expanded || !matches.isEmpty {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(matches.isEmpty ? nodes : matches) { node in
-                            HStack {
-                                Text(node.name).lineLimit(1)
-                                Spacer()
-                                Text(node.type.uppercased()).font(.caption.monospaced()).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.leading, 16)
-                }
-            }
-            #else
             HStack {
                 Text("\(nodeCount) 个节点").font(.callout).foregroundStyle(.secondary)
                 Spacer()
                 sourceActions(provider, isSelected: isSelected)
             }
-            #endif
         }
     }
+    #endif
 
     @ViewBuilder
     private func sourceActions(_ provider: SubscriptionProvider, isSelected: Bool) -> some View {
@@ -369,20 +412,24 @@ public struct SubscriptionsView: View {
             .controlSize(.mini)
         }
         if provider.isRemote {
-            Button {
-                Task { await appState.refreshSubscription(name: provider.name) }
-            } label: {
-                if appState.refreshingProviders.contains(provider.name) {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label(appState.subscriptionErrors[provider.name] == nil ? "刷新" : "重试", systemImage: "arrow.clockwise")
+            if appState.refreshingProviders.contains(provider.name) {
+                ProgressView().controlSize(.small)
+                Button("取消下载") { appState.cancelSubscription(name: provider.name) }
+            } else {
+                Button {
+                    Task { await appState.refreshSubscription(name: provider.name) }
+                } label: {
+                    Label(appState.subscriptionErrors[provider.name] == nil ? "刷新订阅" : "重试", systemImage: "arrow.clockwise")
                 }
+                .help("重新获取订阅节点")
             }
-            .buttonStyle(.borderless)
-            .disabled(appState.refreshingProviders.contains(provider.name))
-            .help("重新获取订阅节点")
         }
         Menu {
+            #if os(macOS)
+            if provider.isRemote {
+                Button("修改订阅地址…") { addressEditor = provider }
+            }
+            #endif
             Button("编辑 YAML…") {
                 editorTarget = EditorTarget(title: "编辑订阅 · \(provider.name)", providerName: provider.name, isNew: false)
             }
@@ -398,8 +445,47 @@ public struct SubscriptionsView: View {
         }
         .labelStyle(.iconOnly)
         .fixedSize()
+        .disabled(appState.refreshingProviders.contains(provider.name))
     }
 }
+
+#if os(macOS)
+private struct SubscriptionAddressEditor: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let provider: SubscriptionProvider
+    @State private var address: String
+    @State private var error: String?
+
+    init(provider: SubscriptionProvider) {
+        self.provider = provider
+        _address = State(initialValue: provider.url ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("修改订阅地址").font(.title3.weight(.semibold))
+            Text(provider.name).foregroundStyle(.secondary)
+            TextField("https://…", text: $address).textFieldStyle(.roundedBorder)
+                .accessibilityLabel("订阅地址")
+            if let error { Text(error).font(.callout).foregroundStyle(.red) }
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("保存并更新") {
+                    Task {
+                        do {
+                            appState.profile = try await appState.runtime.profileStore.updateSubscriptionURL(name: provider.name, newURL: address)
+                            dismiss()
+                            await appState.refreshSubscription(name: provider.name)
+                        } catch { self.error = error.localizedDescription }
+                    }
+                }.keyboardShortcut(.defaultAction)
+            }
+        }.padding(22).frame(width: 460)
+    }
+}
+#endif
 
 struct ImportSubscriptionSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -520,16 +606,11 @@ struct ConnectionSourceEditor: View {
             if isRemote {
                 let added = try await store.createRemoteSubscription(name: title, urlString: trimmed)
                 appState.profile = await store.summary()
-                do {
-                    try await appState.fetchSubscription(name: added)
-                } catch {
-                    await appState.refreshAll(fullSnapshot: true)
-                    appState.selectedDestination = .subscriptions
-                    appState.notify("已保存「\(added)」，获取节点失败。请在订阅中点「重试」。\(error.localizedDescription)", isError: true)
-                    onClose?()
-                    return
-                }
-                message = "已导入订阅「\(added)」"
+                appState.inspectedSubscription = added
+                appState.selectedDestination = .subscriptions
+                onClose?()
+                await appState.refreshSubscription(name: added)
+                return
             } else {
                 if ShareLinkParser.looksLikeShareLinks(trimmed) {
                     let (_, count) = try await store.importShareLinks(trimmed)
@@ -617,7 +698,7 @@ private struct YAMLDocumentSheet: View {
                                 } else {
                                     _ = try await appState.runtime.profileStore.importFullConfig(content: text)
                                 }
-                                try? await appState.runtime.reloadIfRunning()
+                                try await appState.runtime.reloadIfRunning()
                                 await appState.refreshAll(fullSnapshot: true)
                                 appState.notify(isNew ? "已创建本地 YAML 订阅" : "配置已保存")
                                 dismiss()

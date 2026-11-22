@@ -142,6 +142,13 @@ struct XeylrouteCoreTests {
         #expect(next == "A 2")
         let summary = await store.summary()
         #expect(summary.providers.first { $0.name == next }?.url == "https://example.org/two")
+        await #expect(throws: ProfileStoreError.self) {
+            _ = try await store.updateSubscriptionURL(name: next, newURL: "file:///invalid")
+        }
+        let unchanged = await store.summary()
+        #expect(unchanged.providers.first { $0.name == next }?.url == "https://example.org/two")
+        let updated = try await store.updateSubscriptionURL(name: next, newURL: "  https://example.org/updated  ")
+        #expect(updated.providers.first { $0.name == next }?.url == "https://example.org/updated")
     }
 
     @Test("ProfileStore manages rules, fixed SOCKS5 listeners, and runtime config synthesis")

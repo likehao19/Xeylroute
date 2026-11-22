@@ -460,7 +460,11 @@ public actor ProfileStore {
         else {
             throw ProfileStoreError.missingResource("订阅「\(name)」不存在。")
         }
-        entry["url"] = .string(newURL.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard let url = URL(string: newURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host?.isEmpty == false else {
+            throw ProfileStoreError.invalidProfile("请输入有效的 HTTP 或 HTTPS 订阅地址。")
+        }
+        entry["url"] = .string(url.absoluteString)
         if let interval {
             entry["interval"] = .int(Int64(max(0, interval)))
         }
