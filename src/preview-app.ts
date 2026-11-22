@@ -24,7 +24,18 @@ import {
 } from './ui-kit';
 
 export function mountPreviewApp(shell: ShellController): void {
-  document.documentElement.classList.add('platform-macos');
+  const params = new URLSearchParams(window.location.search);
+  const previewPlatform = params.get('platform');
+  document.documentElement.classList.add(
+    previewPlatform === 'windows' || previewPlatform === 'linux' ? `platform-${previewPlatform}` : 'platform-macos',
+  );
+  if (previewPlatform === 'windows') {
+    document.documentElement.classList.add('tauri-native');
+  }
+  const previewTheme = params.get('theme');
+  if (previewTheme === 'light' || previewTheme === 'dark') {
+    shell.setTheme(previewTheme);
+  }
   const sites = createSiteCatalog(false);
   const telemetry = new TelemetryVisualizer(true);
   telemetry.bindInteractions();
@@ -1042,5 +1053,9 @@ export function mountPreviewApp(shell: ShellController): void {
 
   telemetry.renderConnections();
   telemetry.paintChart();
+  const previewView = params.get('view');
+  if (previewView && ['connect', 'nodes', 'split', 'logs', 'subs', 'settings'].includes(previewView)) {
+    shell.switchView(previewView as 'connect' | 'nodes' | 'split' | 'logs' | 'subs' | 'settings');
+  }
   renderAll();
 }

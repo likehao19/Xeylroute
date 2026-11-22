@@ -2014,13 +2014,10 @@
     :root.tauri-native.platform-linux .sidebar-top-brand {
       display: inline-flex;
     }
-    :root.tauri-native.platform-windows .sidebar-brand-row,
     :root.tauri-native.platform-linux .sidebar-brand-row {
       padding: 0 6px 2px;
       gap: 0;
     }
-    :root.tauri-native.platform-windows .sidebar-brand-row img,
-    :root.tauri-native.platform-windows .sidebar-brand-row strong,
     :root.tauri-native.platform-linux .sidebar-brand-row img,
     :root.tauri-native.platform-linux .sidebar-brand-row strong {
       display: none;
@@ -2378,108 +2375,481 @@
     .nodes-empty strong { font-size: var(--type-title); }
     .nodes-empty p { margin: 6px 0 18px; color: var(--muted); }
 
-    /* An opaque client area below the Windows system title bar. */
+    /* Windows 11 Fluent 2 surface, elevation, and control styling below the native title bar. */
     :root.platform-windows {
-      --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-      --window-bg: #202020;
-      --sidebar-surface: #252525;
-      --card-surface: #2c2c2c;
-      --win-line: #444;
+      --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "HarmonyOS Sans SC", "MiSans", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+      --radius-control: 6px;
+      --radius-card: 8px;
+      --radius-panel: 10px;
       --weight-control: 400;
-      --weight-title: 500;
-      --muted: #b9bbc2;
-      --subtle: #a2a5ac;
-      --nav-active-sq: transparent;
-      --win-accent: #83caff;
-      --win-action: #075987;
-      --lg-accent-bg: var(--win-action);
-      --lg-accent-bg-hover: #0a6b9e;
-      --card-shadow: inset 0 0 0 1px var(--win-line);
-      --lg-shadow: none;
-      --lg-accent-shadow: none;
-      --nav-active-bg: var(--node-hover);
+      --weight-title: 600;
+      --window-bg: #1c1d21;
+      --stage-fade: rgba(28, 29, 33, 0.86);
+      --window-depth: radial-gradient(115% 85% at 0% 0%, rgba(96, 165, 250, 0.068) 0%, transparent 56%), radial-gradient(95% 80% at 100% 100%, rgba(10, 12, 18, 0.34) 0%, transparent 62%);
+      --sidebar-surface: linear-gradient(180deg, rgba(35, 37, 43, 0.94) 0%, rgba(30, 32, 37, 0.96) 100%);
+      --card-surface: linear-gradient(180deg, rgba(46, 49, 57, 0.92) 0%, rgba(41, 43, 50, 0.96) 100%);
+      --card-surface-hover: rgba(255, 255, 255, 0.048);
+      --win-line: rgba(255, 255, 255, 0.082);
+      --win-line-strong: rgba(255, 255, 255, 0.135);
+      --win-ctrl-bg: rgba(255, 255, 255, 0.058);
+      --win-ctrl-hover: rgba(255, 255, 255, 0.092);
+      --win-ctrl-active: rgba(255, 255, 255, 0.04);
+      --win-ctrl-border: rgba(255, 255, 255, 0.09);
+      --win-ctrl-border-bottom: rgba(255, 255, 255, 0.15);
+      --card-hairline: rgba(255, 255, 255, 0.075);
+      --inset-divider: rgba(255, 255, 255, 0.072);
+      --well-bg: rgba(0, 0, 0, 0.24);
+      --well-stroke: rgba(255, 255, 255, 0.08);
+      --node-bg: rgba(255, 255, 255, 0.04);
+      --node-hover: rgba(255, 255, 255, 0.078);
+      --node-rim: rgba(255, 255, 255, 0.06);
+      --node-active-bg: rgba(76, 194, 255, 0.12);
+      --node-active-border: rgba(96, 205, 255, 0.56);
+      --muted: #a6abb6;
+      --subtle: #808694;
+      --accent: #4cc2ff;
+      --accent-soft: rgba(76, 194, 255, 0.14);
+      --win-accent: #60cdff;
+      --win-action: #1a82e6;
+      --accent-fill: #1a82e6;
+      --lg-accent-bg: linear-gradient(180deg, #258ef2 0%, #1678d8 100%);
+      --lg-accent-bg-hover: linear-gradient(180deg, #349bff 0%, #1f83e6 100%);
+      --lg-accent-shadow: 0 2px 10px -3px rgba(22, 120, 216, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+      --card-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.28), inset 0 0 0 1px var(--win-line), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+      --lg-shadow: inset 0 0 0 1px var(--win-ctrl-border);
+      --seg-thumb-bg: rgba(255, 255, 255, 0.105);
+      --seg-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.26), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      --nav-active-bg: rgba(255, 255, 255, 0.075);
       --nav-active-ink: var(--ink);
+      --nav-active-sq: transparent;
+      --menu-surface: rgba(38, 40, 47, 0.90);
+      --menu-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.52), 0 0 0 1px var(--win-line-strong), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      --modal-surface: rgba(36, 38, 45, 0.94);
+      --modal-scrim: rgba(0, 0, 0, 0.42);
+      --modal-shadow: 0 20px 52px -8px rgba(0, 0, 0, 0.58), 0 0 0 1px var(--win-line-strong), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      --tooltip-bg: rgba(44, 46, 54, 0.96);
     }
     :root.platform-windows[data-theme="light"] {
-      --window-bg: #f6f7f9;
-      --sidebar-surface: #eff1f4;
-      --card-surface: #fff;
-      --win-line: #d9dde2;
-      --muted: #505a65;
-      --subtle: #5e6874;
-      --win-accent: #0067a3;
-      --win-action: #0067a3;
+      --window-bg: #f3f4f8;
+      --stage-fade: rgba(243, 244, 248, 0.88);
+      --window-depth: radial-gradient(115% 85% at 0% 0%, rgba(255, 255, 255, 0.88) 0%, transparent 56%), radial-gradient(95% 80% at 100% 100%, rgba(0, 103, 192, 0.036) 0%, transparent 62%);
+      --sidebar-surface: linear-gradient(180deg, rgba(247, 248, 251, 0.94) 0%, rgba(241, 243, 247, 0.96) 100%);
+      --card-surface: #ffffff;
+      --card-surface-hover: rgba(16, 24, 40, 0.03);
+      --win-line: rgba(16, 24, 40, 0.075);
+      --win-line-strong: rgba(16, 24, 40, 0.125);
+      --win-ctrl-bg: #ffffff;
+      --win-ctrl-hover: #f7f8fa;
+      --win-ctrl-active: #eef1f5;
+      --win-ctrl-border: rgba(16, 24, 40, 0.09);
+      --win-ctrl-border-bottom: rgba(16, 24, 40, 0.16);
+      --card-hairline: rgba(16, 24, 40, 0.075);
+      --inset-divider: rgba(16, 24, 40, 0.07);
+      --well-bg: rgba(16, 24, 40, 0.042);
+      --well-stroke: rgba(16, 24, 40, 0.07);
+      --node-bg: #f7f8fb;
+      --node-hover: #eef1f6;
+      --node-rim: rgba(255, 255, 255, 0.9);
+      --node-active-bg: rgba(0, 103, 192, 0.08);
+      --node-active-border: rgba(0, 103, 192, 0.48);
+      --muted: #5b6472;
+      --subtle: #78818f;
+      --accent: #0067c0;
+      --accent-soft: rgba(0, 103, 192, 0.10);
+      --win-accent: #0067c0;
+      --win-action: #0067c0;
+      --accent-fill: #0067c0;
+      --lg-accent-bg: linear-gradient(180deg, #0c74ce 0%, #0062b8 100%);
+      --lg-accent-bg-hover: linear-gradient(180deg, #0069c4 0%, #0057a6 100%);
+      --lg-accent-shadow: 0 2px 8px -2px rgba(0, 103, 192, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px -6px rgba(16, 24, 40, 0.07), inset 0 0 0 1px var(--win-line);
+      --seg-thumb-bg: #ffffff;
+      --seg-thumb-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), inset 0 0 0 1px rgba(16, 24, 40, 0.06);
+      --nav-active-bg: rgba(0, 103, 192, 0.085);
+      --nav-active-ink: #005aa8;
+      --menu-surface: rgba(252, 253, 255, 0.92);
+      --menu-shadow: 0 10px 30px -6px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.06), 0 0 0 1px var(--win-line-strong);
+      --modal-surface: rgba(252, 253, 255, 0.96);
+      --modal-scrim: rgba(16, 24, 40, 0.22);
+      --modal-shadow: 0 18px 46px -10px rgba(16, 24, 40, 0.20), 0 2px 8px rgba(16, 24, 40, 0.06), 0 0 0 1px var(--win-line-strong);
+      --tooltip-bg: rgba(255, 255, 255, 0.96);
     }
+
+    /* Fluent 2 Toggle Switch */
     .platform-windows .mac-switch { --thumb-travel: 14px; }
     .platform-windows .mac-switch.lg { --thumb-travel: 18px; }
     .platform-windows .mac-switch i {
-      background: transparent; border: 1px solid var(--muted); padding: 0 3px; box-shadow: none;
+      background: transparent;
+      border: 1px solid var(--muted);
+      padding: 0 3px;
+      box-shadow: none;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .platform-windows .mac-switch:hover i {
+      background: var(--win-ctrl-bg);
+      border-color: var(--ink-2);
     }
     .platform-windows .mac-switch i::after {
-      width: 10px; height: 10px; border-radius: 50%; background: var(--muted); box-shadow: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: none;
+      transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), background 0.16s ease;
+    }
+    .platform-windows .mac-switch:hover i::after {
+      background: var(--ink-2);
+      transform: scale(1.08);
     }
     .platform-windows .mac-switch.lg i::after { width: 12px; height: 12px; }
-    .platform-windows .mac-switch input:checked + i { background: var(--win-action); border-color: var(--win-accent); }
-    .platform-windows .mac-switch input:checked + i::after { background: white; transform: translateX(var(--thumb-travel)); }
-    .platform-windows .mac-switch input:disabled + i { opacity: .5; }
-    .platform-windows .mac-popup-chevrons path:first-child { display: none; }
-    .platform-windows .mac-popup-chevrons path:last-child { transform: translateY(-3px); }
-    .platform-windows .settings-select { appearance: auto; }
-    .platform-windows .mac-window { background: var(--window-bg); }
+    .platform-windows .mac-switch input:checked + i {
+      background: var(--win-action);
+      border-color: var(--win-action);
+    }
+    .platform-windows .mac-switch:hover input:checked + i {
+      background: var(--win-accent);
+      border-color: var(--win-accent);
+    }
+    .platform-windows .mac-switch input:checked + i::after {
+      background: #ffffff;
+      transform: translateX(var(--thumb-travel));
+    }
+    .platform-windows .mac-switch:hover input:checked + i::after {
+      background: #ffffff;
+      transform: translateX(var(--thumb-travel)) scale(1.08);
+    }
+    .platform-windows .mac-switch:active i::after {
+      background: var(--ink-2);
+      box-shadow: none;
+      transform: scale(1.16, 1.04);
+    }
+    .platform-windows .mac-switch:active input:checked + i::after,
+    .platform-windows .mac-switch.lg:active input:checked + i::after {
+      background: #ffffff;
+      box-shadow: none;
+      transform: translateX(var(--thumb-travel)) scale(1.16, 1.04);
+    }
+    .platform-windows .mac-switch input:disabled + i { opacity: 0.46; }
+
+    /* Window Shell, Sidebar & Stage */
+    .platform-windows .mac-window {
+      background: var(--window-depth), var(--window-bg);
+    }
     .platform-windows .sidebar {
-      margin: 0; border-radius: 0; box-shadow: inset -1px 0 var(--win-line);
+      margin: 0;
+      border-radius: 0;
+      padding: 12px 10px 10px;
+      box-shadow: inset -1px 0 var(--win-line);
     }
-    .platform-windows .sidebar-top { position: absolute; top: 12px; right: 10px; z-index: 1; }
-    :root.platform-windows.tauri-native .sidebar-brand-row { min-height: 32px; padding: 0 34px 0 8px; }
-    .platform-windows .sidebar::before, .platform-windows .sidebar::after,
-    .platform-windows .glass-toolbar::before { content: none; }
+    .platform-windows .sidebar-top {
+      position: absolute;
+      top: 13px;
+      right: 10px;
+      z-index: 2;
+      padding: 0;
+    }
+    .platform-windows .sidebar-brand-row {
+      min-height: 32px;
+      padding: 0 34px 2px 4px;
+      gap: 9px;
+    }
+    .platform-windows .sidebar-brand-row img {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+    }
+    .platform-windows .sidebar::before,
+    .platform-windows .sidebar::after,
+    .platform-windows .glass-toolbar::before {
+      content: none;
+    }
     .platform-windows .glass-toolbar {
-      position: relative; flex: none; height: 54px; padding-block: 0;
-      border-bottom: 1px solid var(--win-line); pointer-events: auto;
+      position: relative;
+      flex: none;
+      height: 52px;
+      padding: 4px 20px 0;
+      border-bottom: 0;
+      background: transparent;
+      pointer-events: auto;
     }
-    .platform-windows .view { padding-top: 16px; }
-    .platform-windows .stage-title { font-size: var(--type-title); font-weight: 700; }
+    .platform-windows .views-host {
+      padding: 0 20px 16px;
+    }
+    .platform-windows .view {
+      padding-top: 6px;
+    }
+    .platform-windows .stage-title {
+      font-size: var(--type-title);
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+
+    /* Controls, Buttons & Inputs */
     .platform-windows :is(.glass-capsule, .glass-circle, .online-pill) {
-      background: transparent; box-shadow: none; border-radius: 4px;
+      background: transparent;
+      box-shadow: none;
+      border-radius: var(--radius-control);
     }
     .platform-windows .glass-capsule { gap: 2px; overflow: visible; }
     .platform-windows .glass-capsule .cap-sep { display: none; }
-    .platform-windows .glass-capsule button { padding-inline: 9px; border-radius: 4px; }
+    .platform-windows .glass-capsule button { padding-inline: 9px; border-radius: var(--radius-control); }
     .platform-windows .glass-circle:hover { background: var(--node-hover); }
     .platform-windows .online-pill { padding-inline: 6px; color: var(--muted); }
     .platform-windows .online-pill .dot { box-shadow: none; }
-    .platform-windows :is(.glass-btn-primary, .glass-btn-soft, .glass-search, .mode-pill, .mode-pill-thumb, .nav-item) { border-radius: 5px; }
-    .platform-windows .glass-btn-soft, .platform-windows .glass-btn-primary.off-state {
-      background: var(--card-surface); border: 1px solid var(--win-line);
+    .platform-windows :is(.glass-btn-primary, .glass-btn-soft, .glass-btn-danger, .glass-search, .mac-popup-btn, .port-chip, .sheet-input, .sheet-textarea) {
+      border-radius: var(--radius-control);
     }
-    .platform-windows :is(.glass-btn-soft, .glass-btn-primary.off-state):hover { background: var(--node-hover); }
-    .platform-windows .nav-item { position: relative; min-height: 34px; }
-    .platform-windows .nav-item.active { box-shadow: none; }
+    .platform-windows .glass-btn-primary {
+      font-weight: var(--weight-title);
+    }
+    .platform-windows .glass-btn-soft,
+    .platform-windows .glass-btn-primary.off-state {
+      background: var(--win-ctrl-bg);
+      border: 1px solid var(--win-ctrl-border);
+      border-bottom-color: var(--win-ctrl-border-bottom);
+      box-shadow: none;
+    }
+    .platform-windows :is(.glass-btn-soft, .glass-btn-primary.off-state):hover:not(:disabled) {
+      background: var(--win-ctrl-hover);
+    }
+    .platform-windows :is(.glass-btn-soft, .glass-btn-primary.off-state):active:not(:disabled) {
+      background: var(--win-ctrl-active);
+      transform: none;
+    }
+    .platform-windows .glass-btn-danger {
+      background: #c42b1c;
+      box-shadow: 0 2px 8px -2px rgba(196, 43, 28, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+    .platform-windows .glass-btn-danger:hover {
+      background: #d63626;
+      filter: none;
+    }
+    .platform-windows .glass-btn-primary:disabled { cursor: default; }
+
+    /* Search, Segmented Mode Control & Quick Tiles */
+    .platform-windows .glass-search {
+      height: 32px;
+      background: var(--win-ctrl-bg);
+      border: 1px solid var(--win-ctrl-border);
+      border-bottom-color: var(--win-ctrl-border-bottom);
+      box-shadow: none;
+    }
+    .platform-windows .glass-search:focus-within {
+      background: var(--card-surface);
+      border-color: var(--win-ctrl-border);
+      box-shadow: inset 0 -2px 0 var(--win-accent);
+    }
+    .platform-windows .mode-pill {
+      height: 31px;
+      border-radius: 7px;
+      background: var(--well-bg);
+      box-shadow: inset 0 0 0 1px var(--win-line);
+    }
+    .platform-windows .mode-pill-thumb {
+      border-radius: 5px;
+    }
+    .platform-windows .quick-tiles {
+      border: 0;
+      border-radius: var(--radius-card);
+      box-shadow: var(--card-shadow);
+    }
+    .platform-windows .qtile + .qtile {
+      border-inline-start: 1px solid var(--win-line);
+    }
+    .platform-windows .qtile:has(.qtile-open[aria-current="page"]) {
+      background: var(--win-action);
+    }
+    .platform-windows .sidebar-live-card {
+      border-radius: var(--radius-card);
+      background: var(--card-surface);
+      box-shadow: var(--card-shadow);
+    }
+
+    /* Sidebar Navigation with Fluent Tinted Icons & Left Accent Pill */
+    .platform-windows .nav-item {
+      position: relative;
+      min-height: 35px;
+      border-radius: var(--radius-control);
+    }
+    .platform-windows .nav-item.active {
+      box-shadow: inset 0 0 0 1px var(--win-line);
+    }
     .platform-windows .nav-item.active::before {
-      content: ""; position: absolute; left: 0; width: 3px; height: 16px;
-      border-radius: 2px; background: var(--win-accent);
+      content: "";
+      position: absolute;
+      left: 0;
+      width: 3px;
+      height: 16px;
+      border-radius: 99px;
+      background: var(--win-accent);
     }
-    :root.platform-windows .nav-item .sq { background: transparent; color: inherit; box-shadow: none; }
-    .platform-windows .nav-item .sq svg { width: 16px; height: 16px; }
-    .platform-windows .sub-seg { background: none; box-shadow: none; padding: 0; }
+    .platform-windows .nav-item.active .nav-badge {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    :root.platform-windows .nav-item .sq {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      box-shadow: none;
+    }
+    .platform-windows .nav-item .sq svg { width: 14px; height: 14px; }
+    :root.platform-windows .nav-item .sq.blue { background: rgba(76, 194, 255, 0.14); color: #4cc2ff; }
+    :root.platform-windows .nav-item .sq.cyan { background: rgba(56, 189, 248, 0.14); color: #38bdf8; }
+    :root.platform-windows .nav-item .sq.purple { background: rgba(192, 132, 252, 0.15); color: #c084fc; }
+    :root.platform-windows .nav-item .sq.green { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+    :root.platform-windows .nav-item .sq.orange { background: rgba(251, 146, 60, 0.16); color: #fb923c; }
+    :root.platform-windows .nav-item .sq.gray { background: rgba(166, 171, 182, 0.14); color: #a6abb6; }
+    :root.platform-windows[data-theme="light"] .nav-item .sq.blue { background: rgba(0, 103, 192, 0.10); color: #0067c0; }
+    :root.platform-windows[data-theme="light"] .nav-item .sq.cyan { background: rgba(2, 132, 199, 0.10); color: #0284c7; }
+    :root.platform-windows[data-theme="light"] .nav-item .sq.purple { background: rgba(147, 51, 234, 0.10); color: #7e22ce; }
+    :root.platform-windows[data-theme="light"] .nav-item .sq.green { background: rgba(22, 163, 74, 0.10); color: #15803d; }
+    :root.platform-windows[data-theme="light"] .nav-item .sq.orange { background: rgba(234, 88, 12, 0.10); color: #c2410c; }
+    :root.platform-windows[data-theme="light"] .nav-item .sq.gray { background: rgba(100, 116, 139, 0.11); color: #475569; }
+
+    /* Fluent Underline Pivot Tabs */
+    .platform-windows .sub-seg { background: none; box-shadow: none; padding: 0; gap: 4px; }
     .platform-windows .sub-seg button {
-      position: relative; height: 34px; border-radius: 4px; padding-inline: 10px;
+      position: relative;
+      height: 34px;
+      border-radius: var(--radius-control);
+      padding-inline: 11px;
     }
-    .platform-windows .sub-seg button.active { background: transparent; box-shadow: none; }
+    .platform-windows .sub-seg button.active {
+      background: transparent;
+      box-shadow: none;
+      color: var(--ink);
+    }
     .platform-windows .sub-seg button:hover { background: var(--node-hover); }
     .platform-windows .sub-seg button.active::after {
-      content: ""; position: absolute; bottom: 0; left: 10px; right: 10px;
-      height: 2px; background: var(--win-accent);
+      content: "";
+      position: absolute;
+      bottom: 2px;
+      left: 11px;
+      right: 11px;
+      height: 2.5px;
+      border-radius: 99px;
+      background: var(--win-accent);
     }
-    .platform-windows :is(.group-drawer, .mac-card) { border-radius: var(--radius-control); }
-    .platform-windows .cp-node { border-radius: 5px; box-shadow: none; }
-    .platform-windows .cp-node.selected { border-color: var(--win-accent); }
-    .platform-windows :is(.mac-menu-popover, .modal-sheet) {
-      background: var(--card-surface); backdrop-filter: none; -webkit-backdrop-filter: none;
+
+    /* Cards, Nodes & Telemetry */
+    .platform-windows :is(.group-drawer, .mac-card, .telemetry-capsule) {
+      border-radius: var(--radius-card);
     }
-    .platform-windows .modal-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+    .platform-windows .cp-node {
+      border-radius: var(--radius-control);
+      border-color: var(--win-line);
+      box-shadow: none;
+    }
+    .platform-windows .cp-node:hover:not(.selected) {
+      border-color: var(--win-line-strong);
+    }
+    .platform-windows .cp-node.selected {
+      border-color: var(--win-accent);
+      box-shadow: 0 2px 10px -4px rgba(0, 103, 192, 0.28);
+    }
+
+    /* Fluent ComboBox, Pop-Up Button, Inputs & Selects */
+    .platform-windows .mac-popup-btn {
+      height: 30px;
+      background: var(--win-ctrl-bg);
+      border: 1px solid var(--win-ctrl-border);
+      border-bottom-color: var(--win-ctrl-border-bottom);
+      box-shadow: none;
+    }
+    .platform-windows .mac-popup-btn:hover {
+      background: var(--win-ctrl-hover);
+    }
+    .platform-windows .mac-popup-btn[aria-expanded="true"] {
+      background: var(--accent-soft);
+      border-color: var(--win-accent);
+      box-shadow: none;
+    }
+    .platform-windows .mac-popup-chevrons path:first-child { display: none; }
+    .platform-windows .mac-popup-chevrons path:last-child { transform: translateY(-3px); }
+    .platform-windows :is(.sheet-input, .sheet-textarea, .port-chip) {
+      background: var(--win-ctrl-bg);
+      border: 1px solid var(--win-ctrl-border);
+      border-bottom-color: var(--win-ctrl-border-bottom);
+      box-shadow: none;
+    }
+    .platform-windows :is(.sheet-input, .sheet-textarea):focus,
+    .platform-windows .port-chip:focus-within {
+      background: var(--card-surface);
+      border-color: var(--win-ctrl-border);
+      box-shadow: inset 0 -2px 0 var(--win-accent);
+    }
+
+    /* Fluent Acrylic MenuFlyout, ContentDialog & Toast */
+    .platform-windows .mac-menu-popover {
+      border-radius: var(--radius-card);
+      padding: 4px;
+      background: var(--menu-surface);
+      box-shadow: var(--menu-shadow);
+      backdrop-filter: blur(24px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(150%);
+    }
+    .platform-windows .mac-menu-popover::before { content: none; }
+    .platform-windows .mac-menu-item {
+      position: relative;
+      border-radius: 5px;
+    }
+    .platform-windows .mac-menu-item:hover,
+    .platform-windows .mac-menu-item:focus-visible {
+      background: var(--node-hover);
+      color: var(--ink);
+    }
+    .platform-windows .mac-menu-item:hover .mac-menu-meta,
+    .platform-windows .mac-menu-item:focus-visible .mac-menu-meta {
+      color: var(--muted);
+    }
+    .platform-windows .mac-menu-item.selected {
+      background: var(--accent-soft);
+      font-weight: var(--weight-title);
+    }
+    .platform-windows .mac-menu-item.selected::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 3px;
+      border-radius: 99px;
+      background: var(--win-accent);
+    }
+    .platform-windows .mac-menu-item.selected .mac-menu-check { color: var(--win-accent); }
+    .platform-windows .modal-backdrop {
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .platform-windows .modal-sheet {
+      border-radius: var(--radius-panel);
+      background: var(--modal-surface);
+      box-shadow: var(--modal-shadow);
+      backdrop-filter: blur(24px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(150%);
+    }
+    .platform-windows .modal-sheet::before,
     .platform-windows .modal-sheet::after { content: none; }
-    .platform-windows .glass-btn-primary:disabled { cursor: default; }
+    .platform-windows .toast {
+      border-radius: var(--radius-card);
+      background: var(--menu-surface);
+      box-shadow: var(--menu-shadow);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+    }
+    .platform-windows .toast::before { content: none; }
+    @media (prefers-reduced-transparency: reduce) {
+      .platform-windows :is(.mac-menu-popover, .modal-sheet, .modal-backdrop, .toast) {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+      .platform-windows .mac-menu-popover,
+      .platform-windows .modal-sheet,
+      .platform-windows .toast {
+        background: var(--window-bg);
+      }
+    }
 
     #clearLogsBtn:disabled { opacity: .5; }
     #subsGridPane > :only-child { grid-column: 1 / -1; }
@@ -2641,13 +3011,39 @@
       flex: none; min-height: 28px; padding: 2px 9px; border: 1px solid var(--popup-border);
       border-radius: var(--radius-control); background-color: var(--window-bg); color: var(--ink);
     }
+    .platform-windows .settings-select {
+      -webkit-appearance: none;
+      appearance: none;
+      min-height: 30px;
+      padding: 0 28px 0 10px;
+      border: 1px solid var(--win-ctrl-border);
+      border-bottom-color: var(--win-ctrl-border-bottom);
+      border-radius: var(--radius-control);
+      background: var(--win-ctrl-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%238a909e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E") right 9px center / 11px no-repeat;
+      color: var(--ink);
+      font-size: var(--type-label);
+      transition: background-color 0.12s ease, border-color 0.12s ease;
+    }
+    .platform-windows .settings-select:hover:not(:disabled) {
+      background-color: var(--win-ctrl-hover);
+    }
+    .platform-windows .settings-select:focus-visible {
+      outline: none;
+      border-color: var(--win-ctrl-border);
+      box-shadow: inset 0 -2px 0 var(--win-accent);
+    }
+    .platform-windows .settings-select option {
+      background-color: var(--window-bg);
+      color: var(--ink);
+    }
     .platform-macos .settings-select {
       padding-inline: 7px 24px; border: 0; border-radius: 6px; box-shadow: none;
       background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23777e88' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 5 3-3 3 3m-6 4 3 3 3-3'/%3E%3C/svg%3E") right 6px center / 11px no-repeat;
     }
     .platform-macos .settings-select:hover { background-color: var(--well-bg); }
     @media (forced-colors: active) {
-      .platform-macos .settings-select { appearance: auto; border: 1px solid ButtonText; }
+      .platform-macos .settings-select,
+      .platform-windows .settings-select { appearance: auto; border: 1px solid ButtonText; }
     }
     .settings-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
