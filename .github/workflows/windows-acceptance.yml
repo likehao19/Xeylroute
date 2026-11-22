@@ -74,10 +74,22 @@ jobs:
             if (Test-Path $uninstaller) {
               $remove = Start-Process $uninstaller -ArgumentList '/S' -Wait -PassThru
               if ($remove.ExitCode) { throw "Uninstall failed: $($remove.ExitCode)" }
-              foreach ($file in @('routepilot-desktop.exe', 'xeylroute-mihomo.exe', 'WinDivert.dll', 'WinDivert64.sys')) {
+              foreach ($file in @('routepilot-desktop.exe', 'xeylroute-mihomo.exe', 'WinDivert.dll')) {
                 if (Test-Path (Join-Path $installed $file)) { throw "Uninstall left behind $file" }
               }
-              Write-Host 'Uninstall removed the application and its driver files.'
+              $driver = Join-Path $installed 'WinDivert64.sys'
+              if (Test-Path $driver) {
+                $pending = @(Get-ItemPropertyValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction SilentlyContinue)
+                $source = "\??\$driver"
+                $queued = $false
+                for ($i = 0; $i -lt $pending.Count; $i += 2) {
+                  if ($pending[$i] -eq $source -and !$pending[$i+1]) { $queued = $true }
+                }
+                if (!$queued) { throw 'Uninstall left the driver file without scheduling its deletion' }
+                Write-Host 'Uninstall queued the in-use driver file for deletion on restart.'
+              } else {
+                Write-Host 'Uninstall removed the driver file.'
+              }
             }
           }
       - name: Exercise the TUN worker and check Windows route cleanup

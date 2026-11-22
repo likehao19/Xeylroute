@@ -1,5 +1,11 @@
 {
   "bundle": {
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "windows-uninstall.nsh"
+      }
+    },
     "resources": {
       "licenses/Mihomo-COPYING": "licenses/Mihomo-COPYING",
       "binaries/WinDivert.dll": "WinDivert.dll",

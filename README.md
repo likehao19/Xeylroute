@@ -62,7 +62,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 指定软件 TUN 使用随包提供的签名 WinDivert 2.2.2，只将可识别的所选程序的单播 TCP 和 UDP 送入 Mihomo 虚拟协议栈。系统默认路由和其他软件的出口保持原设置。回环、分片、组播以及由 Windows DNS Client 代发的系统 DNS 请求沿用系统路径。Windows ARM64、macOS 和 Linux 继续提供全局 TUN。[WinDivert 发布页](https://github.com/basil00/WinDivert/releases/tag/v2.2.2)
 
-退出应用会关闭本次接管使用的驱动句柄。安装包附带驱动许可证和源码。作为可由多个程序共享的组件，WinDivert 可能保留到 Windows 重启。可以在隔离的 Windows x64 环境运行 `python scripts/smoke-windows-process-tun.py <随包内核路径>` 验证所选程序、原网卡流量和退出恢复。
+退出应用会关闭本次接管使用的驱动句柄。Windows NSIS 安装和卸载需要管理员权限，安装包附带驱动许可证和源码。卸载时，如果 Windows 仍占用本安装目录里的驱动文件，卸载程序会登记为下次重启时删除。可以在隔离的 Windows x64 环境运行 `python scripts/smoke-windows-process-tun.py <随包内核路径>` 验证所选程序、原网卡流量和退出恢复。
 
 可以通过 `python3 scripts/smoke-mihomo.py --binary <随包内核路径>` 验证本地转发、控制接口、订阅和测速。脚本只使用临时配置和回环端口。
 
