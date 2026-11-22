@@ -107,14 +107,16 @@ def policy(exe, luid, destination, source=None, gateway=None):
 
 
 def powershell(command):
-    return subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+    return subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-Command",
                            "$ErrorActionPreference = 'Stop'; " + command],
-                          check=True, text=True, capture_output=True, timeout=20).stdout.strip()
+                          check=True, text=True, capture_output=True, timeout=50).stdout.strip()
 
 
 def verify(binary):
     if not c.windll.shell32.IsUserAnAdmin():
         raise RuntimeError("The experiment requires an elevated, disposable Windows runner")
+    if not hasattr(c.WinDLL("fwpuclnt.dll"), "FwpmConnectionPolicyAdd0"):
+        raise RuntimeError("This Windows build does not export FwpmConnectionPolicyAdd0 from fwpuclnt.dll")
     destination = "192.0.2.163"
     prefix = destination + "/32"
     system_interface = best_interface(destination)
@@ -122,8 +124,10 @@ def verify(binary):
     curl = shutil.which("curl.exe")
     if curl is None:
         raise RuntimeError("Windows curl is unavailable")
+    source, peer = "198.18.0.1", "198.18.0.2"
     initial = {
-        "tun": {"enable": True, "device": device, "stack": "mixed", "auto-route": False},
+        "tun": {"enable": True, "device": device, "stack": "mixed", "auto-route": False,
+                "inet4-address": [source + "/30"]},
         "mode": "rule", "log-level": "info", "rules": [f"IP-CIDR,{prefix},REJECT,no-resolve", "MATCH,DIRECT"],
     }
     with tempfile.TemporaryDirectory() as folder:
@@ -149,10 +153,6 @@ def verify(binary):
                 raise RuntimeError("The test adapter was not available")
             index = c.c_uint32()
             check(ipapi.ConvertInterfaceLuidToIndex(c.byref(luid), c.byref(index)), "ConvertInterfaceLuidToIndex")
-            source = powershell(f"(Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex {index.value} | Select-Object -First 1).IPAddress")
-            peer = str(ipaddress.IPv4Address(source) + 1)
-            physical_peer = powershell(f"(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -InterfaceIndex {system_interface} | Select-Object -First 1).NextHop")
-
             def probe(stage, port):
                 subprocess.run([curl, "--noproxy", "*", "--max-time", "2",
                                 f"http://{destination}:{port}/"], capture_output=True, timeout=5)
@@ -166,6 +166,7 @@ def verify(binary):
             with policy(curl, luid.value, destination, source, peer):
                 with_source = probe("interface/source/next-hop policy", 18102)
 
+            physical_peer = powershell(f"(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -InterfaceIndex {system_interface} | Select-Object -First 1).NextHop")
             powershell(f"New-NetRoute -DestinationPrefix '{prefix}' -InterfaceIndex {system_interface} -NextHop '{physical_peer}' -RouteMetric 1 -PolicyStore ActiveStore")
             try:
                 powershell(f"New-NetRoute -DestinationPrefix '{prefix}' -InterfaceIndex {index.value} -NextHop '{peer}' -RouteMetric 9999 -PolicyStore ActiveStore")
