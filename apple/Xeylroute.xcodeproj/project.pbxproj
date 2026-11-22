@@ -10,6 +10,7 @@
 		015617EAC641A002F51F8014 /* XeylrouteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */; };
 		03FF53ACF5B6E6394C95DAF4 /* SplitRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */; };
 		188C75B397A85B62DE10FE68 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CED9B85DFC2B4DA7AFB2B57 /* ConnectView.swift */; };
+		24A4B797049A4B4D4EF022AA /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F295CC5137226DC28EE33B /* DesignSystem.swift */; };
 		2E6EDBA5AFB1FAF6E35529B7 /* XeylrouteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */; };
 		35FFA6362C0111287A57EF09 /* SubscriptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF347FF8FA5BA0333DA6D4FB /* SubscriptionsView.swift */; };
 		372D6911D78481618C5E0678 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DDCBC4FDC38AE97C4A6350 /* SettingsView.swift */; };
@@ -25,6 +26,7 @@
 		91A49458B4AC68C9EF4EE2E0 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0740DA687CB23D51D766FCC4 /* AppState.swift */; };
 		91D8E2198D8DFF639A400845 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7677AF1CD1FD7E0E8128998D /* Assets.xcassets */; };
 		93E7FAC81A5154A9A5B5BF37 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7B5364A147B7C8F2CF81E89 /* LogsView.swift */; };
+		9416DC4E0F087BD2E82AEC47 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2F295CC5137226DC28EE33B /* DesignSystem.swift */; };
 		A61625750927DB996112223B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7677AF1CD1FD7E0E8128998D /* Assets.xcassets */; };
 		AF96C675C9FD36469C60126F /* NativeSurfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */; };
 		BFB3971CFDB52EC754112122 /* SplitRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */; };
@@ -76,6 +78,7 @@
 		CDC07DB2410BDEA5E9341DFF /* XeylrouteTunnel.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = XeylrouteTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF347FF8FA5BA0333DA6D4FB /* SubscriptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsView.swift; sourceTree = "<group>"; };
 		DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XeylrouteApp.swift; sourceTree = "<group>"; };
+		F2F295CC5137226DC28EE33B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		F7B5364A147B7C8F2CF81E89 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
 		FDA1C5BB028590B1793CA83C /* NodesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodesView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -125,6 +128,7 @@
 		25F096F536ABBBA440A944A8 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				F2F295CC5137226DC28EE33B /* DesignSystem.swift */,
 				015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */,
 			);
 			path = Components;
@@ -343,6 +347,7 @@
 			files = (
 				3F2DC1080659D9BC2B110B34 /* AppState.swift in Sources */,
 				188C75B397A85B62DE10FE68 /* ConnectView.swift in Sources */,
+				24A4B797049A4B4D4EF022AA /* DesignSystem.swift in Sources */,
 				93E7FAC81A5154A9A5B5BF37 /* LogsView.swift in Sources */,
 				AF96C675C9FD36469C60126F /* NativeSurfaceComponents.swift in Sources */,
 				437C003A222A9FCC8CBA1725 /* NodesView.swift in Sources */,
@@ -368,6 +373,7 @@
 			files = (
 				91A49458B4AC68C9EF4EE2E0 /* AppState.swift in Sources */,
 				4CF69E04E25D3FAEE47CD551 /* ConnectView.swift in Sources */,
+				9416DC4E0F087BD2E82AEC47 /* DesignSystem.swift in Sources */,
 				C4ECF8B168752019F26D11FB /* LogsView.swift in Sources */,
 				C215D7BB94C2984AB2826B5C /* NativeSurfaceComponents.swift in Sources */,
 				8ABF68E0302E3195A70F5635 /* NodesView.swift in Sources */,

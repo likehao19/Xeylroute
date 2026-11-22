@@ -5,6 +5,7 @@ import XeylrouteCore
 public struct SubscriptionsView: View {
     @Environment(AppState.self) private var appState
 
+    @State private var filterText = ""
     @State private var showImportSheet = false
     @State private var editorTarget: EditorTarget?
     @State private var showFileImporter = false
@@ -17,7 +18,7 @@ public struct SubscriptionsView: View {
     }
 
     public var body: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let providers = appState.profile.providers.filter {
             query.isEmpty || $0.name.lowercased().contains(query) || ($0.url?.lowercased().contains(query) ?? false)
         }
@@ -29,24 +30,28 @@ public struct SubscriptionsView: View {
             VStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     SectionHeaderBar("订阅来源") {
-                        Button("编辑完整配置…") {
-                            editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
+                        HStack(spacing: 12) {
+                            InlineSearchField(text: $filterText, placeholder: "搜索订阅或节点")
+                                .frame(width: 200)
+                            Button("编辑完整配置…") {
+                                editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.accentColor)
                         }
-                        .buttonStyle(.plain)
-                        .font(.caption)
-                        .foregroundStyle(Color.accentColor)
                     }
 
                     if providers.isEmpty {
-                        NativeCard(padding: 28) {
+                        NativeCard(padding: 34) {
                             VStack(spacing: 10) {
                                 Image(systemName: "square.stack.3d.up")
-                                    .font(.largeTitle)
+                                    .font(.system(size: 32))
                                     .foregroundStyle(.secondary)
                                 Text("还没有订阅来源")
                                     .font(.headline)
                                 Text("支持粘贴 HTTPS 订阅链接、多条分享链接（VLESS / VMess / Trojan / SS / Hysteria2 / TUIC / Base64）或导入 Clash YAML 文件。")
-                                    .font(.caption)
+                                    .font(.system(size: 12.5))
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)
                                 HStack(spacing: 10) {
@@ -55,6 +60,7 @@ public struct SubscriptionsView: View {
                                     Button("导入 YAML 文件…") { showFileImporter = true }
                                         .buttonStyle(.bordered)
                                 }
+                                .padding(.top, 4)
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -71,22 +77,16 @@ public struct SubscriptionsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         SectionHeaderBar("直接导入的独立节点") {
                             Text("共 \(standalone.count) 个")
-                                .font(.caption)
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
 
                         NativeCard(padding: 0) {
                             VStack(spacing: 0) {
                                 ForEach(Array(standalone.enumerated()), id: \.element.id) { idx, node in
-                                    HStack(spacing: 12) {
-                                        CountryBadge(nodeName: node.name, isPolicy: false)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(node.name).font(.subheadline.weight(.medium))
-                                            Text("\(node.type.uppercased()) · 独立节点")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
+                                    GroupedRow(title: node.name, subtitle: "\(node.type.uppercased()) · 独立节点") {
+                                        CountryBadge(nodeName: node.name, isPolicy: false, size: .compact)
+                                    } trailing: {
                                         Button(role: .destructive) {
                                             Task {
                                                 await appState.mutateProfile({
@@ -98,10 +98,8 @@ public struct SubscriptionsView: View {
                                         }
                                         .buttonStyle(.borderless)
                                     }
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
                                     if idx < standalone.count - 1 {
-                                        Divider().padding(.leading, 54)
+                                        HairlineDivider(inset: 52)
                                     }
                                 }
                             }
@@ -169,24 +167,29 @@ public struct SubscriptionsView: View {
         let usage = live?.usage ?? provider.usage
         let nodeCount = live?.nodes.count ?? provider.nodes.count
 
-        return NativeCard {
-            VStack(alignment: .leading, spacing: 10) {
+        return NativeCard(padding: 15, highlighted: isSelected) {
+            VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 10) {
                     Image(systemName: provider.isRemote ? "icloud.and.arrow.down.fill" : "doc.text.fill")
-                        .font(.title3)
+                        .font(.system(size: 15))
                         .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            (isSelected ? Color.accentColor : Color.secondary).opacity(0.13),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        )
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(provider.name)
-                                .font(.headline)
+                                .font(.system(size: 14, weight: .semibold))
                                 .lineLimit(1)
                             if isSelected {
                                 StatusPill(text: "当前使用", tint: .blue)
                             }
                         }
                         Text(provider.isRemote ? (provider.url ?? "远程订阅") : "本地 YAML 订阅")
-                            .font(.caption2)
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -204,14 +207,17 @@ public struct SubscriptionsView: View {
                                 Text("到期 \(expire.formatted(date: .abbreviated, time: .omitted))")
                             }
                         }
-                        .font(.caption2.monospacedDigit())
+                        .font(.system(size: 11, design: .monospaced))
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                     }
                 }
 
+                HairlineDivider(inset: 0)
+
                 HStack {
                     Text("\(nodeCount) 个节点")
-                        .font(.caption)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                     Spacer()
                     if !isSelected {
@@ -255,10 +261,6 @@ public struct SubscriptionsView: View {
                 }
             }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(isSelected ? Color.accentColor.opacity(0.6) : .clear, lineWidth: 1.5)
-        )
     }
 }
 

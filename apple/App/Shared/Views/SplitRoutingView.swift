@@ -15,6 +15,7 @@ public struct SplitRoutingView: View {
     }
 
     @State private var selectedTab: SplitTab = .rules
+    @State private var filterText = ""
     @State private var scanByProcess = false
     @State private var editingRule: ProfileRule?
     @State private var showAddRule = false
@@ -40,10 +41,13 @@ public struct SplitRoutingView: View {
 
                 Spacer()
 
+                InlineSearchField(text: $filterText, placeholder: selectedTab == .apps ? "搜索应用或路径" : "搜索规则或分组")
+                    .frame(maxWidth: 220)
+
                 if selectedTab == .rules {
                     HStack(spacing: 6) {
                         Text("未命中规则时")
-                            .font(.caption)
+                            .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                         let defaultExit = appState.profile.rules.last(where: \.isDefaultMatch)?.exit ?? "AUTO"
                         Menu {
@@ -73,8 +77,8 @@ public struct SplitRoutingView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
 
             ScrollView {
                 VStack(spacing: 14) {
@@ -138,89 +142,78 @@ public struct SplitRoutingView: View {
     // MARK: - Rules
 
     private var rulesListContent: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let items = appState.profile.rules.filter { rule in
             !rule.isDefaultMatch && (query.isEmpty || rule.rawLine.lowercased().contains(query))
         }
 
         return NativeCard(padding: 0) {
             if items.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     Image(systemName: "arrow.triangle.branch")
-                        .font(.title)
+                        .font(.system(size: 30))
                         .foregroundStyle(.secondary)
                     Text("暂无分流规则")
                         .font(.headline)
                     Text("支持按程序路径、域名/后缀、IP/CIDR 网段和目标端口进行组合分流。")
-                        .font(.caption)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(32)
+                .padding(36)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { idx, rule in
-                        HStack(spacing: 12) {
+                        GroupedRow(title: rule.payload.isEmpty ? rule.kind : rule.payload, subtitle: rule.kind) {
                             Image(systemName: iconForRule(rule))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(colorForRule(rule))
-                                .frame(width: 22)
+                                .frame(width: 28, height: 28)
+                                .background(colorForRule(rule).opacity(0.13), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        } trailing: {
+                            HStack(spacing: 10) {
+                                StatusPill(
+                                    text: rule.exit,
+                                    tint: rule.exit == "DIRECT" ? .green : (rule.exit == "REJECT" ? .red : .blue)
+                                )
+                                Toggle("", isOn: Binding(
+                                    get: { rule.enabled },
+                                    set: { enabled in
+                                        Task {
+                                            await appState.mutateProfile({
+                                                try await appState.runtime.profileStore.toggleRule(rawLine: rule.rawLine, enabled: enabled)
+                                            })
+                                        }
+                                    }
+                                ))
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(rule.payload.isEmpty ? rule.kind : rule.payload)
-                                    .font(.subheadline.weight(.medium))
-                                    .lineLimit(1)
-                                Text(rule.kind)
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                            }
+                                if rule.conditions != nil {
+                                    Button {
+                                        editingRule = rule
+                                        showAddRule = true
+                                    } label: {
+                                        Image(systemName: "pencil")
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
 
-                            Spacer()
-
-                            StatusPill(
-                                text: rule.exit,
-                                tint: rule.exit == "DIRECT" ? .green : (rule.exit == "REJECT" ? .red : .blue)
-                            )
-
-                            Toggle("", isOn: Binding(
-                                get: { rule.enabled },
-                                set: { enabled in
+                                Button(role: .destructive) {
                                     Task {
                                         await appState.mutateProfile({
-                                            try await appState.runtime.profileStore.toggleRule(rawLine: rule.rawLine, enabled: enabled)
-                                        })
+                                            try await appState.runtime.profileStore.deleteRules([rule.rawLine])
+                                        }, successMessage: "已删除规则")
                                     }
-                                }
-                            ))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-
-                            if rule.conditions != nil {
-                                Button {
-                                    editingRule = rule
-                                    showAddRule = true
                                 } label: {
-                                    Image(systemName: "pencil")
+                                    Image(systemName: "trash")
                                 }
                                 .buttonStyle(.borderless)
                             }
-
-                            Button(role: .destructive) {
-                                Task {
-                                    await appState.mutateProfile({
-                                        try await appState.runtime.profileStore.deleteRules([rule.rawLine])
-                                    }, successMessage: "已删除规则")
-                                }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-
                         if idx < items.count - 1 {
-                            Divider().padding(.leading, 48)
+                            HairlineDivider(inset: 56)
                         }
                     }
                 }
@@ -231,74 +224,74 @@ public struct SplitRoutingView: View {
     // MARK: - Policy Groups
 
     private var groupsListContent: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let groups = appState.profile.groups.filter {
             query.isEmpty || $0.name.lowercased().contains(query) || $0.type.lowercased().contains(query)
         }
 
-        return VStack(spacing: 12) {
+        return NativeCard(padding: 0) {
             if groups.isEmpty {
-                NativeCard(padding: 28) {
-                    VStack(spacing: 8) {
-                        Text("暂无自定义策略分组")
-                            .font(.headline)
-                        Text("策略组可设为手选 (select)、自动测速 (url-test) 或故障切换 (fallback)，并引用订阅来源。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
+                VStack(spacing: 10) {
+                    Image(systemName: "folder.badge.gearshape")
+                        .font(.system(size: 30))
+                        .foregroundStyle(.secondary)
+                    Text("暂无自定义策略分组")
+                        .font(.headline)
+                    Text("策略组可设为手选 (select)、自动测速 (url-test) 或故障切换 (fallback)，并引用订阅来源。")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(36)
             } else {
-                ForEach(groups) { group in
-                    NativeCard {
-                        HStack(spacing: 12) {
+                VStack(spacing: 0) {
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { idx, group in
+                        let sources = (group.use + group.proxies).joined(separator: "、")
+                        GroupedRow(title: group.name, subtitle: sources.isEmpty ? "无成员" : sources) {
                             Image(systemName: "folder.badge.gearshape")
-                                .font(.title3)
+                                .font(.system(size: 13.5, weight: .semibold))
                                 .foregroundStyle(.purple)
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    Text(group.name).font(.headline)
-                                    StatusPill(text: group.type, tint: .purple)
+                                .frame(width: 28, height: 28)
+                                .background(Color.purple.opacity(0.13), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        } trailing: {
+                            HStack(spacing: 10) {
+                                StatusPill(text: group.type, tint: .purple)
+                                Toggle("", isOn: Binding(
+                                    get: { group.enabled },
+                                    set: { enabled in
+                                        Task {
+                                            await appState.mutateProfile({
+                                                try await appState.runtime.profileStore.toggleGroup(name: group.name, enabled: enabled)
+                                            })
+                                        }
+                                    }
+                                ))
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+
+                                Button {
+                                    editingGroup = group
+                                    showAddGroup = true
+                                } label: {
+                                    Image(systemName: "pencil")
                                 }
-                                let sources = (group.use + group.proxies).joined(separator: "、")
-                                Text(sources.isEmpty ? "无成员" : sources)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            Toggle("", isOn: Binding(
-                                get: { group.enabled },
-                                set: { enabled in
+                                .buttonStyle(.borderless)
+
+                                Button(role: .destructive) {
                                     Task {
                                         await appState.mutateProfile({
-                                            try await appState.runtime.profileStore.toggleGroup(name: group.name, enabled: enabled)
-                                        })
+                                            try await appState.runtime.profileStore.removeGroup(name: group.name)
+                                        }, successMessage: "已删除策略组「\(group.name)」")
                                     }
+                                } label: {
+                                    Image(systemName: "trash")
                                 }
-                            ))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-
-                            Button {
-                                editingGroup = group
-                                showAddGroup = true
-                            } label: {
-                                Image(systemName: "pencil")
+                                .buttonStyle(.borderless)
                             }
-                            .buttonStyle(.borderless)
-
-                            Button(role: .destructive) {
-                                Task {
-                                    await appState.mutateProfile({
-                                        try await appState.runtime.profileStore.removeGroup(name: group.name)
-                                    }, successMessage: "已删除策略组「\(group.name)」")
-                                }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
+                        }
+                        if idx < groups.count - 1 {
+                            HairlineDivider(inset: 56)
                         }
                     }
                 }
@@ -309,7 +302,7 @@ public struct SplitRoutingView: View {
     // MARK: - Running Applications (macOS)
 
     private var runningAppsContent: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         return NativeCard(padding: 0) {
             if !scanByProcess {
@@ -318,23 +311,16 @@ public struct SplitRoutingView: View {
                 }
                 if apps.isEmpty {
                     Text("没有匹配的运行中应用")
-                        .font(.callout)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
-                        .padding(28)
+                        .padding(32)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(apps.enumerated()), id: \.element.id) { idx, app in
-                            HStack(spacing: 12) {
-                                AppIconThumbnail(path: app.bundlePath ?? app.primaryPath)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(app.name).font(.subheadline.weight(.medium))
-                                    Text("\(app.instanceCount) 个进程 · \(app.primaryPath)")
-                                        .font(.caption2.monospaced())
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
+                            GroupedRow(title: app.name, subtitle: "\(app.instanceCount) 个进程 · \(app.primaryPath)") {
+                                AppIconThumbnail(path: app.bundlePath ?? app.primaryPath, size: 28)
+                            } trailing: {
                                 Menu {
                                     Button("清除专用规则") {
                                         Task {
@@ -354,15 +340,14 @@ public struct SplitRoutingView: View {
                                         }
                                     }
                                 } label: {
-                                    StatusPill(text: currentExit(for: app.paths) ?? "默认规则", tint: currentExit(for: app.paths) == nil ? .secondary : .blue)
+                                    let active = currentExit(for: app.paths)
+                                    StatusPill(text: active ?? "默认规则", tint: active == nil ? .secondary : .blue)
                                 }
                                 .menuStyle(.borderlessButton)
                                 .fixedSize()
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
                             if idx < apps.count - 1 {
-                                Divider().padding(.leading, 52)
+                                HairlineDivider(inset: 56)
                             }
                         }
                     }
@@ -373,17 +358,9 @@ public struct SplitRoutingView: View {
                 }
                 VStack(spacing: 0) {
                     ForEach(Array(procs.enumerated()), id: \.element.id) { idx, proc in
-                        HStack(spacing: 12) {
-                            AppIconThumbnail(path: proc.path)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(proc.name) (PID \(proc.pid))")
-                                    .font(.subheadline.weight(.medium))
-                                Text("\(proc.threadCount) 线程 · \(proc.path)")
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
+                        GroupedRow(title: "\(proc.name) (PID \(proc.pid))", subtitle: "\(proc.threadCount) 线程 · \(proc.path)") {
+                            AppIconThumbnail(path: proc.path, size: 26)
+                        } trailing: {
                             Menu {
                                 ForEach(appState.profile.exits, id: \.self) { exit in
                                     Button(exit) {
@@ -400,10 +377,8 @@ public struct SplitRoutingView: View {
                             .menuStyle(.borderlessButton)
                             .fixedSize()
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
                         if idx < procs.count - 1 {
-                            Divider().padding(.leading, 52)
+                            HairlineDivider(inset: 54)
                         }
                     }
                 }

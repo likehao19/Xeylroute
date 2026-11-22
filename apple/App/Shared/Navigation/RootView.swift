@@ -3,6 +3,7 @@ import XeylrouteCore
 
 public struct RootView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -11,8 +12,6 @@ public struct RootView: View {
     public init() {}
 
     public var body: some View {
-        @Bindable var state = appState
-
         ZStack(alignment: .bottomTrailing) {
             #if os(iOS)
             if sizeClass == .compact {
@@ -28,15 +27,13 @@ public struct RootView: View {
                 HStack(spacing: 8) {
                     Circle()
                         .fill(toast.isError ? Color.red : Color.green)
-                        .frame(width: 8, height: 8)
+                        .frame(width: 7, height: 7)
                     Text(toast.text)
-                        .font(.callout.weight(.medium))
+                        .font(.system(size: 12.5, weight: .medium))
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.primary.opacity(0.1), lineWidth: 0.75))
-                .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
+                .padding(.vertical, 9)
+                .floatingGlass(in: Capsule())
                 .padding(20)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -59,14 +56,12 @@ public struct RootView: View {
     // MARK: - macOS & iPadOS Native Split View
 
     private var splitViewShell: some View {
-        @Bindable var state = appState
-
-        return NavigationSplitView {
+        NavigationSplitView {
             VStack(spacing: 0) {
                 sidebarControlHeader
                     .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 10)
+                    .padding(.top, 6)
+                    .padding(.bottom, 8)
 
                 List(selection: Binding<AppDestination?>(
                     get: { appState.selectedDestination },
@@ -84,14 +79,18 @@ public struct RootView: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
 
                 sidebarLiveFooter
-                    .padding(10)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .padding(.top, 4)
             }
-            .navigationSplitViewColumnWidth(min: 224, ideal: 242, max: 280)
+            .navigationSplitViewColumnWidth(min: 224, ideal: 238, max: 272)
         } detail: {
-            detailContent(for: appState.selectedDestination)
-                .searchable(text: $state.searchText, placement: .toolbar, prompt: searchPrompt(for: appState.selectedDestination))
+            StageCanvas {
+                detailContent(for: appState.selectedDestination)
+            }
         }
         .navigationSplitViewStyle(.balanced)
     }
@@ -104,25 +103,27 @@ public struct RootView: View {
 
         return TabView(selection: $state.selectedDestination) {
             NavigationStack {
-                ConnectView(requestEnableTUN: { showTunConfirm = true })
+                StageCanvas {
+                    ConnectView(requestEnableTUN: { showTunConfirm = true })
+                }
             }
             .tabItem { Label(AppDestination.connect.shortTitle, systemImage: AppDestination.connect.systemImage) }
             .tag(AppDestination.connect)
 
             NavigationStack {
-                NodesView()
+                StageCanvas { NodesView() }
             }
             .tabItem { Label(AppDestination.nodes.shortTitle, systemImage: AppDestination.nodes.systemImage) }
             .tag(AppDestination.nodes)
 
             NavigationStack {
-                SplitRoutingView()
+                StageCanvas { SplitRoutingView() }
             }
             .tabItem { Label(AppDestination.split.shortTitle, systemImage: AppDestination.split.systemImage) }
             .tag(AppDestination.split)
 
             NavigationStack {
-                SubscriptionsView()
+                StageCanvas { SubscriptionsView() }
             }
             .tabItem { Label(AppDestination.subscriptions.shortTitle, systemImage: AppDestination.subscriptions.systemImage) }
             .tag(AppDestination.subscriptions)
@@ -139,23 +140,31 @@ public struct RootView: View {
     // MARK: - Sidebar Subcomponents
 
     private var sidebarControlHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let palette = XeylPalette(colorScheme)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image("AppBrandLogo")
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: 30, height: 30)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .shadow(color: .black.opacity(0.15), radius: 2.5, y: 1)
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Xeylroute")
-                        .font(.headline)
-                    Text("\(appState.profile.mode.fullTitle) · \(appState.statusBadgeTitle)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .font(.system(size: 14, weight: .semibold))
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(statusDotColor)
+                            .frame(width: 6, height: 6)
+                        Text("\(appState.profile.mode.fullTitle) · \(appState.statusBadgeTitle)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
+            .padding(.horizontal, 2)
 
             Picker("模式", selection: Binding(
                 get: { appState.profile.mode },
@@ -168,9 +177,10 @@ public struct RootView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
 
-            HStack(spacing: 8) {
+            // Unified Dual Quick-Capture Capsule
+            HStack(spacing: 0) {
                 if appState.runtime.supportsSystemProxy {
-                    quickToggleTile(
+                    quickCaptureCell(
                         title: "系统代理",
                         icon: "globe",
                         isOn: Binding(
@@ -178,8 +188,11 @@ public struct RootView: View {
                             set: { on in Task { await appState.setSystemProxy(on) } }
                         )
                     )
+                    palette.divider
+                        .frame(width: 0.75)
+                        .padding(.vertical, 8)
                 }
-                quickToggleTile(
+                quickCaptureCell(
                     title: appState.runtime.supportsSystemProxy ? "虚拟网卡" : "VPN 隧道",
                     icon: "shield.lefthalf.filled",
                     isOn: Binding(
@@ -194,57 +207,68 @@ public struct RootView: View {
                     )
                 )
             }
+            .background(palette.cardSurface.opacity(0.78), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(palette.cardBorder, lineWidth: 0.75)
+            )
             .disabled(appState.isBusy)
         }
     }
 
-    private func quickToggleTile(title: String, icon: String, isOn: Binding<Bool>) -> some View {
+    private func quickCaptureCell(title: String, icon: String, isOn: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(isOn.wrappedValue ? Color.accentColor : Color.secondary)
-                Spacer()
+                Spacer(minLength: 4)
                 Toggle("", isOn: isOn)
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.mini)
             }
             Text(title)
-                .font(.caption.weight(.medium))
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(isOn.wrappedValue ? .primary : .secondary)
                 .lineLimit(1)
         }
-        .padding(9)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func navRow(_ dest: AppDestination, badge: Int? = nil) -> some View {
-        HStack(spacing: 8) {
+        let isSelected = appState.selectedDestination == dest
+        return HStack(spacing: 8) {
             Image(systemName: dest.systemImage)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(dest.tint.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(dest.tint))
+                .frame(width: 20, alignment: .center)
             Text(dest.title)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
             Spacer()
             if let badge, badge > 0 {
                 Text("\(badge)")
-                    .font(.caption2.monospacedDigit().weight(.medium))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(.quaternary, in: Capsule())
+                    .background(.quaternary.opacity(0.75), in: Capsule())
             }
         }
+        .padding(.vertical, 1.5)
         .tag(dest)
     }
 
     private var sidebarLiveFooter: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if appState.selectedDestination != .connect {
-                HStack {
+        let palette = XeylPalette(colorScheme)
+        return VStack(alignment: .leading, spacing: 6) {
+            if appState.selectedDestination != .connect && appState.status.running {
+                HStack(alignment: .center) {
                     Text("实时流量")
-                        .font(.caption2.weight(.semibold))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                     Spacer()
                     VStack(alignment: .trailing, spacing: 1) {
@@ -253,14 +277,15 @@ public struct RootView: View {
                         Text("↓ \(TrafficTracker.formatRate(appState.currentDownRate))")
                             .foregroundStyle(.primary)
                     }
-                    .font(.caption2.monospacedDigit().weight(.medium))
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
                 }
-                Divider()
+                palette.divider.frame(height: 0.5)
             }
-            HStack {
+            HStack(spacing: 6) {
                 Circle()
-                    .fill(appState.status.running ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 7, height: 7)
+                    .fill(statusDotColor)
+                    .frame(width: 6.5, height: 6.5)
                 Text(appState.status.coreVersionLabel)
                     .lineLimit(1)
                 Spacer()
@@ -270,11 +295,23 @@ public struct RootView: View {
                     Text(appState.status.running ? "运行中" : "已停止")
                 }
             }
-            .font(.caption2.monospacedDigit())
+            .font(.system(size: 11, design: .monospaced))
+            .monospacedDigit()
             .foregroundStyle(.secondary)
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(palette.cardSurface.opacity(0.65), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(palette.cardBorder, lineWidth: 0.75)
+        )
+    }
+
+    private var statusDotColor: Color {
+        if appState.status.systemProxyEnabled || appState.status.tunEnabled { return .green }
+        if appState.status.running { return .orange }
+        return .secondary.opacity(0.45)
     }
 
     @ViewBuilder
@@ -294,17 +331,6 @@ public struct RootView: View {
             SettingsView()
         }
     }
-
-    private func searchPrompt(for destination: AppDestination) -> String {
-        switch destination {
-        case .connect: return "搜索节点或应用"
-        case .nodes: return "搜索节点、分组或网站"
-        case .split: return "搜索分流规则或程序"
-        case .logs: return "搜索应用、目标地址或出口"
-        case .subscriptions: return "搜索订阅或独立节点"
-        case .settings: return "搜索设置项"
-        }
-    }
 }
 
 #if os(iOS)
@@ -312,12 +338,12 @@ private struct iOSMoreHubView: View {
     var body: some View {
         List {
             NavigationLink {
-                LogsView()
+                StageCanvas { LogsView() }
             } label: {
                 Label("连接记录与活动连接", systemImage: AppDestination.logs.systemImage)
             }
             NavigationLink {
-                SettingsView()
+                StageCanvas { SettingsView() }
             } label: {
                 Label("网络与设置", systemImage: AppDestination.settings.systemImage)
             }

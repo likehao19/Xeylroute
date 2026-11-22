@@ -4,12 +4,18 @@ import XeylrouteCore
 
 public struct ConnectView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     let requestEnableTUN: () -> Void
 
     public var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                captureBannerIfNeeded
+                if !appState.status.configured {
+                    onboardingHeroCard
+                } else if !appState.status.systemProxyEnabled && !appState.status.tunEnabled {
+                    capturePromptBanner
+                }
+
                 telemetryKPIBar
 
                 ViewThatFits(in: .horizontal) {
@@ -27,7 +33,7 @@ public struct ConnectView: View {
                             subscriptionCard
                             activeConnectionsChartCard
                         }
-                        .frame(maxWidth: 420)
+                        .frame(width: 340)
                     }
 
                     VStack(spacing: 16) {
@@ -48,14 +54,17 @@ public struct ConnectView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 StatusPill(
                     text: appState.statusBadgeTitle,
-                    tint: (appState.status.systemProxyEnabled || appState.status.tunEnabled) ? .green : (appState.status.running ? .orange : .secondary)
+                    tint: (appState.status.systemProxyEnabled || appState.status.tunEnabled)
+                        ? .green
+                        : (appState.status.running ? .orange : .secondary),
+                    showDot: true
                 )
                 Button {
                     Task { await appState.toggleLocalCore() }
                 } label: {
                     Label(
                         appState.status.running ? "停止内核" : "启动监听",
-                        systemImage: appState.status.running ? "stop.circle" : "play.circle.fill"
+                        systemImage: appState.status.running ? "stop.fill" : "play.fill"
                     )
                 }
                 .disabled(appState.isBusy)
@@ -63,56 +72,81 @@ public struct ConnectView: View {
         }
     }
 
-    @ViewBuilder
-    private var captureBannerIfNeeded: some View {
-        if !appState.status.systemProxyEnabled && !appState.status.tunEnabled {
-            NativeCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "shield.slash")
-                        .font(.title3)
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(appState.status.configured ? "尚未接管系统流量" : "还没有可用的节点或订阅")
-                            .font(.subheadline.weight(.semibold))
-                        Text(appState.status.configured
-                             ? (appState.runtime.supportsSystemProxy
-                                ? "开启系统代理或虚拟网卡后，应用将按当前路由模式连接。"
-                                : "开启 VPN 隧道后，设备网络流量将按当前规则接管。")
-                             : "前往「订阅管理」粘贴 HTTPS 订阅或节点分享链接即可开始使用。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if appState.status.configured {
-                        Button(appState.runtime.supportsSystemProxy ? "开启系统代理" : "开启 VPN") {
-                            if appState.runtime.supportsSystemProxy {
-                                Task { await appState.setSystemProxy(true) }
-                            } else {
-                                requestEnableTUN()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    } else {
-                        Button("导入订阅") {
-                            appState.selectedDestination = .subscriptions
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    }
+    // MARK: - Onboarding & Status Banners
+
+    private var onboardingHeroCard: some View {
+        NativeCard(padding: 18) {
+            HStack(spacing: 16) {
+                Image("AppBrandLogo")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("欢迎使用 Xeylroute 原生版")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("导入 HTTPS 订阅、节点分享链接（VLESS / VMess / Trojan / SS / Hysteria2 / TUIC）或 Clash YAML 文件即可开始代理与分流。")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
                 }
+                Spacer(minLength: 12)
+                Button("导入订阅或节点…") {
+                    appState.selectedDestination = .subscriptions
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }
 
+    private var capturePromptBanner: some View {
+        NativeCard(padding: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "globe.badge.chevron.backward")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.orange)
+                    .frame(width: 32, height: 32)
+                    .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("尚未接管系统流量")
+                        .font(.system(size: 13.5, weight: .semibold))
+                    Text(appState.runtime.supportsSystemProxy
+                         ? "开启系统代理或虚拟网卡后，应用流量将按当前路由模式转发。"
+                         : "开启 iOS VPN 隧道后，设备网络流量将按当前规则接管。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(appState.runtime.supportsSystemProxy ? "开启系统代理" : "开启 VPN") {
+                    if appState.runtime.supportsSystemProxy {
+                        Task { await appState.setSystemProxy(true) }
+                    } else {
+                        requestEnableTUN()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    // MARK: - 5-Column KPI Telemetry Capsule
+
     private var telemetryKPIBar: some View {
-        NativeCard(padding: 12) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+        let palette = XeylPalette(colorScheme)
+        return NativeCard(padding: 12) {
+            HStack(spacing: 0) {
                 kpiCell(value: TrafficTracker.formatRate(appState.currentDownRate), label: "实时下载", dotColor: .blue)
+                palette.divider.frame(width: 0.75, height: 28)
                 kpiCell(value: TrafficTracker.formatRate(appState.currentUpRate), label: "实时上传", dotColor: .teal)
+                palette.divider.frame(width: 0.75, height: 28)
                 kpiCell(value: formatDuration(appState.elapsedSeconds), label: "会话时长", dotColor: nil)
+                palette.divider.frame(width: 0.75, height: 28)
                 kpiCell(value: TrafficTracker.formatBytes(appState.totalTrafficBytes), label: "已接管流量", dotColor: nil)
-                kpiCell(value: "\(appState.activeRuleCount) 条", label: "生效规则", dotColor: nil)
+                palette.divider.frame(width: 0.75, height: 28)
+                kpiCell(value: "\(appState.activeRuleCount) 条", label: "生效分流规则", dotColor: nil)
             }
         }
     }
@@ -120,15 +154,16 @@ public struct ConnectView: View {
     private func kpiCell(value: String, label: String, dotColor: Color?) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.headline.monospacedDigit())
+                .font(.system(size: 15.5, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.75)
             HStack(spacing: 4) {
                 if let dotColor {
-                    Circle().fill(dotColor).frame(width: 6, height: 6)
+                    Circle().fill(dotColor).frame(width: 5.5, height: 5.5)
                 }
                 Text(label)
-                    .font(.caption2)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -136,11 +171,9 @@ public struct ConnectView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Default Node Spotlight & Quick Grid
+
     private var defaultNodeSection: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let quickNodes = appState.selectableNodes.filter { node in
-            query.isEmpty || node.name.lowercased().contains(query) || node.type.lowercased().contains(query)
-        }
         let activeName = appState.currentGlobalExit
         let activeNode = appState.selectableNodes.first { $0.name == activeName }
 
@@ -150,33 +183,37 @@ public struct ConnectView: View {
                     appState.selectedDestination = .nodes
                 }
                 .buttonStyle(.plain)
-                .font(.caption)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.accentColor)
             }
 
-            NativeCard {
-                VStack(alignment: .leading, spacing: 12) {
+            NativeCard(padding: 16) {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Hero Spotlight Row
                     HStack(spacing: 12) {
-                        CountryBadge(nodeName: activeName, isPolicy: activeNode?.isPolicy ?? false)
+                        CountryBadge(nodeName: activeName, isPolicy: activeNode?.isPolicy ?? true, size: .large)
                         VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 7) {
                                 Text(activeName)
-                                    .font(.headline)
+                                    .font(.system(size: 15.5, weight: .semibold))
                                     .lineLimit(1)
                                 if let type = activeNode?.type {
                                     StatusPill(text: type, tint: .blue)
                                 }
+                                if let activeNode {
+                                    LatencyBadge(
+                                        measurement: appState.nodeDelays[activeNode.id],
+                                        isTesting: appState.testingNodes.contains(activeNode.id)
+                                    )
+                                }
                             }
-                            Text(appState.profile.subscriptionScope.map { "当前订阅：\($0)" } ?? "独立节点 / 全局出口")
-                                .font(.caption)
+                            Text(appState.profile.subscriptionScope.map { "订阅来源：\($0)" } ?? "独立节点 / 全局出口")
+                                .font(.system(size: 11.5))
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                         Spacer()
                         if let activeNode {
-                            LatencyBadge(
-                                measurement: appState.nodeDelays[activeNode.id],
-                                isTesting: appState.testingNodes.contains(activeNode.id)
-                            )
                             Button("重测") {
                                 Task { await appState.measureDelay(for: activeNode) }
                             }
@@ -185,55 +222,33 @@ public struct ConnectView: View {
                         }
                     }
 
-                    Divider()
+                    HairlineDivider(inset: 0)
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 8)], spacing: 8) {
-                        ForEach(quickNodes.prefix(6)) { node in
-                            let selected = node.name == activeName
-                            Button {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 9)], spacing: 9) {
+                        ForEach(appState.selectableNodes.prefix(6)) { node in
+                            NodeQuickTile(
+                                node: node,
+                                isSelected: node.name == activeName,
+                                measurement: appState.nodeDelays[node.id],
+                                isTesting: appState.testingNodes.contains(node.id)
+                            ) {
                                 Task { await appState.selectNode(node.name) }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    CountryBadge(nodeName: node.name, isPolicy: node.isPolicy)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(node.name)
-                                            .font(.subheadline.weight(.medium))
-                                            .lineLimit(1)
-                                        Text(node.currentSelection ?? node.type)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer(minLength: 4)
-                                    LatencyBadge(
-                                        measurement: appState.nodeDelays[node.id],
-                                        isTesting: appState.testingNodes.contains(node.id)
-                                    )
-                                }
-                                .padding(9)
-                                .background(
-                                    selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04),
-                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .strokeBorder(selected ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.06), lineWidth: 1)
-                                )
                             }
-                            .buttonStyle(.plain)
                         }
                     }
 
+                    HairlineDivider(inset: 0)
+
                     HStack {
                         Text(appState.snapshot?.proxies["AUTO"]?.now.map { "自动优选推荐：\($0)" } ?? "自动优选就绪")
-                            .font(.caption)
+                            .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("切换 AUTO ›") {
                             Task { await appState.selectNode("AUTO") }
                         }
                         .buttonStyle(.plain)
-                        .font(.caption)
+                        .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(Color.accentColor)
                     }
                 }
@@ -241,73 +256,65 @@ public struct ConnectView: View {
         }
     }
 
-    private var appExitsSection: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let apps = appState.groupedApps.filter { app in
-            query.isEmpty || app.name.lowercased().contains(query) || app.primaryPath.lowercased().contains(query)
-        }
+    // MARK: - Running Apps Quick Exits (macOS)
 
-        return VStack(alignment: .leading, spacing: 8) {
+    private var appExitsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
             SectionHeaderBar("应用出口") {
                 Button("规则管理 ›") {
                     appState.selectedDestination = .split
                 }
                 .buttonStyle(.plain)
-                .font(.caption)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.accentColor)
             }
 
             NativeCard(padding: 0) {
-                if apps.isEmpty {
+                if appState.groupedApps.isEmpty {
                     Text("暂无可显示的运行中应用")
-                        .font(.callout)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(24)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(apps.prefix(5).enumerated()), id: \.element.id) { idx, app in
+                        let visible = Array(appState.groupedApps.prefix(5))
+                        ForEach(Array(visible.enumerated()), id: \.element.id) { idx, app in
                             let currentExit = exitForApp(app)
-                            HStack(spacing: 10) {
-                                AppIconThumbnail(path: app.bundlePath ?? app.primaryPath)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(app.name)
-                                        .font(.subheadline.weight(.medium))
-                                        .lineLimit(1)
-                                    Text("\(app.instanceCount) 个进程")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Menu {
-                                    Button("按默认规则") {
-                                        Task {
-                                            await appState.mutateProfile({
-                                                try await appState.runtime.profileStore.setProgramExits(paths: app.paths, exit: nil)
-                                            }, successMessage: "已移除「\(app.name)」的专用出口")
-                                        }
-                                    }
-                                    Divider()
-                                    ForEach(appState.profile.exits, id: \.self) { exit in
-                                        Button(exit) {
+                            GroupedRow(
+                                title: app.name,
+                                subtitle: "\(app.instanceCount) 个进程",
+                                leading: {
+                                    AppIconThumbnail(path: app.bundlePath ?? app.primaryPath, size: 26)
+                                },
+                                trailing: {
+                                    Menu {
+                                        Button("按默认规则") {
                                             Task {
                                                 await appState.mutateProfile({
-                                                    try await appState.runtime.profileStore.setProgramExits(paths: app.paths, exit: exit)
-                                                }, successMessage: "已将「\(app.name)」出口设为 \(exit)")
+                                                    try await appState.runtime.profileStore.setProgramExits(paths: app.paths, exit: nil)
+                                                }, successMessage: "已移除「\(app.name)」的专用出口")
                                             }
                                         }
+                                        Divider()
+                                        ForEach(appState.profile.exits, id: \.self) { exit in
+                                            Button(exit) {
+                                                Task {
+                                                    await appState.mutateProfile({
+                                                        try await appState.runtime.profileStore.setProgramExits(paths: app.paths, exit: exit)
+                                                    }, successMessage: "已将「\(app.name)」出口设为 \(exit)")
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        StatusPill(text: currentExit ?? "默认规则", tint: currentExit == nil ? .secondary : .blue)
                                     }
-                                } label: {
-                                    StatusPill(text: currentExit ?? "默认规则", tint: currentExit == nil ? .secondary : .blue)
+                                    .menuStyle(.borderlessButton)
+                                    .fixedSize()
                                 }
-                                .menuStyle(.borderlessButton)
-                                .fixedSize()
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-
-                            if idx < min(apps.count, 5) - 1 {
-                                Divider().padding(.leading, 50)
+                            )
+                            if idx < visible.count - 1 {
+                                HairlineDivider(inset: 54)
                             }
                         }
                     }
@@ -316,23 +323,29 @@ public struct ConnectView: View {
         }
     }
 
+    // MARK: - Subscription Summary Card
+
     private var subscriptionCard: some View {
         let activeProvider = appState.profile.providers.first { $0.name == appState.profile.subscriptionScope }
             ?? appState.profile.providers.first
 
-        return NativeCard {
+        return NativeCard(padding: 15) {
             if let provider = activeProvider {
                 let live = appState.snapshot?.providers[provider.name]
                 let usage = live?.usage ?? provider.usage
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
                         Image(systemName: provider.isRemote ? "icloud.and.arrow.down.fill" : "doc.text.fill")
+                            .font(.system(size: 16))
                             .foregroundStyle(.blue)
+                            .frame(width: 30, height: 30)
+                            .background(Color.blue.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(provider.name)
-                                .font(.subheadline.weight(.semibold))
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .lineLimit(1)
                             Text("\(live?.nodes.count ?? provider.nodes.count) 个节点")
-                                .font(.caption2)
+                                .font(.system(size: 11.5))
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -350,19 +363,23 @@ public struct ConnectView: View {
                             Spacer()
                             Text("\(Int((usage.progress * 100).rounded()))%")
                         }
-                        .font(.caption2.monospacedDigit())
+                        .font(.system(size: 11, design: .monospaced))
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                     }
                 }
             } else {
-                HStack {
-                    Image(systemName: "square.stack.3d.up")
+                HStack(spacing: 10) {
+                    Image(systemName: "square.stack.3d.up.fill")
+                        .font(.system(size: 15))
                         .foregroundStyle(.orange)
+                        .frame(width: 30, height: 30)
+                        .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("独立节点 (\(appState.profile.standaloneNodes.count))")
-                            .font(.subheadline.weight(.semibold))
-                        Text("可在「订阅管理」导入远端订阅或 YAML 文件")
-                            .font(.caption2)
+                            .font(.system(size: 13.5, weight: .semibold))
+                        Text("前往「订阅管理」导入远端订阅或 YAML")
+                            .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -371,19 +388,28 @@ public struct ConnectView: View {
         }
     }
 
+    // MARK: - Live Traffic & Active Connections Charts
+
     private var trafficChartCard: some View {
-        NativeCard {
+        NativeCard(padding: 16) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("已接管流量波形")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 13.5, weight: .semibold))
                     StatusPill(text: appState.profile.mode.fullTitle, tint: .secondary)
                     Spacer()
                     HStack(spacing: 10) {
-                        Label("下载", systemImage: "circle.fill").foregroundStyle(.blue)
-                        Label("上传", systemImage: "circle.fill").foregroundStyle(.teal)
+                        HStack(spacing: 4) {
+                            Circle().fill(.blue).frame(width: 6, height: 6)
+                            Text("下载")
+                        }
+                        HStack(spacing: 4) {
+                            Circle().fill(.teal).frame(width: 6, height: 6)
+                            Text("上传")
+                        }
                     }
-                    .font(.caption2)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 }
 
                 ZStack {
@@ -392,7 +418,7 @@ public struct ConnectView: View {
                             x: .value("时间", sample.id),
                             y: .value("下载", sample.downloadBytesPerSec / 1024.0)
                         )
-                        .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.28), .blue.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.26), .blue.opacity(0.0)], startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.catmullRom)
 
                         LineMark(
@@ -413,29 +439,33 @@ public struct ConnectView: View {
                     }
                     .chartXAxis(.hidden)
                     .chartYAxis {
-                        AxisMarks(position: .trailing) { val in
-                            AxisGridLine()
+                        AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { val in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                                .foregroundStyle(.secondary.opacity(0.25))
                             AxisValueLabel {
                                 if let kb = val.as(Double.self) {
                                     Text(TrafficTracker.formatRate(kb * 1024.0))
-                                        .font(.caption2.monospacedDigit())
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
                     }
-                    .frame(height: 150)
+                    .frame(height: 152)
 
                     if appState.trafficTracker.samples.isEmpty {
-                        VStack(spacing: 4) {
+                        VStack(spacing: 5) {
                             Image(systemName: "waveform.path.ecg")
-                                .font(.title3)
+                                .font(.system(size: 20))
                                 .foregroundStyle(.tertiary)
                             Text(appState.status.running ? "正在采集实时流量…" : "启动监听后显示实时流量波形")
-                                .font(.caption)
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
                     }
                 }
+
+                HairlineDivider(inset: 0)
 
                 HStack {
                     let peak = appState.trafficTracker.samples.map(\.downloadBytesPerSec).max() ?? 0
@@ -443,22 +473,24 @@ public struct ConnectView: View {
                     Spacer()
                     Text("127.0.0.1:\(appState.profile.mixedPort > 0 ? appState.profile.mixedPort : appState.profile.httpPort)")
                 }
-                .font(.caption2.monospacedDigit())
+                .font(.system(size: 11, design: .monospaced))
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
             }
         }
     }
 
     private var activeConnectionsChartCard: some View {
-        NativeCard {
+        NativeCard(padding: 16) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("活跃连接数")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 13.5, weight: .semibold))
                     Spacer()
                     let current = appState.snapshot?.connections?.activeCount ?? 0
                     Text("当前 \(current) 个")
-                        .font(.caption.monospacedDigit())
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
 
@@ -468,18 +500,29 @@ public struct ConnectView: View {
                             x: .value("采样", sample.id),
                             y: .value("连接", sample.activeConnections)
                         )
-                        .foregroundStyle(.blue.gradient)
+                        .foregroundStyle(Color.accentColor.opacity(0.75))
                         .cornerRadius(2)
                     }
                     .chartXAxis(.hidden)
-                    .frame(height: 100)
+                    .chartYAxis(.hidden)
+                    .frame(height: 106)
 
                     if appState.trafficTracker.samples.isEmpty {
-                        Text(appState.status.running ? "等待连接采样…" : "未启动内核")
-                            .font(.caption)
+                        Text(appState.status.running ? "等待连接采样…" : "内核未运行")
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                HairlineDivider(inset: 0)
+
+                HStack {
+                    Text("较早 → 最新")
+                    Spacer()
+                    Text("最近 60 秒")
+                }
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
             }
         }
     }
@@ -489,5 +532,58 @@ public struct ConnectView: View {
         return appState.profile.rules.first { rule in
             rule.enabled && rule.kind == "PROCESS-PATH" && targets.contains(RunningAppGrouper.normalizePath(rule.payload))
         }?.exit
+    }
+}
+
+// MARK: - Node Quick Tile (with smooth macOS hover + crisp selection)
+
+public struct NodeQuickTile: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isHovering = false
+
+    let node: ProxyNode
+    let isSelected: Bool
+    let measurement: DelayMeasurement?
+    let isTesting: Bool
+    let action: () -> Void
+
+    public var body: some View {
+        let palette = XeylPalette(colorScheme)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        Button(action: action) {
+            HStack(spacing: 9) {
+                CountryBadge(nodeName: node.name, isPolicy: node.isPolicy, size: .compact)
+                VStack(alignment: .leading, spacing: 1.5) {
+                    Text(node.name)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(node.currentSelection ?? node.type)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                LatencyBadge(measurement: measurement, isTesting: isTesting)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .background(
+                isSelected
+                    ? palette.selectedFill
+                    : (isHovering ? palette.tileHover : palette.tileSurface),
+                in: shape
+            )
+            .overlay(
+                shape.strokeBorder(
+                    isSelected ? palette.selectedBorder : palette.tileBorder,
+                    lineWidth: isSelected ? 1.2 : 0.75
+                )
+            )
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }

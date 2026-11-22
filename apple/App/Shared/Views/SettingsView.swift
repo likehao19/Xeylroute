@@ -3,6 +3,7 @@ import XeylrouteCore
 
 public struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var mixedPortText = "7890"
     @State private var httpPortText = "0"
@@ -12,198 +13,273 @@ public struct SettingsView: View {
     public var body: some View {
         @Bindable var state = appState
 
-        return Form {
-            Section("外观") {
-                Picker("外观模式", selection: $state.appearance) {
-                    ForEach(AppearanceMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-
-            Section("网络接管") {
-                if appState.runtime.supportsSystemProxy {
-                    Toggle("macOS 系统代理", isOn: Binding(
-                        get: { appState.status.systemProxyEnabled },
-                        set: { on in Task { await appState.setSystemProxy(on) } }
-                    ))
-                    .disabled(appState.isBusy)
-                }
-
-                Toggle(appState.runtime.supportsSystemProxy ? "虚拟网卡 (TUN)" : "iOS VPN 隧道", isOn: Binding(
-                    get: { appState.status.tunEnabled },
-                    set: { on in Task { await appState.setTUN(on) } }
-                ))
-                .disabled(appState.isBusy)
-
-                LabeledContent("TUN 接管范围") {
-                    Text(appState.profile.tunScope.title)
-                        .foregroundStyle(.secondary)
-                }
-
-                Toggle("代理故障时恢复直连", isOn: Binding(
-                    get: { appState.profile.fallbackToDirect },
-                    set: { on in
-                        Task {
-                            await appState.mutateProfile({
-                                try await appState.runtime.profileStore.setFallbackToDirect(on)
-                            })
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                // Appearance
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeaderBar("外观")
+                    NativeCard(padding: 0) {
+                        GroupedRow(title: "外观模式", subtitle: "自动跟随 macOS / iOS 系统浅色或深色主题") {
+                            settingsIcon("circle.lefthalf.filled", tint: .blue)
+                        } trailing: {
+                            Picker("外观模式", selection: $state.appearance) {
+                                ForEach(AppearanceMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .frame(width: 220)
                         }
                     }
-                ))
-            }
+                }
 
-            if appState.runtime.supportsSystemProxy {
-                Section("本地监听端口（仅绑定 127.0.0.1）") {
-                    HStack(spacing: 12) {
-                        portField("MIX", text: $mixedPortText)
-                        portField("HTTP", text: $httpPortText)
-                        portField("SOCKS", text: $socksPortText)
-                        Button("保存") {
-                            guard let m = UInt16(mixedPortText),
-                                  let h = UInt16(httpPortText),
-                                  let s = UInt16(socksPortText)
-                            else {
-                                appState.notify("端口须为 0–65535 的整数", isError: true)
-                                return
+                // Network Capture
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeaderBar("网络接管")
+                    NativeCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            if appState.runtime.supportsSystemProxy {
+                                GroupedRow(
+                                    title: "macOS 系统代理",
+                                    subtitle: "开启后自动接管活动网络服务的 HTTP/HTTPS/SOCKS 代理，关闭或异常退出时自动恢复原值。"
+                                ) {
+                                    settingsIcon("globe", tint: .blue)
+                                } trailing: {
+                                    Toggle("", isOn: Binding(
+                                        get: { appState.status.systemProxyEnabled },
+                                        set: { on in Task { await appState.setSystemProxy(on) } }
+                                    ))
+                                    .labelsHidden()
+                                    .toggleStyle(.switch)
+                                    .disabled(appState.isBusy)
+                                }
+                                HairlineDivider(inset: 56)
                             }
-                            Task {
-                                await appState.mutateProfile({
-                                    try await appState.runtime.profileStore.setPorts(mixed: m, http: h, socks: s)
-                                }, successMessage: "本地监听端口已保存")
+
+                            GroupedRow(
+                                title: appState.runtime.supportsSystemProxy ? "虚拟网卡 (TUN)" : "iOS VPN 隧道",
+                                subtitle: appState.runtime.supportsSystemProxy
+                                    ? "使用 Mixed 协议栈接管系统全部受支持流量，并拦截进入网卡的 53 端口 DNS 请求。"
+                                    : "通过系统 NetworkExtension (NEPacketTunnelProvider) 接管设备流量。"
+                            ) {
+                                settingsIcon("shield.lefthalf.filled", tint: .indigo)
+                            } trailing: {
+                                Toggle("", isOn: Binding(
+                                    get: { appState.status.tunEnabled },
+                                    set: { on in Task { await appState.setTUN(on) } }
+                                ))
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .disabled(appState.isBusy)
+                            }
+
+                            if appState.runtime.supportsSystemProxy {
+                                HairlineDivider(inset: 56)
+                                GroupedRow(
+                                    title: "本地监听端口",
+                                    subtitle: appState.status.running
+                                        ? "内核运行中 · 停止内核后可修改本机监听端口"
+                                        : "仅绑定 127.0.0.1 · 保存前自动校验端口冲突"
+                                ) {
+                                    settingsIcon("network", tint: .green)
+                                } trailing: {
+                                    HStack(spacing: 6) {
+                                        portChip("MIX", text: $mixedPortText)
+                                        portChip("HTTP", text: $httpPortText)
+                                        portChip("SOCKS", text: $socksPortText)
+                                        Button("保存") {
+                                            savePorts()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                        .disabled(appState.status.running)
+                                    }
+                                }
+                            }
+
+                            HairlineDivider(inset: 56)
+                            GroupedRow(
+                                title: "代理故障时恢复直连",
+                                subtitle: "节点连接失败时自动回退 DIRECT（显式 REJECT 规则始终阻断）。"
+                            ) {
+                                settingsIcon("arrow.uturn.right.circle.fill", tint: .orange)
+                            } trailing: {
+                                Toggle("", isOn: Binding(
+                                    get: { appState.profile.fallbackToDirect },
+                                    set: { on in
+                                        Task {
+                                            await appState.mutateProfile({
+                                                try await appState.runtime.profileStore.setFallbackToDirect(on)
+                                            })
+                                        }
+                                    }
+                                ))
+                                .labelsHidden()
+                                .toggleStyle(.switch)
                             }
                         }
-                        .disabled(appState.status.running)
                     }
-                    if appState.status.running {
-                        Text("修改监听端口前请先停止代理内核。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                }
+
+                // Core & Probes
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeaderBar("内核与测速")
+                    NativeCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            GroupedRow(title: "IPv6 出站", subtitle: "允许内核使用 IPv6 地址建立出站连接。") {
+                                Toggle("", isOn: coreSettingBinding(\.ipv6))
+                                    .labelsHidden()
+                                    .toggleStyle(.switch)
+                            }
+                            HairlineDivider()
+                            GroupedRow(title: "TCP 并发连接", subtitle: "域名解析出多个 IP 时同时建连并使用最快响应。") {
+                                Toggle("", isOn: coreSettingBinding(\.tcpConcurrent))
+                                    .labelsHidden()
+                                    .toggleStyle(.switch)
+                            }
+                            HairlineDivider()
+                            GroupedRow(title: "统一延迟测试", subtitle: "复用已建立的连接测量延迟，减少握手误差。") {
+                                Toggle("", isOn: coreSettingBinding(\.unifiedDelay))
+                                    .labelsHidden()
+                                    .toggleStyle(.switch)
+                            }
+                            HairlineDivider()
+                            GroupedRow(title: "内核日志级别", subtitle: "日常可选「信息」，排查连接问题可切换为「调试」。") {
+                                HStack(spacing: 8) {
+                                    Button("查看日志") {
+                                        Task { coreLogSheetText = await appState.runtime.readCoreLogTail() }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+
+                                    Picker("日志级别", selection: coreSettingBinding(\.logLevel)) {
+                                        Text("调试").tag("debug")
+                                        Text("信息").tag("info")
+                                        Text("警告").tag("warning")
+                                        Text("错误").tag("error")
+                                        Text("静默").tag("silent")
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 96)
+                                }
+                            }
+                            HairlineDivider()
+                            GroupedRow(title: "延迟测试服务", subtitle: "用于手动测量节点延迟，批量测试支持自定义并发与超时。") {
+                                HStack(spacing: 8) {
+                                    Picker("服务", selection: $state.probeService) {
+                                        ForEach(ProbeService.allCases) { svc in
+                                            Text(svc.title).tag(svc)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 112)
+
+                                    Picker("超时", selection: $state.probeTimeoutMs) {
+                                        Text("2 秒").tag(2000)
+                                        Text("5 秒").tag(5000)
+                                        Text("7 秒").tag(7000)
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 78)
+
+                                    Picker("并发", selection: $state.probeConcurrency) {
+                                        Text("2 并发").tag(2)
+                                        Text("4 并发").tag(4)
+                                        Text("8 并发").tag(8)
+                                        Text("16 并发").tag(16)
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 90)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Network Details & Kernel Lifecycle
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeaderBar("网络详情与内核")
+                    NativeCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            let localText = appState.networkDetails.localAddresses.isEmpty
+                                ? "本机地址读取中…"
+                                : "本机 \(appState.networkDetails.localAddresses.prefix(3).joined(separator: "、"))"
+                            let dnsText = appState.networkDetails.dnsServers.isEmpty
+                                ? "DNS —"
+                                : "DNS \(appState.networkDetails.dnsServers.prefix(3).joined(separator: "、"))"
+
+                            GroupedRow(
+                                title: "出口 IP 与终端代理变量",
+                                subtitle: "出口 \(appState.networkDetails.exitIP ?? "未检测") · \(localText) · \(dnsText)"
+                            ) {
+                                settingsIcon("antenna.radiowaves.left.and.right", tint: .purple)
+                            } trailing: {
+                                HStack(spacing: 8) {
+                                    if appState.runtime.supportsSystemProxy {
+                                        Button("复制代理变量") {
+                                            let port = appState.status.effectiveHTTPPort ?? appState.profile.mixedPort
+                                            let cmd = "export http_proxy='http://127.0.0.1:\(port)' https_proxy='http://127.0.0.1:\(port)' all_proxy='http://127.0.0.1:\(port)'"
+                                            ClipboardHelper.copy(cmd)
+                                            appState.notify("已复制终端代理变量到剪贴板")
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
+                                    Button("检测 IP") {
+                                        Task { await appState.detectExitIP() }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                }
+                            }
+
+                            HairlineDivider(inset: 56)
+
+                            GroupedRow(
+                                title: appState.status.running
+                                    ? "\(appState.status.coreVersionLabel) 运行中"
+                                    : "\(appState.status.coreVersionLabel) 已停止",
+                                subtitle: "独立数据目录：\(appState.status.dataDirectory)"
+                            ) {
+                                settingsIcon("cpu", tint: .secondary)
+                            } trailing: {
+                                Button(appState.status.running ? "停止内核" : "启动内核") {
+                                    Task { await appState.toggleLocalCore() }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
                     }
                 }
             }
-
-            Section("内核设置") {
-                Toggle("IPv6 出站", isOn: coreSettingBinding(\.ipv6))
-                Toggle("TCP 并发连接", isOn: coreSettingBinding(\.tcpConcurrent))
-                Toggle("统一延迟测试", isOn: coreSettingBinding(\.unifiedDelay))
-
-                Picker("内核日志级别", selection: coreSettingBinding(\.logLevel)) {
-                    Text("调试 (debug)").tag("debug")
-                    Text("信息 (info)").tag("info")
-                    Text("警告 (warning)").tag("warning")
-                    Text("错误 (error)").tag("error")
-                    Text("静默 (silent)").tag("silent")
-                }
-
-                Button("查看内核运行日志…") {
+            .frame(maxWidth: 860, alignment: .leading)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("网络与设置")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("保存备份") {
                     Task {
-                        coreLogSheetText = await appState.runtime.readCoreLogTail()
-                    }
-                }
-            }
-
-            Section("手动测速") {
-                Picker("延迟测试服务", selection: $state.probeService) {
-                    ForEach(ProbeService.allCases) { svc in
-                        Text(svc.title).tag(svc)
-                    }
-                }
-                Picker("延迟超时", selection: $state.probeTimeoutMs) {
-                    Text("2 秒").tag(2000)
-                    Text("5 秒").tag(5000)
-                    Text("7 秒").tag(7000)
-                }
-                Picker("批量测速并发数", selection: $state.probeConcurrency) {
-                    Text("2 个").tag(2)
-                    Text("4 个").tag(4)
-                    Text("8 个").tag(8)
-                    Text("16 个").tag(16)
-                }
-            }
-
-            Section("网络详情与诊断") {
-                LabeledContent("出口 IP") {
-                    HStack(spacing: 8) {
-                        Text(appState.networkDetails.exitIP ?? "未检测")
-                            .font(.callout.monospaced())
-                            .foregroundStyle(.secondary)
-                        Button("检测 IP") {
-                            Task { await appState.detectExitIP() }
-                        }
-                        .controlSize(.small)
-                    }
-                }
-
-                if appState.runtime.supportsSystemProxy {
-                    LabeledContent("本机地址") {
-                        Text(appState.networkDetails.localAddresses.isEmpty
-                             ? "—"
-                             : appState.networkDetails.localAddresses.joined(separator: "、"))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                    LabeledContent("系统 DNS") {
-                        Text(appState.networkDetails.dnsServers.isEmpty
-                             ? "—"
-                             : appState.networkDetails.dnsServers.joined(separator: "、"))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("复制终端代理环境变量") {
-                        let port = appState.status.effectiveHTTPPort ?? appState.profile.mixedPort
-                        let cmd = "export http_proxy='http://127.0.0.1:\(port)' https_proxy='http://127.0.0.1:\(port)' all_proxy='http://127.0.0.1:\(port)'"
-                        ClipboardHelper.copy(cmd)
-                        appState.notify("已复制终端代理变量到剪贴板")
-                    }
-                }
-
-                LabeledContent("数据目录") {
-                    Text(appState.status.dataDirectory)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .lineLimit(1)
-                }
-
-                LabeledContent("内核状态") {
-                    HStack(spacing: 8) {
-                        Text(appState.status.running ? "运行中 (\(appState.status.coreVersionLabel))" : "已停止")
-                            .foregroundStyle(.secondary)
-                        Button(appState.status.running ? "停止内核" : "启动内核") {
-                            Task { await appState.toggleLocalCore() }
-                        }
-                        .controlSize(.small)
-                    }
-                }
-            }
-
-            Section("配置备份") {
-                HStack {
-                    Button("保存备份") {
-                        Task {
-                            do {
-                                try await appState.runtime.profileStore.saveBackup()
-                                appState.notify("已保存配置备份")
-                            } catch {
-                                appState.notify(error.localizedDescription, isError: true)
-                            }
+                        do {
+                            try await appState.runtime.profileStore.saveBackup()
+                            appState.notify("已保存配置备份")
+                        } catch {
+                            appState.notify(error.localizedDescription, isError: true)
                         }
                     }
-                    Spacer()
-                    Button("恢复备份") {
-                        Task {
-                            await appState.mutateProfile({
-                                try await appState.runtime.profileStore.restoreBackup()
-                            }, successMessage: "已从备份恢复配置")
-                        }
+                }
+                Button("恢复备份") {
+                    Task {
+                        await appState.mutateProfile({
+                            try await appState.runtime.profileStore.restoreBackup()
+                        }, successMessage: "已从备份恢复配置")
                     }
                 }
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("网络与设置")
         .onAppear {
             syncPortFields()
             Task { await appState.refreshNetworkDetails() }
@@ -238,22 +314,55 @@ public struct SettingsView: View {
         }
     }
 
+    private func settingsIcon(_ systemName: String, tint: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 13.5, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 28, height: 28)
+            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private func portChip(_ label: String, text: Binding<String>) -> some View {
+        let palette = XeylPalette(colorScheme)
+        return HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            TextField("0", text: text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+                .multilineTextAlignment(.trailing)
+                .frame(width: 44)
+                .disabled(appState.status.running)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(palette.wellSurface, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(palette.tileBorder, lineWidth: 0.75)
+        )
+    }
+
+    private func savePorts() {
+        guard let m = UInt16(mixedPortText),
+              let h = UInt16(httpPortText),
+              let s = UInt16(socksPortText)
+        else {
+            appState.notify("端口须为 0–65535 的整数", isError: true)
+            return
+        }
+        Task {
+            await appState.mutateProfile({
+                try await appState.runtime.profileStore.setPorts(mixed: m, http: h, socks: s)
+            }, successMessage: "本地监听端口已保存")
+        }
+    }
+
     private func syncPortFields() {
         mixedPortText = "\(appState.profile.mixedPort)"
         httpPortText = "\(appState.profile.httpPort)"
         socksPortText = "\(appState.profile.socksPort)"
-    }
-
-    private func portField(_ label: String, text: Binding<String>) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            TextField("0", text: text)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 68)
-                .disabled(appState.status.running)
-        }
     }
 
     private func coreSettingBinding<T>(_ keyPath: WritableKeyPath<CoreSettings, T>) -> Binding<T> {

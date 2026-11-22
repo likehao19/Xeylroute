@@ -5,12 +5,13 @@ public struct LogsView: View {
     @Environment(AppState.self) private var appState
 
     enum LogsTab: String, CaseIterable, Identifiable {
-        case history = "路由日志 (500)"
+        case history = "路由日志"
         case active = "活动连接"
         var id: String { rawValue }
     }
 
     @State private var selectedTab: LogsTab = .history
+    @State private var filterText = ""
     @State private var probeHost = "github.com"
     @State private var probeSummary: String?
     @State private var prefillRule: RuleConditions?
@@ -25,36 +26,40 @@ public struct LogsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 260)
+                .frame(maxWidth: 220)
 
                 Spacer()
 
+                InlineSearchField(text: $filterText, placeholder: "搜索应用、目标或出口")
+                    .frame(maxWidth: 220)
+
                 HStack(spacing: 6) {
-                    TextField("测试域名", text: $probeHost)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 190)
+                    InlineSearchField(text: $probeHost, placeholder: "测试域名")
+                        .frame(width: 160)
                         .onSubmit { runDomainProbe() }
-                    Button("测试连通") { runDomainProbe() }
+                    Button("实测连通") { runDomainProbe() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
 
             if let probeSummary {
-                HStack {
-                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
-                    Text(probeSummary).font(.caption)
-                    Spacer()
-                    Button("关闭") { self.probeSummary = nil }
-                        .buttonStyle(.plain)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                NativeCard(padding: 10, radius: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
+                        Text(probeSummary).font(.system(size: 12.5))
+                        Spacer()
+                        Button("关闭") { self.probeSummary = nil }
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 8)
+                .padding(.top, 6)
             }
 
             ScrollView {
@@ -101,7 +106,7 @@ public struct LogsView: View {
     }
 
     private var logsHistoryContent: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let rows = appState.connectionLogs.filter {
             query.isEmpty
                 || $0.app.lowercased().contains(query)
@@ -112,49 +117,41 @@ public struct LogsView: View {
 
         return NativeCard(padding: 0) {
             if rows.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     Image(systemName: "text.magnifyingglass")
-                        .font(.title)
+                        .font(.system(size: 30))
                         .foregroundStyle(.secondary)
                     Text("暂无连接记录")
                         .font(.headline)
                     Text("内核运行时会实时接收路由日志并保留最近 500 条事件。")
-                        .font(.caption)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(32)
+                .padding(36)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
-                        HStack(spacing: 12) {
+                        GroupedRow(
+                            title: row.target,
+                            subtitle: "\(row.app.isEmpty ? "系统" : row.app) · \(row.decision)"
+                        ) {
                             Text(row.time)
-                                .font(.caption2.monospacedDigit())
+                                .font(.system(size: 11, design: .monospaced))
+                                .monospacedDigit()
                                 .foregroundStyle(.secondary)
-                                .frame(width: 62, alignment: .leading)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 6) {
-                                    Text(row.target)
-                                        .font(.subheadline.monospaced())
-                                        .lineLimit(1)
-                                    StatusPill(text: row.protocolName, tint: .secondary)
-                                }
-                                Text("\(row.app.isEmpty ? "系统" : row.app) · \(row.decision)")
-                                    .font(.caption2)
-                                    .foregroundStyle(row.failed ? .red : .secondary)
-                                    .lineLimit(1)
+                                .frame(width: 60, alignment: .leading)
+                        } trailing: {
+                            HStack(spacing: 6) {
+                                StatusPill(text: row.protocolName, tint: .secondary)
+                                StatusPill(
+                                    text: row.exit,
+                                    tint: row.failed ? .red : (row.exit == "DIRECT" ? .green : .blue)
+                                )
                             }
-                            Spacer()
-                            StatusPill(
-                                text: row.exit,
-                                tint: row.failed ? .red : (row.exit == "DIRECT" ? .green : .blue)
-                            )
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
                         if idx < rows.count - 1 {
-                            Divider().padding(.leading, 14)
+                            HairlineDivider()
                         }
                     }
                 }
@@ -163,7 +160,7 @@ public struct LogsView: View {
     }
 
     private var activeRoutesContent: some View {
-        let query = appState.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let rows = appState.activeRoutes.filter {
             query.isEmpty
                 || $0.displayApp.lowercased().contains(query)
@@ -174,29 +171,17 @@ public struct LogsView: View {
         return NativeCard(padding: 0) {
             if rows.isEmpty {
                 Text("当前没有活动连接")
-                    .font(.callout)
+                    .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
-                    .padding(32)
+                    .padding(36)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { idx, route in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 6) {
-                                    Text(route.displayApp)
-                                        .font(.subheadline.weight(.semibold))
-                                    Text(route.displayTarget)
-                                        .font(.caption.monospaced())
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Text("\(route.rule)\(route.rulePayload.isEmpty ? "" : "(\(route.rulePayload))") → \(route.chains.reversed().joined(separator: " → "))")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
+                        GroupedRow(
+                            title: "\(route.displayApp) · \(route.displayTarget)",
+                            subtitle: "\(route.rule)\(route.rulePayload.isEmpty ? "" : "(\(route.rulePayload))") → \(route.chains.reversed().joined(separator: " → "))"
+                        ) {
                             Button("新建规则…") {
                                 prefillRule = RuleConditions(
                                     program: route.programPath,
@@ -208,10 +193,8 @@ public struct LogsView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
                         if idx < rows.count - 1 {
-                            Divider().padding(.leading, 14)
+                            HairlineDivider()
                         }
                     }
                 }

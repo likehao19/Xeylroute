@@ -6,29 +6,6 @@ import AppKit
 import UIKit
 #endif
 
-// MARK: - Native Adaptive Card Surface
-
-public struct NativeCard<Content: View>: View {
-    private let padding: CGFloat
-    private let content: Content
-
-    public init(padding: CGFloat = 14, @ViewBuilder content: () -> Content) {
-        self.padding = padding
-        self.content = content()
-    }
-
-    public var body: some View {
-        content
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(.primary.opacity(0.08), lineWidth: 0.75)
-            )
-    }
-}
-
 public struct SectionHeaderBar<Trailing: View>: View {
     let title: String
     let trailing: Trailing
@@ -39,14 +16,14 @@ public struct SectionHeaderBar<Trailing: View>: View {
     }
 
     public var body: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(.secondary)
             Spacer()
             trailing
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 6)
     }
 }
 
@@ -61,22 +38,26 @@ public struct LatencyBadge: View {
                     .controlSize(.mini)
             } else if let err = measurement?.error {
                 Text(err)
-                    .font(.caption.monospacedDigit())
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.red)
             } else if let ms = measurement?.delayMs {
-                HStack(spacing: 4) {
-                    Text("\(ms) ms")
-                        .font(.caption.monospacedDigit().weight(.semibold))
+                HStack(spacing: 3) {
+                    Text("\(ms)")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(color(for: ms))
+                    Text("ms")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(color(for: ms).opacity(0.75))
                     if let mbps = measurement?.mbps {
-                        Text("· \(String(format: "%.1f", mbps)) Mbps")
-                            .font(.caption2.monospacedDigit())
+                        Text("· \(String(format: "%.0f", mbps))M")
+                            .font(.system(size: 10.5, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 }
+                .monospacedDigit()
             } else {
                 Text("—")
-                    .font(.caption.monospacedDigit())
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -84,7 +65,7 @@ public struct LatencyBadge: View {
 
     private func color(for ms: Int) -> Color {
         if ms < 100 { return .green }
-        if ms < 240 { return .orange }
+        if ms < 220 { return .orange }
         return .red
     }
 }
@@ -92,80 +73,40 @@ public struct LatencyBadge: View {
 public struct StatusPill: View {
     let text: String
     let tint: Color
+    let showDot: Bool
 
-    public var body: some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.14), in: Capsule())
-            .foregroundStyle(tint)
-            .lineLimit(1)
+    public init(text: String, tint: Color, showDot: Bool = false) {
+        self.text = text
+        self.tint = tint
+        self.showDot = showDot
     }
-}
-
-public struct CountryBadge: View {
-    let nodeName: String
-    let isPolicy: Bool
 
     public var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(badgeTint.opacity(0.15))
-                .frame(width: 28, height: 28)
-            if let emoji = inferredFlag {
-                Text(emoji)
-                    .font(.system(size: 16))
-            } else {
-                Image(systemName: policyIcon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(badgeTint)
+        HStack(spacing: 5) {
+            if showDot {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
             }
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
         }
-    }
-
-    private var inferredFlag: String? {
-        guard !isPolicy else { return nil }
-        let lower = nodeName.lowercased()
-        let pairs: [(String, String)] = [
-            ("香港", "🇭🇰"), ("hk", "🇭🇰"), ("hong kong", "🇭🇰"),
-            ("日本", "🇯🇵"), ("东京", "🇯🇵"), ("大阪", "🇯🇵"), ("jp", "🇯🇵"), ("tokyo", "🇯🇵"),
-            ("新加坡", "🇸🇬"), ("狮城", "🇸🇬"), ("sg", "🇸🇬"), ("singapore", "🇸🇬"),
-            ("美国", "🇺🇸"), ("洛杉矶", "🇺🇸"), ("硅谷", "🇺🇸"), ("us", "🇺🇸"), ("usa", "🇺🇸"),
-            ("台湾", "🇹🇼"), ("台北", "🇹🇼"), ("tw", "🇹🇼"), ("taiwan", "🇹🇼"),
-            ("韩国", "🇰🇷"), ("首尔", "🇰🇷"), ("kr", "🇰🇷"), ("korea", "🇰🇷"),
-            ("英国", "🇬🇧"), ("伦敦", "🇬🇧"), ("uk", "🇬🇧"), ("gb", "🇬🇧"),
-            ("德国", "🇩🇪"), ("法兰克福", "🇩🇪"), ("de", "🇩🇪"), ("germany", "🇩🇪"),
-            ("法国", "🇫🇷"), ("fr", "🇫🇷"), ("加拿大", "🇨🇦"), ("ca", "🇨🇦"),
-            ("澳大利亚", "🇦🇺"), ("au", "🇦🇺"), ("荷兰", "🇳🇱"), ("nl", "🇳🇱"),
-        ]
-        for (keyword, flag) in pairs where lower.contains(keyword) {
-            return flag
-        }
-        return nil
-    }
-
-    private var policyIcon: String {
-        switch nodeName.uppercased() {
-        case "AUTO": return "sparkles"
-        case "DIRECT": return "arrow.up.right"
-        case "REJECT": return "hand.raised.fill"
-        default: return "globe"
-        }
-    }
-
-    private var badgeTint: Color {
-        switch nodeName.uppercased() {
-        case "AUTO": return .blue
-        case "DIRECT": return .green
-        case "REJECT": return .red
-        default: return .cyan
-        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3.5)
+        .background(tint.opacity(0.13), in: Capsule())
+        .foregroundStyle(tint)
     }
 }
 
 public struct AppIconThumbnail: View {
     let path: String?
+    let size: CGFloat
+
+    public init(path: String?, size: CGFloat = 26) {
+        self.path = path
+        self.size = size
+    }
 
     public var body: some View {
         #if os(macOS)
@@ -174,7 +115,7 @@ public struct AppIconThumbnail: View {
             Image(nsImage: icon)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 26, height: 26)
+                .frame(width: size, height: size)
         } else {
             fallbackIcon
         }
@@ -184,10 +125,14 @@ public struct AppIconThumbnail: View {
     }
 
     private var fallbackIcon: some View {
-        Image(systemName: "app.fill")
-            .font(.system(size: 16))
-            .foregroundStyle(.blue)
-            .frame(width: 26, height: 26)
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.accentColor.opacity(0.14))
+            Image(systemName: "app.fill")
+                .font(.system(size: size * 0.5))
+                .foregroundStyle(Color.accentColor)
+        }
+        .frame(width: size, height: size)
     }
 }
 
