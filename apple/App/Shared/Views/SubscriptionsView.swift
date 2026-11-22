@@ -26,92 +26,113 @@ public struct SubscriptionsView: View {
             query.isEmpty || $0.name.lowercased().contains(query) || $0.type.lowercased().contains(query)
         }
 
-        return ScrollView {
-            VStack(spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionHeaderBar("订阅来源") {
-                        HStack(spacing: 12) {
-                            #if os(iOS)
-                            InlineSearchField(text: $filterText, placeholder: "搜索订阅或节点")
-                                .frame(width: 200)
-                            #endif
-                            Button("编辑完整配置…") {
-                                editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
-                            }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color.accentColor)
+        return Group {
+            #if os(macOS)
+            if providers.isEmpty && standalone.isEmpty {
+                if query.isEmpty {
+                    ContentUnavailableView {
+                        Label("添加订阅或节点", systemImage: "square.stack.3d.up")
+                    } description: {
+                        Text("从订阅地址、分享链接或本地 YAML 文件导入。")
+                    } actions: {
+                        Button("导入订阅或节点…") { showImportSheet = true }
+                            .buttonStyle(.borderedProminent)
+                        Button("打开 YAML 文件…") { showFileImporter = true }
+                    }
+                } else {
+                    ContentUnavailableView.search(text: filterText)
+                }
+            } else {
+                Form {
+                    if !providers.isEmpty {
+                        Section("订阅来源") {
+                            ForEach(providers) { provider in subscriptionDetails(provider) }
                         }
                     }
-
-                    if providers.isEmpty && standalone.isEmpty && !query.isEmpty {
-                        ContentUnavailableView.search(text: filterText)
-                    } else if providers.isEmpty && query.isEmpty {
-                        NativeCard(padding: 34) {
-                            VStack(spacing: 10) {
-                                Image(systemName: "square.stack.3d.up")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(.secondary)
-                                Text("还没有订阅来源")
-                                    .font(.headline)
-                                Text("支持粘贴 HTTPS 订阅链接、多条分享链接（VLESS / VMess / Trojan / SS / Hysteria2 / TUIC / Base64）或导入 Clash YAML 文件。")
-                                    .font(.system(size: 12.5))
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
-                                HStack(spacing: 10) {
-                                    Button("导入订阅或节点…") { showImportSheet = true }
-                                        .buttonStyle(.borderedProminent)
-                                    Button("导入 YAML 文件…") { showFileImporter = true }
-                                        .buttonStyle(.bordered)
-                                }
-                                .padding(.top, 4)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                    } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 14)], spacing: 14) {
-                            ForEach(providers) { provider in
-                                subscriptionCard(provider)
-                            }
+                    if !standalone.isEmpty {
+                        Section("独立节点") {
+                            ForEach(standalone) { node in standaloneRow(node) }
                         }
                     }
                 }
-
-                if !standalone.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionHeaderBar("直接导入的独立节点") {
-                            Text("共 \(standalone.count) 个")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        NativeCard(padding: 0) {
-                            VStack(spacing: 0) {
-                                ForEach(Array(standalone.enumerated()), id: \.element.id) { idx, node in
-                                    GroupedRow(title: node.name, subtitle: "\(node.type.uppercased()) · 独立节点") {
-                                        CountryBadge(nodeName: node.name, isPolicy: false, size: .compact)
-                                    } trailing: {
-                                        Button(role: .destructive) {
-                                            Task {
-                                                await appState.mutateProfile({
-                                                    try await appState.runtime.profileStore.removeStandaloneNode(name: node.name)
-                                                }, successMessage: "已删除节点「\(node.name)」")
-                                            }
-                                        } label: {
-                                            Image(systemName: "trash")
-                                        }
-                                        .buttonStyle(.borderless)
-                                    }
-                                    if idx < standalone.count - 1 {
-                                        HairlineDivider(inset: 52)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                .formStyle(.grouped)
             }
-            .padding(20)
+            #else
+            ScrollView {
+                VStack(spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionHeaderBar("订阅来源") {
+                            HStack(spacing: 12) {
+                                #if os(iOS)
+                                InlineSearchField(text: $filterText, placeholder: "搜索订阅或节点")
+                                    .frame(width: 200)
+                                #endif
+                                Button("编辑完整配置…") {
+                                    editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+
+                        if providers.isEmpty && standalone.isEmpty && !query.isEmpty {
+                            ContentUnavailableView.search(text: filterText)
+                        } else if providers.isEmpty && query.isEmpty {
+                            NativeCard(padding: 34) {
+                                VStack(spacing: 10) {
+                                    Image(systemName: "square.stack.3d.up")
+                                        .font(.system(size: 32))
+                                        .foregroundStyle(.secondary)
+                                    Text("还没有订阅来源")
+                                        .font(.headline)
+                                    Text("支持粘贴 HTTPS 订阅链接、多条分享链接（VLESS / VMess / Trojan / SS / Hysteria2 / TUIC / Base64）或导入 Clash YAML 文件。")
+                                        .font(.system(size: 12.5))
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                    HStack(spacing: 10) {
+                                        Button("导入订阅或节点…") { showImportSheet = true }
+                                            .buttonStyle(.borderedProminent)
+                                        Button("导入 YAML 文件…") { showFileImporter = true }
+                                            .buttonStyle(.bordered)
+                                    }
+                                    .padding(.top, 4)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        } else {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 14)], spacing: 14) {
+                                ForEach(providers) { provider in
+                                    subscriptionCard(provider)
+                                }
+                            }
+                        }
+                    }
+
+                    if !standalone.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionHeaderBar("直接导入的独立节点") {
+                                Text("共 \(standalone.count) 个")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            NativeCard(padding: 0) {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(standalone.enumerated()), id: \.element.id) { idx, node in
+                                        standaloneRow(node)
+                                        if idx < standalone.count - 1 {
+                                            HairlineDivider(inset: 52)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            #endif
         }
         .navigationTitle("订阅管理")
         #if os(macOS)
@@ -119,6 +140,16 @@ public struct SubscriptionsView: View {
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                #if os(macOS)
+                Menu {
+                    Button("导入 YAML 文件…") { showFileImporter = true }
+                    Button("编辑完整配置…") {
+                        editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
+                    }
+                } label: {
+                    Label("配置操作", systemImage: "ellipsis.circle")
+                }
+                #endif
                 if !appState.profile.providers.isEmpty {
                     Button("全部刷新") {
                         Task {
@@ -168,104 +199,127 @@ public struct SubscriptionsView: View {
         }
     }
 
+    private func standaloneRow(_ node: ProxyNode) -> some View {
+        GroupedRow(title: node.name, subtitle: "\(node.type.uppercased()) · 独立节点") {
+            CountryBadge(nodeName: node.name, isPolicy: false, size: .compact)
+        } trailing: {
+            Button(role: .destructive) {
+                Task {
+                    await appState.mutateProfile({
+                        try await appState.runtime.profileStore.removeStandaloneNode(name: node.name)
+                    }, successMessage: "已删除节点「\(node.name)」")
+                }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    #if os(iOS)
     private func subscriptionCard(_ provider: SubscriptionProvider) -> some View {
+        NativeCard(padding: 15, highlighted: appState.profile.subscriptionScope == provider.name) {
+            subscriptionDetails(provider)
+        }
+    }
+    #endif
+
+    private func subscriptionDetails(_ provider: SubscriptionProvider) -> some View {
         let isSelected = appState.profile.subscriptionScope == provider.name
         let live = appState.snapshot?.providers[provider.name]
         let usage = live?.usage ?? provider.usage
         let nodeCount = live?.nodes.count ?? provider.nodes.count
 
-        return NativeCard(padding: 15, highlighted: isSelected) {
-            VStack(alignment: .leading, spacing: 11) {
-                HStack(spacing: 10) {
-                    Image(systemName: provider.isRemote ? "icloud.and.arrow.down.fill" : "doc.text.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            (isSelected ? Color.accentColor : Color.secondary).opacity(0.13),
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        )
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 10) {
+                Image(systemName: provider.isRemote ? "icloud.and.arrow.down.fill" : "doc.text.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        (isSelected ? Color.accentColor : Color.secondary).opacity(0.13),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    )
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(provider.name)
-                                .font(.system(size: 14, weight: .semibold))
-                                .lineLimit(1)
-                            if isSelected {
-                                StatusPill(text: "当前使用", tint: .blue)
-                            }
-                        }
-                        Text(provider.isRemote ? (provider.url ?? "远程订阅") : "本地 YAML 订阅")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(provider.name)
+                            .font(.system(size: 14, weight: .semibold))
                             .lineLimit(1)
-                    }
-                    Spacer()
-                }
-
-                if let usage, usage.total > 0 {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ProgressView(value: usage.progress)
-                            .tint(.blue)
-                        HStack {
-                            Text("\(TrafficTracker.formatBytes(usage.used)) / \(TrafficTracker.formatBytes(usage.total))")
-                            Spacer()
-                            if let expire = usage.expireDate {
-                                Text("到期 \(expire.formatted(date: .abbreviated, time: .omitted))")
-                            }
+                        if isSelected {
+                            StatusPill(text: "当前使用", tint: .blue)
                         }
-                        .font(.system(size: 11, design: .monospaced))
-                        .monospacedDigit()
+                    }
+                    Text(provider.isRemote ? (provider.url ?? "远程订阅") : "本地 YAML 订阅")
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                    }
+                        .lineLimit(1)
                 }
+                Spacer()
+            }
 
-                HairlineDivider(inset: 0)
-
-                HStack {
-                    Text("\(nodeCount) 个节点")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if !isSelected {
-                        Button("切换使用") {
-                            Task {
-                                await appState.mutateProfile({
-                                    try await appState.runtime.profileStore.setSubscriptionScope(provider.name)
-                                }, successMessage: "已切换到订阅「\(provider.name)」")
-                            }
+            if let usage, usage.total > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: usage.progress)
+                        .tint(.blue)
+                    HStack {
+                        Text("\(TrafficTracker.formatBytes(usage.used)) / \(TrafficTracker.formatBytes(usage.total))")
+                        Spacer()
+                        if let expire = usage.expireDate {
+                            Text("到期 \(expire.formatted(date: .abbreviated, time: .omitted))")
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
                     }
-                    if provider.isRemote {
-                        Button {
-                            Task { await appState.refreshSubscription(name: provider.name) }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("刷新订阅")
-                    }
-                    Button {
-                        editorTarget = EditorTarget(title: "编辑订阅 · \(provider.name)", providerName: provider.name, isNew: false)
-                    } label: {
-                        Image(systemName: "pencil")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("编辑 YAML")
+                    .font(.system(size: 11, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                }
+            }
 
-                    Button(role: .destructive) {
+            HairlineDivider(inset: 0)
+
+            HStack {
+                Text("\(nodeCount) 个节点")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !isSelected {
+                    Button("切换使用") {
                         Task {
                             await appState.mutateProfile({
-                                try await appState.runtime.profileStore.removeProvider(name: provider.name)
-                            }, successMessage: "已移除订阅「\(provider.name)」")
+                                try await appState.runtime.profileStore.setSubscriptionScope(provider.name)
+                            }, successMessage: "已切换到订阅「\(provider.name)」")
                         }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
+                if provider.isRemote {
+                    Button {
+                        Task { await appState.refreshSubscription(name: provider.name) }
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
+                    .help("刷新订阅")
                 }
+                Button {
+                    editorTarget = EditorTarget(title: "编辑订阅 · \(provider.name)", providerName: provider.name, isNew: false)
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
+                .help("编辑 YAML")
+
+                Button(role: .destructive) {
+                    Task {
+                        await appState.mutateProfile({
+                            try await appState.runtime.profileStore.removeProvider(name: provider.name)
+                        }, successMessage: "已移除订阅「\(provider.name)」")
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
             }
         }
     }

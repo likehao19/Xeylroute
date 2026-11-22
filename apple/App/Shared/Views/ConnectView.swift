@@ -7,34 +7,15 @@ public struct ConnectView: View {
     @Environment(\.colorScheme) private var colorScheme
     #if os(macOS)
     @State private var showImport = false
+    @State private var showInspector = false
+    @State private var showConnections = false
     #endif
     let requestEnableTUN: () -> Void
 
     public var body: some View {
         Group {
             #if os(macOS)
-            if !appState.status.configured && !appState.status.running {
-                ContentUnavailableView {
-                    Image("AppBrandLogo")
-                        .resizable()
-                        .frame(width: 72, height: 72)
-                        .accessibilityHidden(true)
-                    Text("添加第一个节点")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                } description: {
-                    Text("添加订阅或导入节点，即可查看流量并管理应用分流。")
-                } actions: {
-                    Button("导入订阅或节点…") { showImport = true }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    Button("管理订阅") { appState.selectedDestination = .subscriptions }
-                        .buttonStyle(.link)
-                }
-                .sheet(isPresented: $showImport) { ImportSubscriptionSheet() }
-            } else {
-                dashboard
-            }
+            macConnectionView
             #else
             dashboard
             #endif
@@ -63,10 +44,131 @@ public struct ConnectView: View {
                 .labelStyle(.titleAndIcon)
                 #endif
                 .disabled(appState.isBusy)
+                #if os(macOS)
+                if appState.status.configured || appState.status.running {
+                    Button {
+                        showInspector.toggle()
+                    } label: {
+                        Label("连接详情", systemImage: "sidebar.right")
+                    }
+                    .help("显示或隐藏节点、订阅与应用出口")
+                }
+                #endif
             }
         }
     }
 
+    #if os(macOS)
+    private var macConnectionView: some View {
+        let configured = appState.status.configured
+        let captured = appState.status.systemProxyEnabled || appState.status.tunEnabled
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(appState.profile.mode.fullTitle, systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text(configured ? appState.statusBadgeTitle : "设置网络连接")
+                        .font(.largeTitle.bold())
+                }
+
+                HStack(spacing: 0) {
+                    routeStation(title: "这台 Mac", detail: captured ? "流量接管已开启" : "系统流量未接管") {
+                        Image(systemName: "laptopcomputer")
+                            .font(.system(size: 34, weight: .light))
+                    }
+                    routeStation(title: "Xeylroute", detail: appState.status.running ? "内核运行中" : "内核已停止") {
+                        Image("AppBrandLogo").resizable().frame(width: 64, height: 64)
+                    }
+                    routeStation(title: configured ? appState.currentGlobalExit : "默认出口", detail: configured ? "当前默认节点" : "等待导入节点") {
+                        Image(systemName: "network")
+                            .font(.system(size: 32, weight: .light))
+                    }
+                }
+                .background(alignment: .top) {
+                    GeometryReader { geometry in
+                        let w = geometry.size.width
+                        Path { path in
+                            path.move(to: CGPoint(x: w / 6, y: 34))
+                            path.addLine(to: CGPoint(x: 5 * w / 6, y: 34))
+                        }
+                        .stroke(captured && appState.status.running ? Color.accentColor : .secondary.opacity(0.5),
+                                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: captured && appState.status.running ? [] : [2, 5]))
+                    }
+                }
+                .padding(.vertical, 20)
+                .background {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(LinearGradient(colors: [Color.accentColor.opacity(0.11), Color.teal.opacity(0.055)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+
+                if !configured {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("添加第一个节点").font(.title2.bold())
+                        Text("粘贴订阅地址或节点链接，或在订阅管理中导入 YAML 文件。")
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Button("导入订阅或节点…") { showImport = true }
+                                .buttonStyle(.borderedProminent)
+                            Button("管理订阅") { appState.selectedDestination = .subscriptions }
+                        }
+                        .padding(.top, 4)
+                    }
+                } else if !captured {
+                    capturePromptBanner
+                }
+
+                if configured || appState.status.running {
+                    Divider()
+                    HStack {
+                        Text("网络活动").font(.title2.bold())
+                        Spacer()
+                        Picker("监控指标", selection: $showConnections) {
+                            Text("流量").tag(false)
+                            Text("连接数").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    if showConnections { connectionsPlot } else { trafficPlot }
+                }
+            }
+            .frame(maxWidth: 900, alignment: .leading)
+            .padding(32)
+            .frame(maxWidth: .infinity)
+        }
+        .sheet(isPresented: $showImport) { ImportSubscriptionSheet() }
+        .inspector(isPresented: $showInspector) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    defaultNodeSection
+                    subscriptionCard
+                    appExitsSection
+                }
+                .padding(14)
+            }
+            .inspectorColumnWidth(min: 270, ideal: 312, max: 380)
+        }
+    }
+
+    private func routeStation<Icon: View>(title: String, detail: String, @ViewBuilder icon: () -> Icon) -> some View {
+        VStack(spacing: 4) {
+            icon()
+                .frame(width: 68, height: 68)
+                .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.07), radius: 4, y: 2)
+                .padding(.bottom, 6)
+            Text(title).font(.headline).lineLimit(1).help(title)
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+    #endif
+
+    #if os(iOS)
     private var dashboard: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -76,26 +178,15 @@ public struct ConnectView: View {
                     capturePromptBanner
                 }
 
-                #if os(iOS)
                 telemetryKPIBar
-                #endif
 
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 16) {
                         VStack(spacing: 16) {
-                            #if os(macOS)
-                            trafficChartCard
-                            defaultNodeSection
-                            #else
                             defaultNodeSection
                             trafficChartCard
-                            #endif
                         }
-                        #if os(macOS)
-                        .frame(minWidth: 335, maxWidth: .infinity)
-                        #else
                         .frame(maxWidth: .infinity)
-                        #endif
 
                         VStack(spacing: 16) {
                             if appState.runtime.supportsProcessRouting {
@@ -121,6 +212,8 @@ public struct ConnectView: View {
             .padding(20)
         }
     }
+
+    #endif
 
     // MARK: - Onboarding & Status Banners
 
@@ -440,114 +533,115 @@ public struct ConnectView: View {
 
     // MARK: - Live Traffic & Active Connections Charts
 
+    #if os(iOS)
     private var trafficChartCard: some View {
-        NativeCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    #if os(macOS)
-                    Text("网络流量").font(.headline)
-                    Spacer()
-                    Text(formatDuration(appState.elapsedSeconds))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .help("会话时长")
-                    #else
-                    Text("已接管流量波形")
-                        .font(.system(size: 13.5, weight: .semibold))
-                    StatusPill(text: appState.profile.mode.fullTitle, tint: .secondary)
-                    Spacer()
-                    HStack(spacing: 10) {
-                        HStack(spacing: 4) {
-                            Circle().fill(.blue).frame(width: 6, height: 6)
-                            Text("下载")
-                        }
-                        HStack(spacing: 4) {
-                            Circle().fill(.teal).frame(width: 6, height: 6)
-                            Text("上传")
-                        }
+        NativeCard(padding: 16) { trafficPlot }
+    }
+    #endif
+
+    private var trafficPlot: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            #if os(iOS)
+            HStack {
+                Text("已接管流量波形")
+                    .font(.system(size: 13.5, weight: .semibold))
+                StatusPill(text: appState.profile.mode.fullTitle, tint: .secondary)
+                Spacer()
+                HStack(spacing: 10) {
+                    HStack(spacing: 4) {
+                        Circle().fill(.blue).frame(width: 6, height: 6)
+                        Text("下载")
                     }
-                    .font(.system(size: 11))
+                    HStack(spacing: 4) {
+                        Circle().fill(.teal).frame(width: 6, height: 6)
+                        Text("上传")
+                    }
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            }
+            #else
+            HStack(alignment: .bottom, spacing: 32) {
+                trafficReading("下载", icon: "arrow.down", rate: appState.currentDownRate, tint: .blue)
+                trafficReading("上传", icon: "arrow.up", rate: appState.currentUpRate, tint: .teal)
+                Spacer()
+                Label(formatDuration(appState.elapsedSeconds), systemImage: "clock")
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    #endif
+                    .help("会话时长")
+            }
+            #endif
+
+            ZStack {
+                Chart(appState.trafficTracker.samples) { sample in
+                    AreaMark(
+                        x: .value("时间", sample.id),
+                        y: .value("下载", sample.downloadBytesPerSec / 1024.0)
+                    )
+                    .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.26), .blue.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.catmullRom)
+
+                    LineMark(
+                        x: .value("时间", sample.id),
+                        y: .value("下载", sample.downloadBytesPerSec / 1024.0),
+                        series: .value("方向", "下载")
+                    )
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .interpolationMethod(.catmullRom)
+
+                    LineMark(
+                        x: .value("时间", sample.id),
+                        y: .value("上传", sample.uploadBytesPerSec / 1024.0),
+                        series: .value("方向", "上传")
+                    )
+                    .foregroundStyle(.teal)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
                 }
-                #if os(macOS)
-                HStack(spacing: 32) {
-                    trafficReading("下载", icon: "arrow.down", rate: appState.currentDownRate, tint: .blue)
-                    trafficReading("上传", icon: "arrow.up", rate: appState.currentUpRate, tint: .teal)
-                }
-                #endif
-
-                ZStack {
-                    Chart(appState.trafficTracker.samples) { sample in
-                        AreaMark(
-                            x: .value("时间", sample.id),
-                            y: .value("下载", sample.downloadBytesPerSec / 1024.0)
-                        )
-                        .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.26), .blue.opacity(0.0)], startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.catmullRom)
-
-                        LineMark(
-                            x: .value("时间", sample.id),
-                            y: .value("下载", sample.downloadBytesPerSec / 1024.0),
-                            series: .value("方向", "下载")
-                        )
-                        .foregroundStyle(.blue)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                        .interpolationMethod(.catmullRom)
-
-                        LineMark(
-                            x: .value("时间", sample.id),
-                            y: .value("上传", sample.uploadBytesPerSec / 1024.0),
-                            series: .value("方向", "上传")
-                        )
-                        .foregroundStyle(.teal)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
-                    }
-                    .chartXAxis(.hidden)
-                    .chartYAxis {
-                        AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { val in
-                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                                .foregroundStyle(.secondary.opacity(0.25))
-                            AxisValueLabel {
-                                if let kb = val.as(Double.self) {
-                                    Text(TrafficTracker.formatRate(kb * 1024.0))
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                }
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { val in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                            .foregroundStyle(.secondary.opacity(0.25))
+                        AxisValueLabel {
+                            if let kb = val.as(Double.self) {
+                                Text(TrafficTracker.formatRate(kb * 1024.0))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
-                    .frame(height: 152)
+                }
+                .frame(height: 152)
 
-                    if appState.trafficTracker.samples.isEmpty {
-                        VStack(spacing: 5) {
-                            Image(systemName: "waveform.path.ecg")
-                                .font(.system(size: 20))
-                                .foregroundStyle(.tertiary)
-                            Text(appState.status.running ? "正在采集实时流量…" : "启动监听后显示实时流量波形")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
+                if appState.trafficTracker.samples.isEmpty {
+                    VStack(spacing: 5) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.tertiary)
+                        Text(appState.status.running ? "正在采集实时流量…" : "启动监听后显示实时流量波形")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
                     }
                 }
-
-                HairlineDivider(inset: 0)
-
-                HStack {
-                    let peak = appState.trafficTracker.samples.map(\.downloadBytesPerSec).max() ?? 0
-                    #if os(macOS)
-                    Text("累计 \(TrafficTracker.formatBytes(appState.totalTrafficBytes))")
-                    Text("\(appState.activeRuleCount) 条规则")
-                    #endif
-                    Text("峰值下载 \(TrafficTracker.formatRate(peak))")
-                    Spacer()
-                    Text("127.0.0.1:\(String(appState.profile.mixedPort > 0 ? appState.profile.mixedPort : appState.profile.httpPort))")
-                }
-                .font(.system(size: 11, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
             }
+
+            HairlineDivider(inset: 0)
+
+            HStack {
+                let peak = appState.trafficTracker.samples.map(\.downloadBytesPerSec).max() ?? 0
+                #if os(macOS)
+                Text("累计 \(TrafficTracker.formatBytes(appState.totalTrafficBytes))")
+                Text("\(appState.activeRuleCount) 条规则")
+                #endif
+                Text("峰值下载 \(TrafficTracker.formatRate(peak))")
+                Spacer()
+                Text("127.0.0.1:\(String(appState.profile.mixedPort > 0 ? appState.profile.mixedPort : appState.profile.httpPort))")
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -567,50 +661,54 @@ public struct ConnectView: View {
     }
     #endif
 
+    #if os(iOS)
     private var activeConnectionsChartCard: some View {
-        NativeCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("活跃连接数")
-                        .font(.system(size: 13.5, weight: .semibold))
-                    Spacer()
-                    let current = appState.snapshot?.connections?.activeCount ?? 0
-                    Text("当前 \(current) 个")
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .monospacedDigit()
+        NativeCard(padding: 16) { connectionsPlot }
+    }
+    #endif
+
+    private var connectionsPlot: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("活跃连接数")
+                    .font(.system(size: 13.5, weight: .semibold))
+                Spacer()
+                let current = appState.snapshot?.connections?.activeCount ?? 0
+                Text("当前 \(current) 个")
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            ZStack {
+                Chart(appState.trafficTracker.samples) { sample in
+                    BarMark(
+                        x: .value("采样", sample.id),
+                        y: .value("连接", sample.activeConnections)
+                    )
+                    .foregroundStyle(Color.accentColor.opacity(0.75))
+                    .cornerRadius(2)
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .frame(height: 106)
+
+                if appState.trafficTracker.samples.isEmpty {
+                    Text(appState.status.running ? "等待连接采样…" : "内核未运行")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
-
-                ZStack {
-                    Chart(appState.trafficTracker.samples) { sample in
-                        BarMark(
-                            x: .value("采样", sample.id),
-                            y: .value("连接", sample.activeConnections)
-                        )
-                        .foregroundStyle(Color.accentColor.opacity(0.75))
-                        .cornerRadius(2)
-                    }
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
-                    .frame(height: 106)
-
-                    if appState.trafficTracker.samples.isEmpty {
-                        Text(appState.status.running ? "等待连接采样…" : "内核未运行")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                HairlineDivider(inset: 0)
-
-                HStack {
-                    Text("较早 → 最新")
-                    Spacer()
-                    Text("最近 60 秒")
-                }
-                .font(.system(size: 10.5))
-                .foregroundStyle(.tertiary)
             }
+
+            HairlineDivider(inset: 0)
+
+            HStack {
+                Text("较早 → 最新")
+                Spacer()
+                Text("最近 60 秒")
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.tertiary)
         }
     }
 

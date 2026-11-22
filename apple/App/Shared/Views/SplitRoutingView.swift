@@ -14,6 +14,9 @@ public struct SplitRoutingView: View {
         var id: String { rawValue }
     }
 
+    #if os(macOS)
+    @State private var selectedRule: String?
+    #endif
     @State private var selectedTab: SplitTab = .rules
     @State private var filterText = ""
     @State private var scanByProcess = false
@@ -82,19 +85,16 @@ public struct SplitRoutingView: View {
             .padding(.top, 14)
             .padding(.bottom, 6)
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    switch selectedTab {
-                    case .rules:
-                        rulesListContent
-                    case .groups:
-                        groupsListContent
-                    case .apps:
-                        runningAppsContent
-                    }
-                }
-                .padding(20)
+            #if os(macOS)
+            if selectedTab == .rules {
+                Divider()
+                rulesListContent
+            } else {
+                tabContent
             }
+            #else
+            tabContent
+            #endif
         }
         .navigationTitle("分流与程序")
         #if os(macOS)
@@ -144,6 +144,22 @@ public struct SplitRoutingView: View {
         }
     }
 
+    private var tabContent: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                switch selectedTab {
+                case .rules:
+                    rulesListContent
+                case .groups:
+                    groupsListContent
+                case .apps:
+                    runningAppsContent
+                }
+            }
+            .padding(20)
+        }
+    }
+
     // MARK: - Rules
 
     private var rulesListContent: some View {
@@ -152,6 +168,26 @@ public struct SplitRoutingView: View {
             !rule.isDefaultMatch && (query.isEmpty || rule.rawLine.lowercased().contains(query))
         }
 
+        #if os(macOS)
+        return Table(items, selection: $selectedRule) {
+            TableColumn("匹配条件") { rule in
+                Label(rule.payload.isEmpty ? rule.kind : rule.payload, systemImage: iconForRule(rule))
+            }
+            TableColumn("类型", value: \.kind).width(ideal: 105)
+            TableColumn("出口", value: \.exit).width(ideal: 82)
+            TableColumn("操作") { rule in
+                HStack(spacing: 10) { ruleControls(rule) }
+            }
+            .width(106)
+        }
+        .alternatingRowBackgrounds(.disabled)
+        .overlay {
+            if items.isEmpty {
+                CollectionEmptyState(title: "暂无分流规则", systemImage: "arrow.triangle.branch",
+                                     description: "添加规则，为应用或目标地址指定出口。", query: query)
+            }
+        }
+        #else
         return NativeCard(padding: 0) {
             if items.isEmpty {
                 CollectionEmptyState(
@@ -175,40 +211,7 @@ public struct SplitRoutingView: View {
                                     text: rule.exit,
                                     tint: rule.exit == "DIRECT" ? .green : (rule.exit == "REJECT" ? .red : .blue)
                                 )
-                                Toggle("", isOn: Binding(
-                                    get: { rule.enabled },
-                                    set: { enabled in
-                                        Task {
-                                            await appState.mutateProfile({
-                                                try await appState.runtime.profileStore.toggleRule(rawLine: rule.rawLine, enabled: enabled)
-                                            })
-                                        }
-                                    }
-                                ))
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                                .controlSize(.small)
-
-                                if rule.conditions != nil {
-                                    Button {
-                                        editingRule = rule
-                                        showAddRule = true
-                                    } label: {
-                                        Image(systemName: "pencil")
-                                    }
-                                    .buttonStyle(.borderless)
-                                }
-
-                                Button(role: .destructive) {
-                                    Task {
-                                        await appState.mutateProfile({
-                                            try await appState.runtime.profileStore.deleteRules([rule.rawLine])
-                                        }, successMessage: "已删除规则")
-                                    }
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.borderless)
+                                ruleControls(rule)
                             }
                         }
                         if idx < items.count - 1 {
@@ -218,6 +221,45 @@ public struct SplitRoutingView: View {
                 }
             }
         }
+        #endif
+    }
+
+    @ViewBuilder
+    private func ruleControls(_ rule: ProfileRule) -> some View {
+        Toggle("", isOn: Binding(
+            get: { rule.enabled },
+            set: { enabled in
+                Task {
+                    await appState.mutateProfile({
+                        try await appState.runtime.profileStore.toggleRule(rawLine: rule.rawLine, enabled: enabled)
+                    })
+                }
+            }
+        ))
+        .labelsHidden()
+        .toggleStyle(.switch)
+        .controlSize(.small)
+
+        if rule.conditions != nil {
+            Button {
+                editingRule = rule
+                showAddRule = true
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+        }
+
+        Button(role: .destructive) {
+            Task {
+                await appState.mutateProfile({
+                    try await appState.runtime.profileStore.deleteRules([rule.rawLine])
+                }, successMessage: "已删除规则")
+            }
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(.borderless)
     }
 
     // MARK: - Policy Groups

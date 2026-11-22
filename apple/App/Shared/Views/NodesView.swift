@@ -12,6 +12,10 @@ public struct NodesView: View {
         var id: String { rawValue }
     }
 
+    #if os(macOS)
+    @State private var selectedGroup = "GLOBAL"
+    @State private var selectedNode: String?
+    #endif
     @State private var selectedTab: NodesTab = .groups
     @State private var expandedGroups: Set<String> = ["GLOBAL"]
     @State private var filterText = ""
@@ -49,19 +53,15 @@ public struct NodesView: View {
             .padding(.top, 14)
             .padding(.bottom, 6)
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    switch selectedTab {
-                    case .groups:
-                        nodesGroupsContent
-                    case .sites:
-                        websiteProbeContent
-                    case .socks:
-                        fixedSocksContent
-                    }
-                }
-                .padding(20)
+            #if os(macOS)
+            if selectedTab == .groups && appState.status.configured {
+                macNodeTable
+            } else {
+                tabContent
             }
+            #else
+            tabContent
+            #endif
         }
         .navigationTitle("代理组与节点")
         #if os(macOS)
@@ -107,6 +107,87 @@ public struct NodesView: View {
         }
     }
 
+    private var tabContent: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                switch selectedTab {
+                case .groups:
+                    nodesGroupsContent
+                case .sites:
+                    websiteProbeContent
+                case .socks:
+                    fixedSocksContent
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    #if os(macOS)
+    private var macNodeTable: some View {
+        let group = appState.profile.groups.first { $0.name == selectedGroup }
+        let groupName = group?.name ?? "GLOBAL"
+        let nodes = group.map(groupMembers) ?? appState.selectableNodes
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rows = nodes.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.type.localizedCaseInsensitiveContains(query) }
+        let active = group == nil ? appState.currentGlobalExit : appState.snapshot?.proxies[groupName]?.now
+
+        return VStack(spacing: 0) {
+            HStack {
+                Picker("策略组", selection: Binding(get: { groupName }, set: { selectedGroup = $0 })) {
+                    Text("全局默认出口").tag("GLOBAL")
+                    ForEach(appState.profile.groups) { Text($0.name).tag($0.name) }
+                }
+                .fixedSize()
+                Spacer()
+                Text("\(rows.count) 个节点").font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+
+            Table(rows, selection: $selectedNode) {
+                TableColumn("节点") { node in
+                    HStack(spacing: 8) {
+                        CountryBadge(nodeName: node.name, isPolicy: node.isPolicy)
+                        Text(node.name).lineLimit(1)
+                    }
+                }
+                TableColumn("类型", value: \.type).width(ideal: 95)
+                TableColumn("延迟") { node in
+                    LatencyBadge(measurement: appState.nodeDelays[node.id], isTesting: appState.testingNodes.contains(node.id))
+                }
+                TableColumn("操作") { node in
+                    HStack {
+                        if node.name == active {
+                            Label("使用中", systemImage: "checkmark").foregroundStyle(.tint)
+                        } else {
+                            Button("使用") { Task { await appState.selectNode(node.name, inGroup: groupName) } }
+                        }
+                        if !node.isPolicy || node.name == "AUTO" {
+                            Button("测速") { Task { await appState.measureDelay(for: node) } }
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .width(110)
+            }
+            .alternatingRowBackgrounds(.disabled)
+            .overlay {
+                if rows.isEmpty && !query.isEmpty { ContentUnavailableView.search(text: query) }
+            }
+        }
+    }
+    #endif
+
+    private func groupMembers(_ group: PolicyGroup) -> [ProxyNode] {
+        let names = appState.snapshot?.proxies[group.name]?.all ?? group.proxies
+        let available = appState.selectableNodes
+        return names.map { name in
+            available.first { $0.name == name }
+                ?? ProxyNode(name: name, type: "策略成员", isPolicy: ["AUTO", "DIRECT", "REJECT"].contains(name))
+        }
+    }
+
     // MARK: - Nodes & Policy Groups
 
     private var nodesGroupsContent: some View {
@@ -146,16 +227,11 @@ public struct NodesView: View {
 
                 ForEach(appState.profile.groups) { group in
                     let live = appState.snapshot?.proxies[group.name]
-                    let memberNames = live?.all ?? group.proxies
-                    let memberNodes = memberNames.map { name in
-                        appState.selectableNodes.first(where: { $0.name == name })
-                            ?? ProxyNode(name: name, type: "策略成员", isPolicy: ["AUTO", "DIRECT", "REJECT"].contains(name))
-                    }
                     groupDrawer(
                         id: group.name,
                         title: group.name,
                         subtitle: "\(group.type) · 当前 \(live?.now ?? "未启动")",
-                        nodes: memberNodes,
+                        nodes: groupMembers(group),
                         selectedName: live?.now ?? ""
                     )
                 }

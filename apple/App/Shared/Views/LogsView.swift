@@ -10,6 +10,10 @@ public struct LogsView: View {
         var id: String { rawValue }
     }
 
+    #if os(macOS)
+    @State private var selectedLog: UUID?
+    @State private var selectedRoute: String?
+    #endif
     @State private var selectedTab: LogsTab = .history
     @State private var filterText = ""
     @State private var probeHost = "github.com"
@@ -64,6 +68,13 @@ public struct LogsView: View {
                 .padding(.top, 6)
             }
 
+            #if os(macOS)
+            Divider()
+            switch selectedTab {
+            case .history: logsHistoryContent
+            case .active: activeRoutesContent
+            }
+            #else
             ScrollView {
                 VStack(spacing: 14) {
                     switch selectedTab {
@@ -75,6 +86,7 @@ public struct LogsView: View {
                 }
                 .padding(20)
             }
+            #endif
         }
         .navigationTitle("连接记录")
         #if os(macOS)
@@ -120,6 +132,25 @@ public struct LogsView: View {
                 || $0.decision.lowercased().contains(query)
         }
 
+        #if os(macOS)
+        return Table(rows, selection: $selectedLog) {
+            TableColumn("时间", value: \.time).width(ideal: 78)
+            TableColumn("应用") { Text($0.app.isEmpty ? "系统" : $0.app) }
+            TableColumn("目标", value: \.target)
+            TableColumn("协议", value: \.protocolName).width(ideal: 56)
+            TableColumn("决策", value: \.decision)
+            TableColumn("出口") { row in
+                Text(row.exit).foregroundStyle(row.failed ? Color.red : .primary)
+            }
+        }
+        .alternatingRowBackgrounds(.disabled)
+        .overlay {
+            if rows.isEmpty {
+                CollectionEmptyState(title: "暂无连接记录", systemImage: "text.magnifyingglass",
+                                     description: "启动内核后，这里显示最近的路由事件。", query: query)
+            }
+        }
+        #else
         return NativeCard(padding: 0) {
             if rows.isEmpty {
                 CollectionEmptyState(
@@ -156,6 +187,7 @@ public struct LogsView: View {
                 }
             }
         }
+        #endif
     }
 
     private var activeRoutesContent: some View {
@@ -167,6 +199,26 @@ public struct LogsView: View {
                 || $0.chains.joined(separator: " ").lowercased().contains(query)
         }
 
+        #if os(macOS)
+        return Table(rows, selection: $selectedRoute) {
+            TableColumn("应用", value: \.displayApp)
+            TableColumn("目标", value: \.displayTarget)
+            TableColumn("规则") { Text($0.rulePayload.isEmpty ? $0.rule : "\($0.rule) · \($0.rulePayload)") }
+            TableColumn("出口") { Text($0.chains.reversed().joined(separator: " → ")) }
+            TableColumn("操作") { route in
+                Button("新建规则…") { prepareRule(for: route) }
+                    .buttonStyle(.borderless)
+            }
+            .width(74)
+        }
+        .alternatingRowBackgrounds(.disabled)
+        .overlay {
+            if rows.isEmpty {
+                CollectionEmptyState(title: "当前没有活动连接", systemImage: "network",
+                                     description: "通过代理建立的连接会出现在这里。", query: query)
+            }
+        }
+        #else
         return NativeCard(padding: 0) {
             if rows.isEmpty {
                 Text("当前没有活动连接")
@@ -182,12 +234,7 @@ public struct LogsView: View {
                             subtitle: "\(route.rule)\(route.rulePayload.isEmpty ? "" : "(\(route.rulePayload))") → \(route.chains.reversed().joined(separator: " → "))"
                         ) {
                             Button("新建规则…") {
-                                prefillRule = RuleConditions(
-                                    program: route.programPath,
-                                    target: route.host.isEmpty ? route.destinationIP : route.host,
-                                    suffix: false,
-                                    port: route.port
-                                )
+                                prepareRule(for: route)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
@@ -199,6 +246,16 @@ public struct LogsView: View {
                 }
             }
         }
+        #endif
+    }
+
+    private func prepareRule(for route: ActiveRoute) {
+        prefillRule = RuleConditions(
+            program: route.programPath,
+            target: route.host.isEmpty ? route.destinationIP : route.host,
+            suffix: false,
+            port: route.port
+        )
     }
 
     private func runDomainProbe() {

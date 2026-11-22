@@ -8,6 +8,9 @@ public struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var showTunConfirm = false
+    #if os(macOS)
+    @State private var showControls = false
+    #endif
 
     public init() {}
 
@@ -57,90 +60,42 @@ public struct RootView: View {
 
     private var splitViewShell: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                #if os(macOS)
-                HStack(spacing: 9) {
-                    Image("AppBrandLogo")
-                        .resizable()
-                        .frame(width: 32, height: 32)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Xeylroute").font(.headline)
-                        Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
+            #if os(macOS)
+            sidebarNavigation
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Button {
+                        showControls.toggle()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image("AppBrandLogo").resizable().frame(width: 30, height: 30)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Xeylroute").font(.headline)
+                                Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .help("路由模式与网络接管设置")
+                    .popover(isPresented: $showControls) { macNetworkControls.frame(width: 244) }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                #else
+                .navigationTitle("Xeylroute")
+                .navigationSplitViewColumnWidth(min: 180, ideal: 204, max: 250)
+            #else
+            VStack(spacing: 0) {
                 sidebarControlHeader
                     .padding(.horizontal, 12)
                     .padding(.top, 6)
                     .padding(.bottom, 8)
-                #endif
-
-                List(selection: Binding<AppDestination?>(
-                    get: { appState.selectedDestination },
-                    set: { if let v = $0 { appState.selectedDestination = v } }
-                )) {
-                    Section("代理与路由") {
-                        navRow(.connect)
-                        navRow(.nodes, badge: appState.selectableNodes.filter { !$0.isPolicy }.count)
-                        navRow(.split, badge: appState.activeRuleCount)
-                    }
-                    Section("管理与诊断") {
-                        navRow(.logs)
-                        navRow(.subscriptions, badge: appState.profile.providers.count)
-                        navRow(.settings)
-                    }
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-
-                #if os(macOS)
-                Divider()
-                VStack(alignment: .leading, spacing: 12) {
-                    Picker("路由模式", selection: Binding(
-                        get: { appState.profile.mode },
-                        set: { mode in Task { await appState.setMode(mode) } }
-                    )) {
-                        ForEach(RoutingMode.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    Toggle(isOn: Binding(
-                        get: { appState.status.systemProxyEnabled },
-                        set: { on in Task { await appState.setSystemProxy(on) } }
-                    )) {
-                        Text("系统代理").frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Toggle(isOn: Binding(
-                        get: { appState.status.tunEnabled },
-                        set: { on in
-                            if on { showTunConfirm = true }
-                            else { Task { await appState.setTUN(false) } }
-                        }
-                    )) {
-                        Text("虚拟网卡").frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Divider()
-                    sidebarLiveFooter
-                }
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .disabled(appState.isBusy)
-                .padding(16)
-                #else
+                sidebarNavigation
                 sidebarLiveFooter
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
                     .padding(.top, 4)
-                #endif
             }
-            #if os(macOS)
-            .navigationTitle("Xeylroute")
-            .navigationSplitViewColumnWidth(min: 186, ideal: 206, max: 260)
-            #else
             .navigationSplitViewColumnWidth(min: 224, ideal: 238, max: 272)
             #endif
         } detail: {
@@ -150,6 +105,65 @@ public struct RootView: View {
         }
         .navigationSplitViewStyle(.balanced)
     }
+
+    private var sidebarNavigation: some View {
+        List(selection: Binding<AppDestination?>(
+            get: { appState.selectedDestination },
+            set: { if let v = $0 { appState.selectedDestination = v } }
+        )) {
+            Section("代理与路由") {
+                navRow(.connect)
+                navRow(.nodes, badge: appState.selectableNodes.filter { !$0.isPolicy }.count)
+                navRow(.split, badge: appState.activeRuleCount)
+            }
+            Section("管理与诊断") {
+                navRow(.logs)
+                navRow(.subscriptions, badge: appState.profile.providers.count)
+                navRow(.settings)
+            }
+        }
+        .listStyle(.sidebar)
+        #if os(iOS)
+        .scrollContentBackground(.hidden)
+        #endif
+    }
+
+    #if os(macOS)
+    private var macNetworkControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("网络控制").font(.headline)
+            Picker("路由模式", selection: Binding(
+                get: { appState.profile.mode },
+                set: { mode in Task { await appState.setMode(mode) } }
+            )) {
+                ForEach(RoutingMode.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Toggle(isOn: Binding(
+                get: { appState.status.systemProxyEnabled },
+                set: { on in Task { await appState.setSystemProxy(on) } }
+            )) {
+                Text("系统代理").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Toggle(isOn: Binding(
+                get: { appState.status.tunEnabled },
+                set: { on in
+                    if on { showControls = false; showTunConfirm = true }
+                    else { Task { await appState.setTUN(false) } }
+                }
+            )) {
+                Text("虚拟网卡").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Divider()
+            sidebarLiveFooter
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .disabled(appState.isBusy)
+        .padding(16)
+    }
+    #endif
 
     // MARK: - iPhone Native Tab Shell
 
