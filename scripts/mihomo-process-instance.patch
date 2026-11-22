@@ -1,0 +1,239 @@
+diff --git a/component/process/instance.go b/component/process/instance.go
+new file mode 100644
+index 0000000..a748170
+--- /dev/null
++++ b/component/process/instance.go
+@@ -0,0 +1,15 @@
++package process
++
++import C "github.com/metacubex/mihomo/constant"
++
++type Instance struct {
++	PID     uint32
++	Started uint64
++	Path    string
++}
++
++var matchInstance func(*C.Metadata, Instance) bool
++
++func MatchInstance(metadata *C.Metadata, instance Instance) bool {
++	return matchInstance != nil && matchInstance(metadata, instance)
++}
+diff --git a/component/process/instance_windows.go b/component/process/instance_windows.go
+new file mode 100644
+index 0000000..bfcbb3e
+--- /dev/null
++++ b/component/process/instance_windows.go
+@@ -0,0 +1,129 @@
++package process
++
++import (
++	"encoding/binary"
++	"net"
++	"net/netip"
++	"path/filepath"
++	"strings"
++
++	C "github.com/metacubex/mihomo/constant"
++	"golang.org/x/sys/windows"
++)
++
++func init() {
++	matchInstance = matchWindowsInstance
++}
++
++func matchWindowsInstance(metadata *C.Metadata, expected Instance) bool {
++	if metadata.Type == C.INNER || !metadata.SrcIP.IsValid() {
++		return false
++	}
++	tcp := metadata.NetWork == C.TCP
++	var remote netip.AddrPort
++	if tcp {
++		if metadata.Type == C.TUN {
++			addr, ok := metadata.RawDstAddr.(*net.TCPAddr)
++			if !ok {
++				return false
++			}
++			remote = addr.AddrPort()
++		} else {
++			remote = netip.AddrPortFrom(metadata.InIP, metadata.InPort)
++		}
++		if !remote.IsValid() || remote.Port() == 0 {
++			return false
++		}
++	} else if metadata.NetWork != C.UDP {
++		return false
++	}
++	once.Do(func() { _ = initWin32API() })
++	fn, class := getExUDPTable, udpTablePid
++	if tcp {
++		fn, class = getExTCPTable, tcpTablePidConn
++	}
++	if fn == 0 {
++		return false
++	}
++	source := metadata.SrcIP.Unmap().WithZone("")
++	var owner uint32
++	families := []int{windows.AF_INET6}
++	if source.Is4() {
++		families = append(families, windows.AF_INET)
++	}
++	for _, family := range families {
++		table, err := getTransportTable(fn, family, class)
++		if err != nil {
++			return false
++		}
++		layout := newSearcher(family == windows.AF_INET, tcp)
++		if !confirmOwner(table, layout, source, metadata.SrcPort, remote, expected.PID, &owner) {
++			return false
++		}
++	}
++	if owner != expected.PID {
++		return false
++	}
++	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, owner)
++	if err != nil {
++		return false
++	}
++	defer windows.CloseHandle(handle)
++	var start, exit, kernel, user windows.Filetime
++	if windows.GetProcessTimes(handle, &start, &exit, &kernel, &user) != nil ||
++		(uint64(start.HighDateTime)<<32|uint64(start.LowDateTime)) != expected.Started {
++		return false
++	}
++	path := make([]uint16, 32768)
++	size := uint32(len(path))
++	if windows.QueryFullProcessImageName(handle, 0, &path[0], &size) != nil ||
++		!strings.EqualFold(filepath.Clean(expected.Path), filepath.Clean(windows.UTF16ToString(path[:size]))) {
++		return false
++	}
++	state, err := windows.WaitForSingleObject(handle, 0)
++	return err == nil && state == uint32(windows.WAIT_TIMEOUT)
++}
++
++// A TCP owner must match both endpoints. For UDP the Windows table has only the
++// local endpoint, so a shared endpoint with another owner cannot identify an instance.
++func confirmOwner(table []byte, layout *searcher, source netip.Addr, port uint16, remote netip.AddrPort, expected uint32, owner *uint32) bool {
++	if len(table) < 4 {
++		return false
++	}
++	count := int(binary.LittleEndian.Uint32(table))
++	if count > (len(table)-4)/layout.itemSize {
++		return false
++	}
++	for i := 0; i < count; i++ {
++		at := 4 + i*layout.itemSize
++		row := table[at : at+layout.itemSize]
++		local, _ := netip.AddrFromSlice(row[layout.ip : layout.ip+layout.ipSize])
++		local = local.Unmap()
++		if binary.BigEndian.Uint16(row[layout.port:]) != port ||
++			(local != source && (remote.IsValid() || !local.IsUnspecified())) {
++			continue
++		}
++		if remote.IsValid() {
++			if binary.LittleEndian.Uint32(row[layout.tcpState:]) != 5 {
++				continue
++			}
++			// MIB_TCPROW_OWNER_PID and MIB_TCP6ROW_OWNER_PID both put the
++			// remote address just after the four-byte local port field.
++			start := layout.port + 4
++			peerIP, _ := netip.AddrFromSlice(row[start : start+layout.ipSize])
++			peerPort := layout.pid - 4
++			if layout.ipSize == 16 {
++				peerPort = layout.tcpState - 4
++			}
++			if peerIP.Unmap() != remote.Addr().Unmap().WithZone("") || binary.BigEndian.Uint16(row[peerPort:]) != remote.Port() {
++				continue
++			}
++		}
++		pid := binary.LittleEndian.Uint32(row[layout.pid:])
++		if pid != expected {
++			return false
++		}
++		*owner = pid
++	}
++	return true
++}
+diff --git a/constant/rule.go b/constant/rule.go
+index 05ea8eb..a707b9c 100644
+--- a/constant/rule.go
++++ b/constant/rule.go
+@@ -40,6 +40,7 @@ const (
+ 	AND
+ 	OR
+ 	NOT
++	ProcessInstance
+ )
+ 
+ type RuleType int
+@@ -90,6 +91,8 @@ func (rt RuleType) String() string {
+ 		return "ProcessName"
+ 	case ProcessPath:
+ 		return "ProcessPath"
++	case ProcessInstance:
++		return "ProcessInstance"
+ 	case ProcessNameRegex:
+ 		return "ProcessNameRegex"
+ 	case ProcessPathRegex:
+diff --git a/rules/common/process_instance.go b/rules/common/process_instance.go
+new file mode 100644
+index 0000000..9b6320b
+--- /dev/null
++++ b/rules/common/process_instance.go
+@@ -0,0 +1,43 @@
++package common
++
++import (
++	"encoding/base64"
++	"fmt"
++	"strconv"
++	"strings"
++
++	"github.com/metacubex/mihomo/component/process"
++	C "github.com/metacubex/mihomo/constant"
++)
++
++type ProcessInstance struct {
++	Base
++	payload  string
++	adapter  string
++	identity process.Instance
++}
++
++func (r *ProcessInstance) RuleType() C.RuleType { return C.ProcessInstance }
++func (r *ProcessInstance) Payload() string      { return r.payload }
++func (r *ProcessInstance) Adapter() string      { return r.adapter }
++
++func (r *ProcessInstance) Match(metadata *C.Metadata, _ C.RuleMatchHelper) (bool, string) {
++	return process.MatchInstance(metadata, r.identity), r.adapter
++}
++
++func NewProcessInstance(payload, adapter string) (*ProcessInstance, error) {
++	fields := strings.SplitN(payload, ":", 3)
++	if len(fields) != 3 {
++		return nil, fmt.Errorf("invalid PROCESS-INSTANCE identity")
++	}
++	pid, pidErr := strconv.ParseUint(fields[0], 10, 32)
++	started, startErr := strconv.ParseUint(fields[1], 10, 64)
++	path, pathErr := base64.RawURLEncoding.DecodeString(fields[2])
++	if pidErr != nil || startErr != nil || pathErr != nil || pid == 0 || started == 0 || len(path) == 0 {
++		return nil, fmt.Errorf("invalid PROCESS-INSTANCE identity")
++	}
++	return &ProcessInstance{
++		payload: payload, adapter: adapter,
++		identity: process.Instance{PID: uint32(pid), Started: started, Path: string(path)},
++	}, nil
++}
+diff --git a/rules/parser.go b/rules/parser.go
+index 474d01e..0a123cc 100644
+--- a/rules/parser.go
++++ b/rules/parser.go
+@@ -59,6 +59,8 @@ func ParseRule(tp, payload, target string, params []string, subRules map[string]
+ 		parsed, parseErr = RC.NewProcess(payload, target, C.ProcessName)
+ 	case "PROCESS-PATH":
+ 		parsed, parseErr = RC.NewProcess(payload, target, C.ProcessPath)
++	case "PROCESS-INSTANCE":
++		parsed, parseErr = RC.NewProcessInstance(payload, target)
+ 	case "PROCESS-NAME-REGEX":
+ 		parsed, parseErr = RC.NewProcess(payload, target, C.ProcessNameRegex)
+ 	case "PROCESS-PATH-REGEX":

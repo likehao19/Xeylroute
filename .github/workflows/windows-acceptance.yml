@@ -12,17 +12,34 @@ on:
 permissions:
   contents: read
 jobs:
-  feasibility:
+  instance:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 8
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - run: npm run core
-        shell: pwsh
-      - name: Try binding only cURL to the TUN interface
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.11'
+          cache: false
+      - name: Build the Mihomo instance matcher
         shell: pwsh
         run: |
-          $target = ((rustc -vV | Select-String '^host: ').Line -split ' ')[1]
-          python scripts/probe-network-policy.py "src-tauri/binaries/xeylroute-mihomo-${target}.exe"
+          $src = Join-Path $env:RUNNER_TEMP 'mihomo-src'
+          git clone --depth 1 --branch v1.19.34 https://github.com/MetaCubeX/mihomo.git $src
+          if ($LASTEXITCODE -ne 0 -or (git -C $src rev-parse HEAD) -ne '0455d0d28c4526937380505153e65a843d8612e8') { exit 1 }
+          git -C $src apply (Resolve-Path 'scripts/mihomo-process-instance.patch')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:CGO_ENABLED = '0'
+          $env:GOTOOLCHAIN = 'local'
+          Push-Location $src
+          try {
+            go build -p 2 -tags with_gvisor -trimpath -o "$env:RUNNER_TEMP/mihomo-instance.exe" .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+      - name: Compare two instances of the same executable
+        shell: pwsh
+        run: python scripts/smoke-windows-process-instance.py "$env:RUNNER_TEMP/mihomo-instance.exe"
