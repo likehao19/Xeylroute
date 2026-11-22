@@ -1961,7 +1961,7 @@
       padding-left: 96px;
     }
 
-    /* Linux uses client-side window controls. Windows keeps its system frame. */
+    /* Windows and Linux use client-side window controls. */
     :root.tauri-native.platform-windows .traffic-lights,
     :root.tauri-native.platform-linux .traffic-lights {
       display: none;
@@ -1981,6 +1981,7 @@
     .win-controls {
       display: none;
     }
+    :root.tauri-native.platform-windows .win-controls,
     :root.tauri-native.platform-linux .win-controls {
       display: inline-flex;
     }

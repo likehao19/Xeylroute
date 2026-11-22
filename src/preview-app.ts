@@ -133,7 +133,6 @@ export function mountPreviewApp(shell: ShellController): void {
   function renderHeaderState(): void {
     const active = currentNode();
     const cap = captureSummary();
-    $('captureIdleBanner').hidden = !!cap || !activeNodes().length;
     const modeLabel = { rule: '规则模式', global: '全局模式', direct: '直连模式' }[state.mode];
     const modeIdx = { rule: 0, global: 1, direct: 2 }[state.mode] || 0;
 
@@ -599,7 +598,6 @@ export function mountPreviewApp(shell: ShellController): void {
 
   const setSysProxy = (v: boolean) => { state.systemProxy = v; if (v) state.connected = true; renderAll(); notify(v ? '系统代理已开启' : '系统代理已关闭'); };
   const setTun = (v: boolean) => { state.tun = v; if (v) state.connected = true; renderAll(); notify(v ? '虚拟网卡 (TUN) 已开启' : '虚拟网卡 (TUN) 已关闭'); };
-  $('enableSystemProxyBtn').addEventListener('click', () => setSysProxy(true));
   $('sideSysProxy').addEventListener('change', e => setSysProxy((e.target as HTMLInputElement).checked));
   $('sideTunToggle').addEventListener('change', e => setTun((e.target as HTMLInputElement).checked));
   $('setFallbackToggle').addEventListener('change', e => {

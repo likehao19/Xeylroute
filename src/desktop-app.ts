@@ -120,10 +120,8 @@ export function mountDesktopApp(shell: ShellController): void {
   const root = document.documentElement;
   root.classList.add('tauri-native');
 
-  const dragRegions = document.querySelectorAll<HTMLElement>('[data-tauri-drag-region]');
   function applyPlatformClass(platform: 'macos' | 'windows' | 'linux'): void {
     if (root.classList.contains(`platform-${platform}`)) return;
-    dragRegions.forEach(el => el.toggleAttribute('data-tauri-drag-region', platform !== 'windows'));
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
   }
@@ -143,7 +141,7 @@ export function mountDesktopApp(shell: ShellController): void {
   $('winMaxBtn').addEventListener('click', toggleMaximize);
   $('winCloseBtn').addEventListener('click', () => { void tauriApi.windowClose(); });
   $('toolbarDragSpacer').addEventListener('dblclick', () => {
-    if (!root.classList.contains('platform-windows')) toggleMaximize();
+    toggleMaximize();
   });
 
   $('tunScopeHelp').textContent = '全局 TUN 接管系统流量，可用程序规则指定出口。';
@@ -997,8 +995,6 @@ export function mountDesktopApp(shell: ShellController): void {
     const tunInput = $<HTMLInputElement>('sideTunToggle');
     sysInput.checked = Boolean(liveStatus?.systemProxy);
     tunInput.checked = Boolean(liveStatus?.tun);
-    $('captureIdleBanner').hidden = !liveStatus?.configured || !liveStatus.available || !!liveError || sysInput.checked || tunInput.checked;
-    $<HTMLButtonElement>('enableSystemProxyBtn').disabled = networkUpdating || changingSubscription;
     sysInput.disabled = networkUpdating || changingSubscription;
     tunInput.disabled = networkUpdating || changingSubscription;
 
@@ -2807,7 +2803,6 @@ rules:
     });
   });
 
-  $('enableSystemProxyBtn').addEventListener('click', () => void performNetworkControl({ control: 'system', enabled: true }));
   $('sideSysProxy').addEventListener('change', e => {
     const input = e.target as HTMLInputElement;
     const enabled = input.checked;
