@@ -227,6 +227,7 @@ export function mountDesktopApp(shell: ShellController): void {
   $('setFallbackRow').hidden = true;
   $('exportBackupBtn').textContent = '保存备份';
   $('resetStateBtn').textContent = '恢复备份';
+  $('settingsLanguage').addEventListener('change', syncTray);
 
   function currentMode(): RoutingMode {
     return liveCore?.config?.mode || liveProfile?.mode || 'rule';
@@ -343,7 +344,7 @@ export function mountDesktopApp(shell: ShellController): void {
       ? sharedDrawerNodes().map(n => n.name).filter(name => global.all?.includes(name))
       : [];
     const payload = {
-      english: false,
+      english: document.documentElement.lang === 'en',
       configured: Boolean(liveStatus?.configured),
       running: Boolean(liveStatus?.running),
       systemProxy: Boolean(liveStatus?.systemProxy),
@@ -1195,7 +1196,7 @@ export function mountDesktopApp(shell: ShellController): void {
               <div class="mac-row-left">
                 ${renderProgramIcon(app.icon, app.name)}
                 <div style="min-width:0">
-                  <span class="mac-row-title">${esc(app.name)}</span>
+                  <span class="mac-row-title" translate="no">${esc(app.name)}</span>
                   <span class="mac-row-sub"><i class="mini-dot"></i> ${esc(app.exe)} · ${app.instances} 进程</span>
                 </div>
               </div>
@@ -1421,7 +1422,7 @@ export function mountDesktopApp(shell: ShellController): void {
     const markup = `
       <p class="section-label">本机 SOCKS5 · ${liveStatus?.running ? '内核运行中' : '内核已停止'}</p>
       <div class="mac-card flush">${rows.map(b => `
-        <div class="mac-row"><div class="mac-row-left"><div><span class="mac-row-title">${esc(b.node)}</span>
+        <div class="mac-row"><div class="mac-row-left"><div><span class="mac-row-title" translate="no">${esc(b.node)}</span>
           <div class="mac-row-sub selectable"><code>127.0.0.1:${b.port}</code><span>· ${esc(b.provider || '本地节点')}</span></div></div></div>
           <div class="port-actions">
             <button type="button" class="glass-btn-soft compact" data-clash="${b.port}">Clash 配置…</button>
@@ -1461,7 +1462,7 @@ export function mountDesktopApp(shell: ShellController): void {
             <select class="sheet-input" id="clashSocksMode"><option value="process">按程序规则</option><option value="listener">专用 SOCKS5 端口</option></select></div>
           <div class="sheet-field" id="clashProgramField"><label for="clashSocksProgram">实际联网程序</label>
             <select class="sheet-input" id="clashSocksProgram"><option value="">ChatGPT（按程序名）</option>
-              ${programs.map(program => `<option value="${esc(program.path)}">${esc(program.name)} · ${esc(program.path)}</option>`).join('')}
+              ${programs.map(program => `<option value="${esc(program.path)}" translate="no">${esc(program.name)} · ${esc(program.path)}</option>`).join('')}
             </select></div>
           <div class="sheet-field" id="clashPortField" hidden><label for="clashSocksPort">Clash 专用端口</label>
             <input type="number" class="sheet-input" id="clashSocksPort" min="1" max="65535" placeholder="填写一个未使用的端口"></div>
@@ -1824,7 +1825,7 @@ rules:
                   <div class="group-heading">
                     <span class="sq md blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
                     <div>
-                      <strong class="card-title" title="${esc(g.name)}">${esc(g.name)}</strong>
+                      <strong class="card-title" translate="no" title="${esc(g.name)}">${esc(g.name)}</strong>
                       <small style="color:var(--muted);font-size:var(--type-caption)">${members.length} 个目标 · ${esc(g.type)}${g.enabled ? '' : ' · 已停用'}</small>
                     </div>
                   </div>
@@ -1898,7 +1899,7 @@ rules:
               <div class="mac-row-left">
                 ${renderProgramIcon(item.icon, item.name)}
                 <div style="min-width:0">
-                  <span class="mac-row-title" title="${esc(item.name)}">${esc(item.name)}</span>
+                  <span class="mac-row-title" translate="no" title="${esc(item.name)}">${esc(item.name)}</span>
                   <span class="mac-row-sub" style="font-family:var(--font-mono)" title="${esc(item.path)}">${esc(item.exe)} · ${esc(metric)}</span>
                 </div>
               </div>
@@ -2137,7 +2138,7 @@ rules:
           <div class="mac-row-left">
             <span class="flag-box">${flagSvg(n.name)}</span>
             <div style="min-width:0">
-              <span class="mac-row-title">${esc(n.name)}</span>
+              <span class="mac-row-title" translate="no">${esc(n.name)}</span>
               <span class="mac-row-sub">${esc(n.type)} · 直接导入</span>
             </div>
           </div>

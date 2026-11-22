@@ -4,9 +4,11 @@ import { mountPreviewApp } from './preview-app';
 import { initShell } from './shell';
 import { isTauri } from './tauri-bridge';
 import { initGlobalPolish, initMacMenuListener } from './ui-kit';
+import { initLanguage } from './ui-language';
 
 initGlobalPolish();
 initMacMenuListener();
+initLanguage();
 
 const shell = initShell();
 
