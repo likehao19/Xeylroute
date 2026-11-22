@@ -11,12 +11,16 @@ public struct SettingsView: View {
     @State private var coreLogSheetText: String?
 
     #if os(macOS)
-    @State private var advanced = false
-    private var showGeneral: Bool { !advanced }
-    private var showAdvanced: Bool { advanced }
+    private enum Category: String, CaseIterable {
+        case general = "常规", network = "连接", tests = "测速", diagnostics = "诊断"
+    }
+    @State private var category: Category = .general
+    private var showGeneral: Bool { category == .general }
+    private var showNetwork: Bool { category == .network }
+    private var showTests: Bool { category == .tests }
+    private var showDiagnostics: Bool { category == .diagnostics }
     #else
-    private let showGeneral = true
-    private let showAdvanced = true
+    private let showGeneral = true, showNetwork = true, showTests = true, showDiagnostics = true
     #endif
 
     public var body: some View {
@@ -24,23 +28,12 @@ public struct SettingsView: View {
             .navigationTitle("网络与设置")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Button("保存备份") {
-                        Task {
-                            do {
-                                try await appState.runtime.profileStore.saveBackup()
-                                appState.notify("已保存配置备份")
-                            } catch {
-                                appState.notify(error.localizedDescription, isError: true)
-                            }
-                        }
+                    Menu {
+                        backupActions
+                    } label: {
+                        Label("配置备份", systemImage: "clock.arrow.circlepath")
                     }
-                    Button("恢复备份") {
-                        Task {
-                            await appState.mutateProfile({
-                                try await appState.runtime.profileStore.restoreBackup()
-                            }, successMessage: "已从备份恢复配置")
-                        }
-                    }
+
                 }
             }
             .onAppear {
@@ -78,21 +71,42 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var backupActions: some View {
+        Button("保存备份") {
+            Task {
+                do {
+                    try await appState.runtime.profileStore.saveBackup()
+                    appState.notify("已保存配置备份")
+                } catch {
+                    appState.notify(error.localizedDescription, isError: true)
+                }
+            }
+        }
+        Button("恢复备份") {
+            Task {
+                await appState.mutateProfile({
+                    try await appState.runtime.profileStore.restoreBackup()
+                }, successMessage: "已从备份恢复配置")
+            }
+        }
+    }
+
+    @ViewBuilder
     private var settingsForm: some View {
         #if os(macOS)
-        VStack(spacing: 0) {
-            HStack {
-                Picker("设置类别", selection: $advanced) {
-                    Text("常规").tag(false)
-                    Text("高级").tag(true)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Picker("设置类别", selection: $category) {
+                    ForEach(Category.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 160)
-                Spacer()
+                .fixedSize()
+                preferenceSections
             }
-            .workspaceControlBar()
-            Form { preferenceSections }.formStyle(.grouped)
+            .frame(maxWidth: 740, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity)
         }
         #else
         ScrollView {
@@ -182,8 +196,8 @@ public struct SettingsView: View {
             }
         }
 
-        if showAdvanced {
-            preferenceSection("监听与测速") {
+        if showNetwork {
+            preferenceSection("本机连接") {
                 if appState.runtime.supportsSystemProxy {
                     preferenceRow(
                         title: "本地监听端口",
@@ -207,6 +221,7 @@ public struct SettingsView: View {
                     }
                 }
 
+                if appState.runtime.supportsSystemProxy { preferenceDivider() }
                 preferenceRow(title: "IPv6 出站", subtitle: "允许内核使用 IPv6 地址建立出站连接。") { EmptyView() } trailing: {
                     Toggle("", isOn: coreSettingBinding(\.ipv6))
                         .labelsHidden()
@@ -218,31 +233,14 @@ public struct SettingsView: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                 }
-                preferenceDivider()
+            }
+        }
+        if showTests {
+            preferenceSection("节点测速") {
                 preferenceRow(title: "统一延迟测试", subtitle: "复用已建立的连接测量延迟，减少握手误差。") { EmptyView() } trailing: {
                     Toggle("", isOn: coreSettingBinding(\.unifiedDelay))
                         .labelsHidden()
                         .toggleStyle(.switch)
-                }
-                preferenceDivider()
-                preferenceRow(title: "内核日志级别", subtitle: "日常可选「信息」，排查连接问题可切换为「调试」。") { EmptyView() } trailing: {
-                    HStack(spacing: 8) {
-                        Button("查看日志") {
-                            Task { coreLogSheetText = await appState.runtime.readCoreLogTail() }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Picker("日志级别", selection: coreSettingBinding(\.logLevel)) {
-                            Text("调试").tag("debug")
-                            Text("信息").tag("info")
-                            Text("警告").tag("warning")
-                            Text("错误").tag("error")
-                            Text("静默").tag("silent")
-                        }
-                        .labelsHidden()
-                        .frame(width: 96)
-                    }
                 }
                 preferenceDivider()
                 preferenceRow(title: "延迟测试服务", subtitle: "用于手动测量节点延迟，批量测试支持自定义并发与超时。") { EmptyView() } trailing: {
@@ -273,6 +271,30 @@ public struct SettingsView: View {
                         .frame(width: 90)
                     }
                 }
+            }
+        }
+        if showDiagnostics {
+            preferenceSection("日志") {
+                preferenceRow(title: "内核日志级别", subtitle: "日常可选「信息」，排查连接问题可切换为「调试」。") { EmptyView() } trailing: {
+                    HStack(spacing: 8) {
+                        Button("查看日志") {
+                            Task { coreLogSheetText = await appState.runtime.readCoreLogTail() }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Picker("日志级别", selection: coreSettingBinding(\.logLevel)) {
+                            Text("调试").tag("debug")
+                            Text("信息").tag("info")
+                            Text("警告").tag("warning")
+                            Text("错误").tag("error")
+                            Text("静默").tag("silent")
+                        }
+                        .labelsHidden()
+                        .frame(width: 96)
+                    }
+                }
+
             }
 
             preferenceSection("网络详情与内核") {
@@ -331,7 +353,13 @@ public struct SettingsView: View {
     @ViewBuilder
     private func preferenceSection<Rows: View>(_ title: String, @ViewBuilder rows: () -> Rows) -> some View {
         #if os(macOS)
-        Section { rows() } header: { Text(title) }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.title3.weight(.semibold)).padding(.bottom, 5)
+            VStack(alignment: .leading, spacing: 0) { rows() }
+                .padding(.horizontal, 14)
+                .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        }
         #else
         VStack(alignment: .leading, spacing: 8) {
             SectionHeaderBar(title)
@@ -345,26 +373,39 @@ public struct SettingsView: View {
         title: String, subtitle: String, @ViewBuilder leading: () -> Icon, @ViewBuilder trailing: () -> Control
     ) -> some View {
         #if os(macOS)
-        LabeledContent {
-            trailing()
-        } label: {
-            HStack(spacing: 10) {
-                leading()
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                preferenceLabel(title, subtitle: subtitle)
+                Spacer(minLength: 12)
+                trailing().fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 9) {
+                preferenceLabel(title, subtitle: subtitle)
+                trailing()
             }
         }
+        .padding(.vertical, 13)
         #else
         GroupedRow(title: title, subtitle: subtitle, leading: leading, trailing: trailing)
         #endif
     }
 
+    #if os(macOS)
+    private func preferenceLabel(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.body.weight(.medium))
+            Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    #endif
+
     @ViewBuilder
     private func preferenceDivider(inset: CGFloat = 16) -> some View {
         #if os(iOS)
         HairlineDivider(inset: inset)
+        #else
+        Divider()
         #endif
     }
 

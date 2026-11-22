@@ -270,7 +270,8 @@ public final class AppState {
         if status.tunEnabled { return "虚拟网卡运行中" }
         if status.systemProxyEnabled { return "系统代理已开启" }
         if status.running { return "仅本地监听" }
-        return status.configured ? "未连接" : "待导入配置"
+        if status.configured { return "未连接" }
+        return profile.providers.isEmpty ? "待导入配置" : "等待订阅节点"
     }
 
     // MARK: - Refresh

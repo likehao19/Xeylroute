@@ -21,6 +21,95 @@ extension View {
     }
 }
 
+#if os(macOS)
+struct WorkspaceSearch: View {
+    @Binding var query: String
+    let prompt: String
+    @State private var expanded = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        if expanded || !query.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField(prompt, text: $query)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .accessibilityLabel(prompt)
+                    .onExitCommand { close() }
+                Button(action: close) { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel("关闭搜索")
+            }
+            .frame(width: 182)
+            .padding(.horizontal, 5)
+            .onAppear { focused = true }
+        } else {
+            Button {
+                expanded = true
+            } label: {
+                Label(prompt, systemImage: "magnifyingglass")
+            }
+            .keyboardShortcut("f")
+            .help(prompt)
+        }
+    }
+
+    private func close() {
+        query = ""
+        expanded = false
+        focused = false
+    }
+}
+
+/// A route preview for pages where the user has not added any entries yet.
+struct RouteSetupPanel: View {
+    let title: String
+    let detail: String
+    let source: String
+    let destination: String
+    let sourceIcon: String
+    let destinationIcon: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                endpoint(source, icon: sourceIcon)
+                Rectangle().fill(.teal.opacity(0.35)).frame(height: 1)
+                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.teal)
+                endpoint(destination, icon: destinationIcon)
+            }
+            .padding(24)
+            .background(LinearGradient(colors: [.teal.opacity(0.13), .indigo.opacity(0.07)], startPoint: .leading, endPoint: .trailing))
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title).font(.title2.weight(.semibold))
+                Text(detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(actionTitle, action: action)
+                    .buttonStyle(.borderedProminent).padding(.top, 5)
+            }
+            .padding(24)
+        }
+        .background(.background, in: RoundedRectangle(cornerRadius: 15))
+        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.separator))
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.top, 36)
+    }
+
+    private func endpoint(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 11).padding(.vertical, 8)
+            .background(.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+#endif
+
 public struct SectionHeaderBar<Trailing: View>: View {
     let title: String
     let trailing: Trailing

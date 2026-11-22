@@ -58,18 +58,16 @@ public struct ConnectView: View {
         let configured = appState.status.configured
         return ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 14) {
-                    Image("AppBrandLogo").resizable().frame(width: 56, height: 56)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(configured ? appState.statusBadgeTitle : "添加网络配置")
-                            .font(.largeTitle.bold())
-                        Text(configured ? (appState.status.running ? "本地监听已启动" : "开启系统代理后即可连接。") : "从服务商复制订阅地址，或打开已有配置文件。")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
                 if configured {
+                    HStack(spacing: 12) {
+                        Image(systemName: "network")
+                            .font(.title).foregroundStyle(.teal)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appState.statusBadgeTitle).font(.title.bold())
+                            Text(appState.status.running ? "本地监听已启动" : "开启系统代理后即可连接。")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 0) {
                         Toggle(isOn: Binding(
                             get: { appState.status.systemProxyEnabled },
@@ -127,11 +125,36 @@ public struct ConnectView: View {
                     }
                     .background(.background, in: RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+                } else if !appState.profile.providers.isEmpty {
+                    RouteSetupPanel(title: "订阅已保存，等待节点",
+                                    detail: "节点就绪后即可连接。在订阅管理中可以查看获取进度，或重试失败的订阅。",
+                                    source: "订阅来源", destination: "代理节点",
+                                    sourceIcon: "square.stack.3d.up", destinationIcon: "network",
+                                    actionTitle: "查看订阅") { appState.selectedDestination = .subscriptions }
                 } else {
-                    ConnectionSourceEditor()
-                        .padding(20)
-                        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 18) {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text("导入网络配置").font(.system(size: 27, weight: .semibold))
+                                Text("粘贴服务商提供的链接，或打开本地配置文件。")
+                                    .font(.body).foregroundStyle(.white.opacity(0.83))
+                            }
+                            Spacer()
+                            Image(systemName: "square.and.arrow.down.on.square")
+                                .font(.system(size: 35, weight: .light))
+                                .accessibilityHidden(true)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(24)
+                        .background(LinearGradient(colors: [Color(red: 0.12, green: 0.21, blue: 0.27),
+                                                           Color(red: 0.15, green: 0.33, blue: 0.36)],
+                                                   startPoint: .leading, endPoint: .trailing))
+                        ConnectionSourceEditor().padding(24)
+                    }
+                    .background(.background)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
+                    .padding(.top, 20)
                 }
                 if appState.status.running || !appState.trafficTracker.samples.isEmpty {
                     Divider()

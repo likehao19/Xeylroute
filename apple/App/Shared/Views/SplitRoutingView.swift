@@ -94,10 +94,12 @@ public struct SplitRoutingView: View {
             #endif
         }
         .navigationTitle("分流与程序")
-        #if os(macOS)
-        .searchable(text: $filterText, placement: .toolbar, prompt: selectedTab == .apps ? "搜索应用或路径" : "搜索规则或分组")
-        #endif
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .automatic) {
+                WorkspaceSearch(query: $filterText, prompt: selectedTab == .apps ? "搜索应用或路径" : "搜索规则或分组")
+            }
+            #endif
             ToolbarItemGroup(placement: .primaryAction) {
                 if selectedTab == .rules {
                     Button("生效顺序") {
@@ -159,6 +161,7 @@ public struct SplitRoutingView: View {
 
     // MARK: - Rules
 
+    @ViewBuilder
     private var rulesListContent: some View {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let items = appState.profile.rules.filter { rule in
@@ -166,26 +169,37 @@ public struct SplitRoutingView: View {
         }
 
         #if os(macOS)
-        return Table(items, selection: $selectedRule) {
-            TableColumn("匹配条件") { rule in
-                Label(rule.payload.isEmpty ? rule.kind : rule.payload, systemImage: iconForRule(rule))
+        if items.isEmpty {
+            if query.isEmpty {
+                ScrollView {
+                    RouteSetupPanel(title: "为特定流量指定出口",
+                                    detail: "规则从上到下匹配。你可以让某个网站走代理，也可以让一个应用始终直连。",
+                                    source: "应用或地址", destination: "指定出口",
+                                    sourceIcon: "macwindow", destinationIcon: "arrow.up.right",
+                                    actionTitle: "创建分流规则…") {
+                        editingRule = nil
+                        showAddRule = true
+                    }
+                }
+            } else {
+                ContentUnavailableView.search(text: filterText)
             }
-            TableColumn("类型", value: \.kind).width(ideal: 105)
-            TableColumn("出口", value: \.exit).width(ideal: 82)
-            TableColumn("操作") { rule in
-                HStack(spacing: 10) { ruleControls(rule) }
+        } else {
+            Table(items, selection: $selectedRule) {
+                TableColumn("匹配条件") { rule in
+                    Label(rule.payload.isEmpty ? rule.kind : rule.payload, systemImage: iconForRule(rule))
+                }
+                TableColumn("类型", value: \.kind).width(ideal: 105)
+                TableColumn("出口", value: \.exit).width(ideal: 82)
+                TableColumn("操作") { rule in
+                    HStack(spacing: 10) { ruleControls(rule) }
+                }
+                .width(106)
             }
-            .width(106)
-        }
-        .alternatingRowBackgrounds(.disabled)
-        .overlay {
-            if items.isEmpty {
-                CollectionEmptyState(title: "暂无分流规则", systemImage: "arrow.triangle.branch",
-                                     description: "添加规则，为应用或目标地址指定出口。", query: query)
-            }
+            .alternatingRowBackgrounds(.disabled)
         }
         #else
-        return NativeCard(padding: 0) {
+        NativeCard(padding: 0) {
             if items.isEmpty {
                 CollectionEmptyState(
                     title: "暂无分流规则",
@@ -478,47 +492,88 @@ public struct RuleEditorSheet: View {
 
     public var body: some View {
         NavigationStack {
-            Form {
-                if appState.runtime.supportsProcessRouting {
-                    Section("应用（可选）") {
-                        HStack {
-                            TextField("/Applications/.../MacOS/...", text: $conditions.program)
-                            #if os(macOS)
-                            Button("选取应用…") {
-                                pickExecutable()
+            Group {
+                #if os(macOS)
+                VStack(alignment: .leading, spacing: 18) {
+                    Label("匹配条件", systemImage: "line.3.horizontal.decrease")
+                        .font(.headline)
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 14) {
+                        GridRow {
+                            Text("目标地址")
+                            TextField("例如 example.com 或 192.168.1.0/24", text: $conditions.target)
+                                .frame(maxWidth: .infinity)
+                        }
+                        GridRow {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                            Toggle("包含子域名", isOn: $conditions.suffix)
+                                .toggleStyle(.checkbox)
+                        }
+                        if appState.runtime.supportsProcessRouting {
+                            GridRow {
+                                Text("应用")
+                                HStack {
+                                    TextField("应用或可执行文件路径", text: $conditions.program)
+                                    Button("选取…") { pickExecutable() }
+                                }
                             }
-                            #endif
+                        }
+                        GridRow {
+                            Text("目标端口")
+                            TextField("例如 443 或 8000-8999", text: $conditions.port)
+                        }
+                    }
+                    .textFieldStyle(.roundedBorder)
+                    Divider()
+                    HStack {
+                        Label("出口策略", systemImage: "arrow.turn.up.right").font(.headline)
+                        Spacer()
+                        Picker("出口策略", selection: $selectedExit) {
+                            ForEach(appState.profile.exits, id: \.self) { Text($0).tag($0) }
+                        }.labelsHidden().frame(maxWidth: 185)
+                    }
+                    Text(errorText ?? validationHint ?? "流量符合以上全部条件时，使用所选出口。")
+                        .font(.callout).foregroundStyle(errorText == nil ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                #else
+                Form {
+                    if appState.runtime.supportsProcessRouting {
+                        Section("应用（可选）") {
+                            TextField("可执行文件路径", text: $conditions.program)
+                        }
+                    }
+
+                    Section("目标地址（可选）") {
+                        TextField("域名、网址、IP 或 CIDR 网段", text: $conditions.target)
+                        Toggle("包括该域名的子域名", isOn: $conditions.suffix)
+                    }
+
+                    Section("目标端口（可选）") {
+                        TextField("例如 443 或 8000-8999", text: $conditions.port)
+                    }
+
+                    Section("出口策略") {
+                        Picker("匹配时使用", selection: $selectedExit) {
+                            ForEach(appState.profile.exits, id: \.self) { exit in
+                                Text(exit).tag(exit)
+                            }
+                        }
+                    }
+
+                    if let validationHint {
+                        Text(validationHint).font(.callout).foregroundStyle(.secondary)
+                    }
+                    if let errorText {
+                        Section {
+                            Text(errorText).foregroundStyle(.red).font(.caption)
                         }
                     }
                 }
-
-                Section("目标地址（可选）") {
-                    TextField("域名、网址、IP 或 CIDR 网段", text: $conditions.target)
-                    Toggle("包括该域名的子域名", isOn: $conditions.suffix)
-                }
-
-                Section("目标端口（可选）") {
-                    TextField("例如 443 或 8000-8999", text: $conditions.port)
-                }
-
-                Section("出口策略") {
-                    Picker("匹配时使用", selection: $selectedExit) {
-                        ForEach(appState.profile.exits, id: \.self) { exit in
-                            Text(exit).tag(exit)
-                        }
-                    }
-                }
-
-                if let validationHint {
-                    Text(validationHint).font(.callout).foregroundStyle(.secondary)
-                }
-                if let errorText {
-                    Section {
-                        Text(errorText).foregroundStyle(.red).font(.caption)
-                    }
-                }
+                .formStyle(.grouped)
+                #endif
             }
-            .formStyle(.grouped)
             .navigationTitle(existing == nil ? "添加分流规则" : "编辑分流规则")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -547,7 +602,11 @@ public struct RuleEditorSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(width: 520, height: 410)
+        #else
         .frame(minWidth: 460, minHeight: 380)
+        #endif
     }
 
     #if os(macOS)

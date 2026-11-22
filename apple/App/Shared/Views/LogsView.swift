@@ -91,10 +91,12 @@ public struct LogsView: View {
             #endif
         }
         .navigationTitle("连接记录")
-        #if os(macOS)
-        .searchable(text: $filterText, placement: .toolbar, prompt: "搜索应用、目标或出口")
-        #endif
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .automatic) {
+                WorkspaceSearch(query: $filterText, prompt: "搜索应用、目标或出口")
+            }
+            #endif
             ToolbarItemGroup(placement: .primaryAction) {
                 if selectedTab == .active {
                     Button {

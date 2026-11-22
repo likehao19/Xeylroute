@@ -23,6 +23,8 @@ public struct NodesView: View {
     @State private var showAddSocksSheet = false
     @State private var clashSnippetBinding: FixedSocksBinding?
 
+    private var hasBindableNodes: Bool { appState.selectableNodes.contains { !$0.isPolicy } }
+
     private var availableTabs: [NodesTab] {
         appState.runtime.supportsFixedSocks ? NodesTab.allCases : [.groups, .sites]
     }
@@ -66,7 +68,17 @@ public struct NodesView: View {
             .workspaceControlBar()
 
             #if os(macOS)
-            if selectedTab == .groups && appState.status.configured {
+            if selectedTab == .socks && appState.profile.fixedSocks.isEmpty && filterText.isEmpty {
+                ScrollView {
+                    RouteSetupPanel(title: "为应用保留一个固定出口",
+                                    detail: "把本机端口绑定到一个节点。其他应用可以通过这个端口连接，切换默认节点时仍使用原出口。",
+                                    source: "本机端口", destination: "固定节点",
+                                    sourceIcon: "desktopcomputer", destinationIcon: "network",
+                                    actionTitle: hasBindableNodes ? "创建 SOCKS5 入口…" : "先导入节点…") {
+                        if hasBindableNodes { showAddSocksSheet = true } else { showImport = true }
+                    }
+                }
+            } else if selectedTab == .groups && appState.status.configured {
                 macNodeTable
             } else {
                 tabContent
@@ -76,10 +88,12 @@ public struct NodesView: View {
             #endif
         }
         .navigationTitle("代理组与节点")
-        #if os(macOS)
-        .searchable(text: $filterText, placement: .toolbar, prompt: selectedTab == .sites ? "搜索网站" : (selectedTab == .socks ? "搜索节点、端口或订阅" : "搜索节点或协议"))
-        #endif
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .automatic) {
+                WorkspaceSearch(query: $filterText, prompt: selectedTab == .sites ? "搜索网站" : (selectedTab == .socks ? "搜索节点、端口或订阅" : "搜索节点或协议"))
+            }
+            #endif
             ToolbarItemGroup(placement: .primaryAction) {
                 switch selectedTab {
                 case .groups:
@@ -106,6 +120,7 @@ public struct NodesView: View {
                     } label: {
                         Label("添加固定入口", systemImage: "plus")
                     }
+                    .disabled(!hasBindableNodes)
                     .buttonStyle(.borderedProminent)
                 }
             }

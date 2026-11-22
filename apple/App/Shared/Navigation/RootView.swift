@@ -80,10 +80,10 @@ public struct RootView: View {
                     }
                     .buttonStyle(.plain)
                     .help("路由模式与网络接管设置")
-                    .popover(isPresented: $showControls) { macNetworkControls.frame(width: 244) }
+                    .popover(isPresented: $showControls) { macNetworkControls.frame(width: 278) }
                 }
                 .navigationTitle("Xeylroute")
-                .navigationSplitViewColumnWidth(min: 180, ideal: 204, max: 250)
+                .navigationSplitViewColumnWidth(min: 168, ideal: 186, max: 216)
             #else
             VStack(spacing: 0) {
                 sidebarControlHeader
@@ -131,7 +131,15 @@ public struct RootView: View {
     #if os(macOS)
     private var macNetworkControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("网络控制").font(.headline)
+            HStack(spacing: 10) {
+                Image(systemName: "switch.2").font(.title2).foregroundStyle(.teal)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("网络控制").font(.headline)
+                    Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Divider()
+            Text("路由模式").font(.caption.weight(.medium)).foregroundStyle(.secondary)
             Picker("路由模式", selection: Binding(
                 get: { appState.profile.mode },
                 set: { mode in Task { await appState.setMode(mode) } }
@@ -140,11 +148,13 @@ public struct RootView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .frame(maxWidth: .infinity)
+            Divider()
             Toggle(isOn: Binding(
                 get: { appState.status.systemProxyEnabled },
                 set: { on in Task { await appState.setSystemProxy(on) } }
             )) {
-                Text("系统代理").frame(maxWidth: .infinity, alignment: .leading)
+                Label("系统代理", systemImage: "globe").frame(maxWidth: .infinity, alignment: .leading)
             }
             Toggle(isOn: Binding(
                 get: { appState.status.tunEnabled },
@@ -153,11 +163,12 @@ public struct RootView: View {
                     else { Task { await appState.setTUN(false) } }
                 }
             )) {
-                Text("虚拟网卡").frame(maxWidth: .infinity, alignment: .leading)
+                Label("虚拟网卡", systemImage: "shield.lefthalf.filled").frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
             sidebarLiveFooter
         }
+        .tint(.accentColor)
         .toggleStyle(.switch)
         .controlSize(.small)
         .disabled(appState.isBusy)
@@ -314,8 +325,13 @@ public struct RootView: View {
     @ViewBuilder
     private func navRow(_ dest: AppDestination, badge: Int? = nil) -> some View {
         #if os(macOS)
-        Label(dest.title, systemImage: dest.systemImage)
-            .symbolVariant(.none)
+        Label {
+            Text(dest.title)
+        } icon: {
+            Image(systemName: dest.systemImage)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(appState.selectedDestination == dest ? Color.primary : Color.secondary)
+        }
             .badge(badge ?? 0)
             .padding(.vertical, 3)
             .tag(dest)
