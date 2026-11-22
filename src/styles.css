@@ -424,33 +424,6 @@
       text-overflow: ellipsis;
     }
 
-    /* Recessed macOS Search Capsule with ⌘K Keycap */
-    .glass-search {
-      position: relative;
-      display: flex;
-      align-items: center;
-      height: 30px;
-      border-radius: 999px;
-      background: var(--well-bg);
-      box-shadow: inset 0 0 0 0.5px var(--well-stroke), inset 0 1px 2px rgba(0, 0, 0, 0.12);
-      padding: 0 8px 0 10px;
-      gap: 6px;
-      transition: background 0.16s ease, box-shadow 0.16s ease;
-    }
-    .glass-search:focus-within {
-      background: var(--card-surface-hover);
-      box-shadow: 0 0 0 2.5px var(--accent-soft), inset 0 0 0 0.5px var(--accent);
-    }
-    .glass-search svg { width: 13px; height: 13px; color: var(--muted); flex: none; }
-    .glass-search input {
-      width: 100%;
-      border: 0;
-      background: transparent;
-      outline: none;
-      font-size: var(--type-label);
-      color: var(--ink);
-    }
-    .glass-search input::placeholder { color: var(--muted); }
     .kbd-hint {
       font-family: var(--font-ui);
       font-size: var(--type-caption);
@@ -464,24 +437,6 @@
       flex: none;
       letter-spacing: 0.02em;
     }
-    .glass-search:focus-within .kbd-hint { opacity: 0; }
-    .search-clear-btn {
-      width: 16px;
-      height: 16px;
-      border: 0;
-      border-radius: 50%;
-      background: var(--subtle);
-      color: var(--window-bg);
-      display: none;
-      place-items: center;
-      padding: 0;
-      flex: none;
-      font-size: var(--type-caption);
-      font-weight: 700;
-    }
-    .glass-search.has-value .search-clear-btn { display: inline-grid; }
-    .glass-search.has-value .kbd-hint { display: none; }
-
     /* Authentic macOS Segmented Control with Spring-Sliding Glass Thumb */
     .mode-pill {
       position: relative;
@@ -2319,13 +2274,13 @@
       #homeSubCard { grid-area: subscription; }
       .home-traffic { grid-area: traffic; }
       .home-connections { grid-area: connections; }
-      .mac-window:not(:has(#searchWrap.has-value)) #homeQuickNodes { display: none; }
-      .mac-window:not(:has(#searchWrap.has-value)) .spotlight-bar {
+      .mac-window #homeQuickNodes { display: none; }
+      .mac-window .spotlight-bar {
         margin-bottom: 0;
         border-bottom: 0;
         padding-bottom: 0;
       }
-      .mac-window:not(:has(#searchWrap.has-value)) .node-card-foot { margin-top: 10px; }
+      .mac-window .node-card-foot { margin-top: 10px; }
       .node-pills-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .t-cell strong { font-size: var(--type-body); }
       .t-cell span { font-size: var(--type-caption); }
@@ -2596,7 +2551,7 @@
     .platform-windows .glass-circle:hover { background: var(--node-hover); }
     .platform-windows .online-pill { padding-inline: 6px; color: var(--muted); }
     .platform-windows .online-pill .dot { box-shadow: none; }
-    .platform-windows :is(.glass-btn-primary, .glass-btn-soft, .glass-btn-danger, .glass-search, .mac-popup-btn, .port-chip, .sheet-input, .sheet-textarea) {
+    .platform-windows :is(.glass-btn-primary, .glass-btn-soft, .glass-btn-danger, .mac-popup-btn, .port-chip, .sheet-input, .sheet-textarea) {
       border-radius: var(--radius-control);
     }
     .platform-windows .glass-btn-primary {
@@ -2627,18 +2582,6 @@
     .platform-windows .glass-btn-primary:disabled { cursor: default; }
 
     /* Search, Segmented Mode Control & Quick Tiles */
-    .platform-windows .glass-search {
-      height: 32px;
-      background: var(--win-ctrl-bg);
-      border: 1px solid var(--win-ctrl-border);
-      border-bottom-color: var(--win-ctrl-border-bottom);
-      box-shadow: none;
-    }
-    .platform-windows .glass-search:focus-within {
-      background: var(--card-surface);
-      border-color: var(--win-ctrl-border);
-      box-shadow: inset 0 -2px 0 var(--win-accent);
-    }
     .platform-windows .mode-pill {
       height: 31px;
       border-radius: 7px;
@@ -2977,23 +2920,19 @@
     .platform-macos #view-settings .glass-btn-soft:disabled { color: var(--muted); }
     .platform-macos .port-chip { border-radius: 6px; }
 
-    .platform-macos :is(.sheet-input, .sheet-textarea, .settings-select, .glass-search input, .port-chip input) {
+    .platform-macos :is(.sheet-input, .sheet-textarea, .settings-select, .port-chip input) {
       -webkit-appearance: none; appearance: none; font-family: var(--font-ui); color: var(--ink);
     }
     .platform-macos .sheet-textarea {
       min-height: 112px; border-radius: var(--radius-card); padding: 11px 13px; line-height: 1.55;
     }
     .platform-macos .sheet-input { border-radius: var(--radius-control); }
-    .platform-macos :is(.glass-search, .port-chip):focus-within,
+    .platform-macos :is(.port-chip):focus-within,
     .platform-macos :is(.sheet-input, .sheet-textarea):focus {
       outline: 2px solid var(--focus-ring); outline-offset: 2px;
     }
     .platform-macos :is(.sheet-input,.sheet-textarea)::placeholder { color: var(--muted); }
     .platform-macos .port-chip input { font-family: var(--font-mono); }
-
-    .mac-window:has(#view-connect.active) .sidebar-live-top,
-    .mac-window:has(#view-connect.active) .sidebar-wave-bg { display: none; }
-    .mac-window:has(#view-connect.active) .sidebar-core-foot { margin-top: 0; border-top: 0; padding-top: 0; }
 
     .settings-fields { min-width: 0; margin: 0 0 18px; }
     .settings-fields .mac-row > div { min-width: 0; }
@@ -3153,7 +3092,6 @@ details[open] > summary > .rule-disclosure { transform: rotate(90deg); }
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 #portSearch { margin-bottom: 12px; }
-.mac-window:has(#view-nodes.active #portSearch:not([hidden])) #searchWrap { display: none; }
 #fixedSocksPane .mac-row, #splitProcsPane .mac-row, #splitRulesPane .mac-row:has(.rule-right-cols) {
   display: grid; grid-template-columns: minmax(0,1fr) auto;
 }

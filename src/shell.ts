@@ -62,13 +62,6 @@ export function initShell(): ShellController {
     else delete settings.dataset.detail;
     if (viewId !== currentView) syncSearch('');
     currentView = viewId;
-    $('searchWrap').hidden = viewId === 'split';
-    if (isTauri()) {
-      const input = $<HTMLInputElement>('globalSearchInput');
-      input.placeholder = { connect: '搜索节点或应用', nodes: '搜索节点、分组或网站', split: '搜索当前列表',
-        logs: '搜索应用、地址或出口', subs: '搜索订阅或独立节点', settings: '搜索当前页面的设置' }[viewId];
-      input.setAttribute('aria-label', input.placeholder);
-    }
     document.querySelectorAll<HTMLElement>('#sidebarNav .nav-item').forEach(b =>
       b.classList.toggle('active', !detail && b.dataset.view === viewId)
     );
@@ -98,10 +91,9 @@ export function initShell(): ShellController {
     if ($('macWindow').inert && e.key !== 'Escape') return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      const input = document.querySelector<HTMLInputElement>('.view.active .list-search:not([hidden])') ?? $<HTMLInputElement>('globalSearchInput');
-      if (input.id === 'globalSearchInput') $('macWindow').classList.remove('sidebar-collapsed');
-      input.focus();
-      input.select();
+      const input = document.querySelector<HTMLInputElement>('.view.active .list-search:not([hidden])');
+      input?.focus();
+      input?.select();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       toggleSidebar();
@@ -128,23 +120,17 @@ export function initShell(): ShellController {
 
   function syncSearch(query: string): void {
     globalSearch = query;
-    for (const id of ['globalSearchInput', 'ruleSearch', 'portSearch']) {
+    for (const id of ['ruleSearch', 'portSearch']) {
       const input = $<HTMLInputElement>(id);
       if (input.value !== query) input.value = query;
     }
-    $('searchWrap').classList.toggle('has-value', Boolean(query));
   }
-  for (const id of ['globalSearchInput', 'ruleSearch', 'portSearch']) {
+  for (const id of ['ruleSearch', 'portSearch']) {
     $(id).addEventListener('input', e => {
       syncSearch((e.target as HTMLInputElement).value);
       for (const cb of searchListeners) cb(globalSearch);
     });
   }
-  $('searchClearBtn').addEventListener('click', () => {
-    syncSearch('');
-    for (const cb of searchListeners) cb(globalSearch);
-  });
-
   $('settingsThemeSeg').addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-set-theme]');
     if (b?.dataset.setTheme === 'dark' || b?.dataset.setTheme === 'light' || b?.dataset.setTheme === 'auto') {
@@ -154,8 +140,6 @@ export function initShell(): ShellController {
 
   const isMac = /mac/i.test(`${navigator.platform || ''} ${navigator.userAgent || ''}`);
   const modKey = isMac ? '⌘' : 'Ctrl+';
-  const kbdSearch = document.querySelector<HTMLElement>('#searchWrap .kbd-hint');
-  if (kbdSearch) kbdSearch.textContent = isMac ? '⌘K' : 'Ctrl K';
   $('sidebarCollapseBtn').dataset.tip = `隐藏边栏 (${modKey}S)`;
   $('sidebarExpandBtn').dataset.tip = `显示边栏 (${modKey}S)`;
 
@@ -169,7 +153,7 @@ export function initShell(): ShellController {
           <div><strong style="color:var(--ink)">规则优先级：</strong>${isTauri() ? '首条匹配生效。打开「分流与程序 → 生效顺序」可查看当前订阅的实际顺序。' : '显式 REJECT &gt; 显式 DIRECT &gt; 进程 &gt; 软件 &gt; 精确域名 &gt; 通配域名 &gt; 默认出口'}</div>
           <div><strong style="color:var(--ink)">Scoped TUN：</strong>${isTauri() ? '支持接管全部流量或指定目标。打开「虚拟网卡」可查看当前接管范围。' : '规则模式下仅接管勾选 TUN 的分组或程序。'}</div>
           <div><strong style="color:var(--ink)">导入支持：</strong>HTTPS 订阅链接、单/多条分享链接（vless / trojan / ss / vmess / hy2 / tuic / Base64），以及第三方 YAML / JSON 完整配置。</div>
-          <div><strong style="color:var(--ink)">快捷键：</strong><kbd class="kbd-hint">${modKey}K</kbd> 全局搜索 · <kbd class="kbd-hint">${modKey}S</kbd> 收起/展开边栏 · <kbd class="kbd-hint">Esc</kbd> 关闭浮层</div>
+          <div><strong style="color:var(--ink)">快捷键：</strong><kbd class="kbd-hint">${modKey}K</kbd> 当前列表搜索 · <kbd class="kbd-hint">${modKey}S</kbd> 收起/展开边栏 · <kbd class="kbd-hint">Esc</kbd> 关闭浮层</div>
         </div>
       `,
       actionsHtml: `<button type="button" class="glass-btn-primary compact" id="sheetCloseHelp">完成</button>`,
