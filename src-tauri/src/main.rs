@@ -114,6 +114,7 @@ struct CoreStatus {
     system_proxy: bool,
     tun: bool,
     tun_scope: String,
+    selected_tun_available: bool,
     http_port: Option<u16>,
     dns_mode: Option<&'static str>,
     tun_dns_hijack: bool,
@@ -259,6 +260,7 @@ fn status(dir: &Path, child: &mut Option<CoreProcess>) -> Result<CoreStatus, Str
         running: is_running,
         tun: is_running && facts.tun,
         tun_scope: configured_tun_scope(dir),
+        selected_tun_available: selected_tun_available(dir),
         system_proxy: system_proxy::is_owned_cached(dir)?,
         http_port: facts.http,
         dns_mode: facts.dns_mode.filter(|_| is_running),
@@ -438,7 +440,10 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
         settings.insert("store-selected".into(), Value::Bool(true));
     }
     if tun {
-        normalized["tun"] = global_tun_config(&configured)?;
+        if profile::tun_scope(&configured) == "selected" && !selected_tun_available(&dir) {
+            return Err("指定软件 TUN 需要 Windows x64 和随安装包提供的签名驱动。".into());
+        }
+        normalized["tun"] = tun_config(&configured)?;
     }
     let management = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).map_err(|err| err.to_string())?;
     let endpoint = management.local_addr().map_err(|err| err.to_string())?;
@@ -495,7 +500,7 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
                     &[],
                     None,
                 ))
-                .is_ok_and(|config| config["tun"]["enable"] == true);
+                .is_ok_and(|config| tun_matches(&config["tun"], &normalized["tun"]));
                 if !ready {
                     thread::sleep(Duration::from_millis(120));
                     continue;
@@ -556,11 +561,48 @@ fn local_worker(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn global_tun_config(configured: &Value) -> Result<Value, String> {
-    if profile::tun_scope(configured) == "selected" {
-        return Err("此内核支持全局 TUN。仅指定程序接管暂不可用，请在设置中明确选择全局范围。".into());
+fn selected_tun_available(dir: &Path) -> bool {
+    cfg!(all(windows, target_arch = "x86_64"))
+        && core_binary(dir).is_some_and(|binary| {
+            binary.parent().is_some_and(|folder| {
+                folder.join("WinDivert.dll").is_file() && folder.join("WinDivert64.sys").is_file()
+            })
+        })
+}
+
+fn tun_config(configured: &Value) -> Result<Value, String> {
+    let mut tun = runtime_tuning::tun_inbound();
+    if profile::tun_scope(configured) != "selected" {
+        return Ok(tun);
     }
-    Ok(runtime_tuning::tun_inbound())
+    if !cfg!(all(windows, target_arch = "x86_64")) {
+        return Err("当前平台支持全局 TUN。指定软件 TUN 需要 Windows x64。".into());
+    }
+    tun["stack"] = serde_json::json!("gvisor");
+    tun["auto-route"] = serde_json::json!(false);
+    tun["auto-detect-interface"] = serde_json::json!(false);
+    tun["windows-process-capture"] = serde_json::json!(true);
+    tun["windows-process-paths"] = serde_json::json!(profile::selected_tun_paths(configured));
+    Ok(tun)
+}
+
+fn tun_matches(actual: &Value, expected: &Value) -> bool {
+    if actual["enable"] != expected["enable"] {
+        return false;
+    }
+    let selected = expected["windows-process-capture"] == true;
+    if (actual["windows-process-capture"] == true) != selected {
+        return false;
+    }
+    if !selected {
+        return true;
+    }
+    let paths = |value: &Value| {
+        value["windows-process-paths"].as_array().into_iter().flatten()
+            .filter_map(Value::as_str).map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    paths(actual) == paths(expected) && actual["auto-route"] == false
 }
 
 /// The configuration Mihomo actually runs: the saved profile narrowed to the active subscription,
@@ -998,16 +1040,22 @@ fn update_profile(
                 &fs::read(dir.join("routepilot-validated.json")).map_err(|err| err.to_string())?,
             )
             .map_err(|err| err.to_string())?;
-            if validated["tun"]["enable"] == true {
-                global_tun_config(&config)?;
+            let active_tun = validated["tun"]["enable"] == true;
+            let previous_tun = active_tun.then(|| tun_config(&original)).transpose()?;
+            let next_tun = active_tun.then(|| tun_config(&config)).transpose()?;
+            if next_tun.as_ref().is_some_and(|value| value["windows-process-capture"] == true)
+                && !selected_tun_available(&dir)
+            {
+                return Err("未找到指定软件 TUN 的签名驱动。".into());
             }
+            let tun_changed = previous_tun != next_tun;
             let prepared = serde_json::to_string_pretty(&config).map_err(|err| err.to_string())?;
             validate_config(&prepared)?;
             let temporary = dir.join("mihomo.json.tmp");
             let mode_changed = config.get("mode") != original.get("mode");
             // Mihomo supports PATCH for these fields. Unified delay and providers need a reload.
             let patch_key = ["mode", "ipv6", "tcp-concurrent", "log-level"].into_iter().find(|&key| {
-                if config.get(key) == original.get(key) {
+                if tun_changed || config.get(key) == original.get(key) {
                     return false;
                 }
                 let mut previous = original.clone();
@@ -1033,12 +1081,10 @@ fn update_profile(
                             Some(serde_json::json!({(key):value})),
                         ));
                     }
-                    let mut runtime =
-                        runtime_config(raw, validated["tun"]["enable"] == true)?;
+                    let mut runtime = runtime_config(raw, active_tun)?;
                     for key in [
                         "bind-address",
                         "allow-lan",
-                        "tun",
                         "external-controller",
                         "secret",
                         "profile",
@@ -1046,6 +1092,9 @@ fn update_profile(
                         if let Some(value) = validated.get(key) {
                             runtime[key] = value.clone();
                         }
+                    }
+                    if let Some(tun) = if restoring { &previous_tun } else { &next_tun } {
+                        runtime["tun"] = tun.clone();
                     }
                     if restoring || !mode_changed {
                         runtime["mode"] = get["mode"].clone();
@@ -1061,8 +1110,26 @@ fn update_profile(
                 };
                 let request = reload(&config, false)?;
                 fs::write(&temporary, prepared).map_err(|err| err.to_string())?;
-                if let Err(error) = request.await {
+                let mut applied = request.await.map(|_| ());
+                if applied.is_ok() && tun_changed {
+                    applied = controller.request(reqwest::Method::GET, &["configs"], &[], None)
+                        .await.and_then(|status| {
+                            if tun_matches(&status["tun"], next_tun.as_ref().unwrap()) {
+                                Ok(())
+                            } else {
+                                Err("内核未启用请求的 TUN 接管范围。".into())
+                            }
+                        });
+                }
+                if let Err(error) = applied {
                     let _ = fs::remove_file(&temporary);
+                    if tun_changed {
+                        let recovery = reload(&original, true)?.await;
+                        return Err(match recovery {
+                            Ok(_) => format!("TUN 设置未能应用，已恢复原配置：{error}"),
+                            Err(err) => format!("TUN 设置未能应用，回滚失败：{error} / {err}"),
+                        });
+                    }
                     return Err(format!("内核未能应用配置：{error}"));
                 }
                 let persist = new_ports.iter().try_for_each(|port| fixed_socks::verify_listener(*port))
@@ -1748,7 +1815,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{global_tun_config, log_tail, parse_runtime_facts, sanitize_imported_config, subscription_usage, validate_config};
+    use super::{log_tail, parse_runtime_facts, sanitize_imported_config, subscription_usage, tun_config, validate_config};
 
     #[test]
     fn tail_limits_large_logs_by_bytes_and_lines() {
@@ -1764,9 +1831,16 @@ mod tests {
     #[test]
     fn selected_scope_never_starts_global_tun() {
         for mode in ["global", "direct", "rule"] {
-            assert!(global_tun_config(&serde_json::json!({
+            let tun = tun_config(&serde_json::json!({
                 "mode": mode, "routepilot-tun-scope": "selected"
-            })).is_err());
+            }));
+            if cfg!(all(windows, target_arch = "x86_64")) {
+                let tun = tun.unwrap();
+                assert_eq!(tun["auto-route"], false);
+                assert_eq!(tun["windows-process-capture"], true);
+            } else {
+                assert!(tun.is_err());
+            }
         }
     }
 

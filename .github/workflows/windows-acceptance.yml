@@ -36,6 +36,13 @@ jobs:
           python scripts/smoke-routing.py $core
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/smoke-windows-process-instance.py $core
+      - name: Verify signed driver and selected software TUN
+        if: ${{ inputs.runner == 'windows-2022' }}
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature src-tauri/binaries/WinDivert64.sys
+          if ($sig.Status -ne 'Valid') { throw "WinDivert signature: $($sig.Status)" }
+          python scripts/smoke-windows-process-tun.py src-tauri/binaries/xeylroute-mihomo-x86_64-pc-windows-msvc.exe
       - name: Build frontend
         run: npm ci && npm run build
         shell: cmd

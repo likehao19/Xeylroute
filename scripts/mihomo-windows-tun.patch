@@ -1,0 +1,449 @@
+diff --git a/component/process/instance_windows.go b/component/process/instance_windows.go
+index bfcbb3e..f2f0763 100644
+--- a/component/process/instance_windows.go
++++ b/component/process/instance_windows.go
+@@ -40,24 +40 @@ func matchWindowsInstance(metadata *C.Metadata, expected Instance) bool {
+-	once.Do(func() { _ = initWin32API() })
+-	fn, class := getExUDPTable, udpTablePid
+-	if tcp {
+-		fn, class = getExTCPTable, tcpTablePidConn
+-	}
+-	if fn == 0 {
+-		return false
+-	}
+-	source := metadata.SrcIP.Unmap().WithZone("")
+-	var owner uint32
+-	families := []int{windows.AF_INET6}
+-	if source.Is4() {
+-		families = append(families, windows.AF_INET)
+-	}
+-	for _, family := range families {
+-		table, err := getTransportTable(fn, family, class)
+-		if err != nil {
+-			return false
+-		}
+-		layout := newSearcher(family == windows.AF_INET, tcp)
+-		if !confirmOwner(table, layout, source, metadata.SrcPort, remote, expected.PID, &owner) {
+-			return false
+-		}
+-	}
++	owner := WindowsSocketOwner(netip.AddrPortFrom(metadata.SrcIP, metadata.SrcPort), remote, tcp, true)
+@@ -86,0 +64,32 @@ func matchWindowsInstance(metadata *C.Metadata, expected Instance) bool {
++func WindowsSocketOwner(local, remote netip.AddrPort, tcp, establishedOnly bool) uint32 {
++	once.Do(func() { _ = initWin32API() })
++	fn, class := getExUDPTable, udpTablePid
++	if tcp {
++		fn, class = getExTCPTable, tcpTablePidConn
++	}
++	if fn == 0 {
++		return 0
++	}
++	source := local.Addr().Unmap().WithZone("")
++	var owner uint32
++	families := []int{windows.AF_INET6}
++	if source.Is4() {
++		families = append(families, windows.AF_INET)
++	}
++	for _, family := range families {
++		table, err := getTransportTable(fn, family, class)
++		if err != nil {
++			return 0
++		}
++		layout := newSearcher(family == windows.AF_INET, tcp)
++		if !confirmOwner(table, layout, source, local.Port(), remote, establishedOnly, &owner) {
++			return 0
++		}
++	}
++	return owner
++}
++
++func WindowsProcessImage(pid uint32) (string, error) {
++	return getExecPathFromPID(pid)
++}
++
+@@ -89 +98 @@ func matchWindowsInstance(metadata *C.Metadata, expected Instance) bool {
+-func confirmOwner(table []byte, layout *searcher, source netip.Addr, port uint16, remote netip.AddrPort, expected uint32, owner *uint32) bool {
++func confirmOwner(table []byte, layout *searcher, source netip.Addr, port uint16, remote netip.AddrPort, establishedOnly bool, owner *uint32) bool {
+@@ -107 +116,2 @@ func confirmOwner(table []byte, layout *searcher, source netip.Addr, port uint16
+-			if binary.LittleEndian.Uint32(row[layout.tcpState:]) != 5 {
++			state := binary.LittleEndian.Uint32(row[layout.tcpState:])
++			if state < 3 || (establishedOnly && state != 5) {
+@@ -123 +133 @@ func confirmOwner(table []byte, layout *searcher, source netip.Addr, port uint16
+-		if pid != expected {
++		if *owner != 0 && *owner != pid {
+diff --git a/config/config.go b/config/config.go
+index cc8c101..25ba1cd 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -310,0 +311,2 @@ type RawTun struct {
++	WindowsProcessCapture                 bool           `yaml:"windows-process-capture" json:"windows-process-capture,omitempty"`
++	WindowsProcessPaths                   []string       `yaml:"windows-process-paths" json:"windows-process-paths,omitempty"`
+@@ -1731,0 +1734,2 @@ func parseTun(rawTun RawTun, dns *DNS, general *General) error {
++		WindowsProcessCapture:                 rawTun.WindowsProcessCapture,
++		WindowsProcessPaths:                   rawTun.WindowsProcessPaths,
+diff --git a/listener/config/tun.go b/listener/config/tun.go
+index 3cfa17a..7c9dd52 100644
+--- a/listener/config/tun.go
++++ b/listener/config/tun.go
+@@ -49,0 +50,2 @@ type Tun struct {
++	WindowsProcessCapture                 bool           `yaml:"windows-process-capture" json:"windows-process-capture,omitempty"`
++	WindowsProcessPaths                   []string       `yaml:"windows-process-paths" json:"windows-process-paths,omitempty"`
+@@ -89,0 +92 @@ func (t *Tun) Sort() {
++	slices.Sort(t.WindowsProcessPaths)
+@@ -197,0 +201,3 @@ func (t *Tun) Equal(other Tun) bool {
++	if t.WindowsProcessCapture != other.WindowsProcessCapture || !slices.Equal(t.WindowsProcessPaths, other.WindowsProcessPaths) {
++		return false
++	}
+diff --git a/listener/sing_tun/process_capture_windows_amd64.go b/listener/sing_tun/process_capture_windows_amd64.go
+new file mode 100644
+index 0000000..d3bdc2e
+--- /dev/null
++++ b/listener/sing_tun/process_capture_windows_amd64.go
+@@ -0,0 +1,329 @@
++//go:build with_gvisor
++
++package sing_tun
++
++import (
++	"context"
++	"encoding/binary"
++	"errors"
++	"fmt"
++	"net/netip"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"time"
++	"unsafe"
++
++	"github.com/metacubex/gvisor/pkg/buffer"
++	"github.com/metacubex/gvisor/pkg/tcpip"
++	"github.com/metacubex/gvisor/pkg/tcpip/header"
++	"github.com/metacubex/gvisor/pkg/tcpip/link/channel"
++	"github.com/metacubex/gvisor/pkg/tcpip/stack"
++	"github.com/metacubex/mihomo/component/process"
++	"github.com/metacubex/mihomo/log"
++	tun "github.com/metacubex/sing-tun"
++	"golang.org/x/sys/windows"
++)
++
++// WINDIVERT_ADDRESS, with the network-layer interface indices at the start of its union.
++type divertAddress struct {
++	timestamp int64
++	flags     uint32
++	reserved  uint32
++	iface     uint32
++	subIface  uint32
++	data      [56]byte
++}
++
++const (
++	divertOutbound        = 1 << 17
++	divertIPv6            = 1 << 20
++	divertShutdownReceive = 1
++	protoTCP              = 6
++	protoUDP              = 17
++)
++
++type processFlow struct {
++	source, destination netip.AddrPort
++	protocol            byte
++}
++
++type processDecision struct {
++	address divertAddress
++	at      time.Time
++	useTun  bool
++}
++
++type processTun struct {
++	ctx                                          context.Context
++	cancel                                       context.CancelFunc
++	handle                                       uintptr
++	dll                                          *windows.DLL
++	recv, send, shutdown, closeHandle, checksums *windows.Proc
++	paths                                        map[string]struct{}
++	ownPath                                      string
++	endpoint                                     *channel.Endpoint
++	flows                                        map[processFlow]processDecision
++	flowsMu                                      sync.Mutex
++	start                                        sync.Once
++	stop                                         sync.Once
++	workers                                      sync.WaitGroup
++	cleanupAfter                                 time.Time
++}
++
++var _ tun.GVisorTun = (*processTun)(nil)
++
++func init() {
++	windowsProcessTun = openProcessTun
++}
++
++func pathKey(path string) string {
++	return strings.ToLower(filepath.Clean(path))
++}
++
++func openProcessTun(options tun.Options, paths []string) (tun.Tun, error) {
++	executable, err := os.Executable()
++	if err != nil {
++		return nil, err
++	}
++	dll, err := windows.LoadDLL(filepath.Join(filepath.Dir(executable), "WinDivert.dll"))
++	if err != nil {
++		return nil, fmt.Errorf("load signed capture driver library: %w", err)
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	device := &processTun{
++		ctx: ctx, cancel: cancel, dll: dll, paths: make(map[string]struct{}, len(paths)),
++		ownPath: pathKey(executable), endpoint: channel.New(256, options.MTU, ""),
++		flows: make(map[processFlow]processDecision),
++	}
++	for _, path := range paths {
++		device.paths[pathKey(path)] = struct{}{}
++	}
++	var open *windows.Proc
++	for _, proc := range []struct {
++		name string
++		out  **windows.Proc
++	}{
++		{"WinDivertOpen", &open}, {"WinDivertRecv", &device.recv}, {"WinDivertSend", &device.send},
++		{"WinDivertShutdown", &device.shutdown}, {"WinDivertClose", &device.closeHandle},
++		{"WinDivertHelperCalcChecksums", &device.checksums},
++	} {
++		*proc.out, err = dll.FindProc(proc.name)
++		if err != nil {
++			cancel()
++			dll.Release()
++			return nil, err
++		}
++	}
++	filter := "false"
++	if len(paths) > 0 {
++		filter = "outbound and !loopback and !impostor and (tcp or udp) and ((ip and ip.DstAddr < 224.0.0.0) or (ipv6 and ipv6.DstAddr < ff00::))"
++	}
++	filterPtr, _ := windows.BytePtrFromString(filter)
++	handle, _, callErr := open.Call(uintptr(unsafe.Pointer(filterPtr)), 0, 0, 0)
++	if handle == uintptr(windows.InvalidHandle) {
++		cancel()
++		dll.Release()
++		return nil, fmt.Errorf("start signed capture driver: %w", callErr)
++	}
++	device.handle = handle
++	return device, nil
++}
++
++type processEndpoint struct {
++	*channel.Endpoint
++	device *processTun
++}
++
++func (e *processEndpoint) Attach(dispatcher stack.NetworkDispatcher) {
++	e.Endpoint.Attach(dispatcher)
++	if dispatcher == nil {
++		return
++	}
++	e.device.start.Do(func() {
++		e.device.workers.Add(2)
++		go e.device.receive()
++		go e.device.sendQueued()
++	})
++}
++
++func (t *processTun) NewEndpoint() (stack.LinkEndpoint, stack.NICOptions, error) {
++	return &processEndpoint{t.endpoint, t}, stack.NICOptions{}, nil
++}
++
++func (t *processTun) Read([]byte) (int, error) {
++	return 0, errors.ErrUnsupported
++}
++
++func (t *processTun) Close() error {
++	t.stop.Do(func() {
++		t.cancel()
++		t.shutdown.Call(t.handle, divertShutdownReceive)
++		t.workers.Wait()
++		t.endpoint.Close()
++		t.closeHandle.Call(t.handle)
++		t.dll.Release()
++	})
++	return nil
++}
++
++func readProcessFlow(packet []byte) (flow processFlow, newTCP bool, ok bool) {
++	if len(packet) < 20 {
++		return
++	}
++	var source, destination netip.Addr
++	var offset int
++	switch packet[0] >> 4 {
++	case 4:
++		offset = int(packet[0]&15) * 4
++		if offset < 20 || offset > len(packet) || binary.BigEndian.Uint16(packet[6:8])&0x3fff != 0 {
++			return
++		}
++		source = netip.AddrFrom4([4]byte(packet[12:16]))
++		destination = netip.AddrFrom4([4]byte(packet[16:20]))
++		flow.protocol = packet[9]
++	case 6:
++		if len(packet) < 40 {
++			return
++		}
++		source = netip.AddrFrom16([16]byte(packet[8:24]))
++		destination = netip.AddrFrom16([16]byte(packet[24:40]))
++		offset, flow.protocol = 40, packet[6]
++		for flow.protocol == 0 || flow.protocol == 43 || flow.protocol == 60 {
++			if len(packet) < offset+8 {
++				return
++			}
++			flow.protocol, offset = packet[offset], offset+(int(packet[offset+1])+1)*8
++		}
++	default:
++		return
++	}
++	if flow.protocol == protoTCP {
++		if len(packet) < offset+20 {
++			return
++		}
++		newTCP = packet[offset+13]&0x12 == 0x02
++	} else if flow.protocol != protoUDP || len(packet) < offset+8 {
++		return
++	}
++	flow.source = netip.AddrPortFrom(source, binary.BigEndian.Uint16(packet[offset:]))
++	flow.destination = netip.AddrPortFrom(destination, binary.BigEndian.Uint16(packet[offset+2:]))
++	return flow, newTCP, true
++}
++
++func (t *processTun) shouldCapture(flow processFlow, newTCP bool, address divertAddress) bool {
++	now := time.Now()
++	t.flowsMu.Lock()
++	if now.After(t.cleanupAfter) {
++		for key, state := range t.flows {
++			if now.Sub(state.at) > 5*time.Minute {
++				delete(t.flows, key)
++			}
++		}
++		t.cleanupAfter = now.Add(time.Minute)
++	}
++	state, cached := t.flows[flow]
++	if cached && flow.protocol == protoTCP && !newTCP {
++		t.flows[flow] = processDecision{address, now, state.useTun}
++		t.flowsMu.Unlock()
++		return state.useTun
++	}
++	t.flowsMu.Unlock()
++	peer := flow.destination
++	if flow.protocol == protoUDP {
++		peer = netip.AddrPort{}
++	}
++	owner := process.WindowsSocketOwner(flow.source, peer, flow.protocol == protoTCP, false)
++	image, err := process.WindowsProcessImage(owner)
++	key := pathKey(image)
++	_, selected := t.paths[key]
++	selected = selected && err == nil && key != t.ownPath
++	t.flowsMu.Lock()
++	if cached || len(t.flows) < 16384 {
++		t.flows[flow] = processDecision{address, now, selected}
++	}
++	t.flowsMu.Unlock()
++	return selected
++}
++
++func (t *processTun) receive() {
++	defer t.workers.Done()
++	var address divertAddress
++	var received uint32
++	packet := make([]byte, 65576)
++	for {
++		result, _, err := t.recv.Call(t.handle, uintptr(unsafe.Pointer(&packet[0])), uintptr(len(packet)),
++			uintptr(unsafe.Pointer(&received)), uintptr(unsafe.Pointer(&address)))
++		if result == 0 {
++			if t.ctx.Err() == nil {
++				log.Fatalln("Process TUN receive stopped: %v", err)
++			}
++			return
++		}
++		data := packet[:received]
++		flow, newTCP, ok := readProcessFlow(data)
++		if t.ctx.Err() != nil || !ok || !t.shouldCapture(flow, newTCP, address) {
++			_ = t.inject(data, &address)
++			continue
++		}
++		t.checksums.Call(uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)), uintptr(unsafe.Pointer(&address)), 0)
++		protocol := tcpip.NetworkProtocolNumber(header.IPv4ProtocolNumber)
++		if address.flags&divertIPv6 != 0 {
++			protocol = header.IPv6ProtocolNumber
++		}
++		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(data), IsForwardedPacket: true})
++		t.endpoint.InjectInbound(protocol, pkt)
++		pkt.DecRef()
++	}
++}
++
++func (t *processTun) sendQueued() {
++	defer t.workers.Done()
++	for {
++		pkt := t.endpoint.ReadContext(t.ctx)
++		if pkt == nil {
++			return
++		}
++		_, _ = t.WritePacket(pkt)
++		pkt.DecRef()
++	}
++}
++
++func (t *processTun) WritePacket(pkt *stack.PacketBuffer) (int, error) {
++	view := pkt.ToView()
++	defer view.Release()
++	return t.Write(view.AsSlice())
++}
++
++func (t *processTun) Write(packet []byte) (int, error) {
++	flow, _, ok := readProcessFlow(packet)
++	if !ok {
++		return 0, nil
++	}
++	flow.source, flow.destination = flow.destination, flow.source
++	t.flowsMu.Lock()
++	state, known := t.flows[flow]
++	t.flowsMu.Unlock()
++	if !known || !state.useTun {
++		return 0, nil
++	}
++	address := state.address
++	address.flags &^= divertOutbound
++	t.checksums.Call(uintptr(unsafe.Pointer(&packet[0])), uintptr(len(packet)), uintptr(unsafe.Pointer(&address)), 0)
++	if err := t.inject(packet, &address); err != nil {
++		return 0, err
++	}
++	return len(packet), nil
++}
++
++func (t *processTun) inject(packet []byte, address *divertAddress) error {
++	if len(packet) == 0 {
++		return nil
++	}
++	result, _, err := t.send.Call(t.handle, uintptr(unsafe.Pointer(&packet[0])), uintptr(len(packet)), 0, uintptr(unsafe.Pointer(address)))
++	if result == 0 {
++		return err
++	}
++	return nil
++}
+diff --git a/listener/sing_tun/server.go b/listener/sing_tun/server.go
+index 5415b25..c52397f 100644
+--- a/listener/sing_tun/server.go
++++ b/listener/sing_tun/server.go
+@@ -41,0 +42,2 @@ var EnforceBindInterface = false
++var windowsProcessTun func(tun.Options, []string) (tun.Tun, error)
++
+@@ -486 +488,9 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
+-	tunIf, err := tunNew(tunOptions)
++	var tunIf tun.Tun
++	if options.WindowsProcessCapture {
++		if windowsProcessTun == nil || options.AutoRoute || options.AutoRedirect || !strings.EqualFold(options.Stack.String(), "gvisor") {
++			return nil, E.New("Windows process capture requires x64, gVisor and disabled system routes")
++		}
++		tunIf, err = windowsProcessTun(tunOptions, options.WindowsProcessPaths)
++	} else {
++		tunIf, err = tunNew(tunOptions)
++	}

@@ -152,7 +152,6 @@ export function mountDesktopApp(shell: ShellController): void {
     if (e.target === e.currentTarget) toggleMaximize();
   });
 
-  $('tunScopeHelp').textContent = '全局 TUN 接管系统流量，可用程序规则指定出口。';
   const sites = createSiteCatalog(true);
   const telemetry = new TelemetryVisualizer(false);
   telemetry.bindInteractions();
@@ -306,7 +305,9 @@ export function mountDesktopApp(shell: ShellController): void {
     const parts: string[] = [];
     if (liveStatus?.systemProxy) parts.push('系统代理');
     if (liveStatus?.tun) {
-      parts.push(liveProfile?.tunScope === 'selected' ? '指定目标 TUN' : '全局 TUN');
+      parts.push(liveProfile?.tunScope === 'selected'
+        ? (currentMode() === 'rule' ? '指定软件 TUN' : '指定软件 TUN（已暂停）')
+        : '全局 TUN');
     }
     return parts.join(' + ');
   }
@@ -779,10 +780,12 @@ export function mountDesktopApp(shell: ShellController): void {
       if (action.control === 'tun') {
         if (action.enabled === current.tun) return;
         if (action.enabled) {
-          if (current.tunScope === 'selected') throw new Error('仅指定程序接管暂不可用。需要全局 TUN 时，请先在设置中更改范围。');
+          if (current.tunScope === 'selected' && !current.selectedTunAvailable) {
+            throw new Error('指定软件 TUN 需要 Windows x64 和随安装包提供的签名驱动。');
+          }
           const accepted = await confirmSheet({
             title: '开启虚拟网卡 (TUN)',
-            message: tunElevationMessage(current.platform, liveProfile?.tunScope),
+            message: tunElevationMessage(current.platform, current.tunScope),
             confirmLabel: '继续授权',
             tone: 'cyan',
           });
@@ -1782,6 +1785,8 @@ rules:
                   ${live?.type === 'Selector' && live.all?.length
                     ? macPopupBtnHtml({ value: curExit, label: exitDisplayLabel(curExit), width: 162, popupKind: 'group-exit', popupKey: g.name })
                     : `<span class="pill blue">${esc(exitDisplayLabel(curExit))}</span>`}
+                  ${liveStatus?.selectedTunAvailable && liveProfile?.tunScope === 'selected'
+                    ? `<label class="mac-row-sub">TUN <span class="mac-switch"><input type="checkbox" data-group-tun="${esc(g.name)}" ${liveProfile.tunGroups.includes(g.name) ? 'checked' : ''}><i></i></span></label>` : ''}
                 </div>
                 <details style="border-top:0.5px solid var(--inset-divider);padding-top:9px;font-size:var(--type-label)">
                   <summary style="cursor:pointer;color:var(--accent);font-weight:var(--weight-control)">管理组成员 (${members.length})</summary>
@@ -1814,6 +1819,7 @@ rules:
     );
     const groupNamesSet = new Set((liveProfile?.groups || []).map(g => g.name));
     const canEditInstance = liveStatus?.platform === 'windows';
+    const canEditTun = liveStatus?.selectedTunAvailable && liveProfile?.tunScope === 'selected';
     const pathRules = programPathExits();
     const matchQuery = (item: RunningProcess) =>
       !q || [item.name, item.exe, item.path, String(item.pid)].some(v => v.toLowerCase().includes(q));
@@ -1857,6 +1863,12 @@ rules:
                   label: instanceExit ? `本次 · ${exitDisplayLabel(instanceExit)}` : '本次运行',
                   popupKind: 'process-instance-exit',
                   popupKey: `${item.pid}:${item.startedAt}`,
+                }) : ''}
+                ${canEditTun && isApp ? macPopupBtnHtml({
+                  value: programTunPreference(item.path),
+                  label: `TUN ${TUN_PREFERENCES[programTunPreference(item.path)]}`,
+                  popupKind: 'program-tun',
+                  popupKey: item.path,
                 }) : ''}
                 <button type="button" class="sf-icon-btn" data-proc-detail-pid="${item.pid}" data-proc-detail-mode="${procScanType}" data-tip="${isApp ? '查看所属进程' : '查看线程详情'}">${SF_DETAIL}</button>
               </div>
@@ -2168,12 +2180,24 @@ rules:
     $<HTMLFieldSetElement>('probeSettingsFields').disabled = batchTesting || liveTesting.size > 0;
     const scope = liveProfile?.tunScope || liveStatus?.tunScope || 'all';
     const scopeHost = $('setTunScopeHost');
-    if (scopeHost.dataset.scope !== scope) {
-      scopeHost.dataset.scope = scope;
-      scopeHost.innerHTML = scope === 'selected'
+    const canSelect = Boolean(liveStatus?.selectedTunAvailable);
+    const scopeKey = `${scope}:${canSelect}`;
+    if (scopeHost.dataset.scope !== scopeKey) {
+      scopeHost.dataset.scope = scopeKey;
+      scopeHost.innerHTML = canSelect
+        ? macPopupBtnHtml({ value: scope, label: scope === 'selected' ? '仅指定分组和程序' : '全部受支持流量',
+          popupKind: 'tun-scope' })
+        : scope === 'selected'
         ? '<button type="button" class="glass-btn-soft" data-popup-kind="tun-scope">改用全局范围</button>'
         : '<span class="scope-value">全部受支持流量</span>';
     }
+    $('tunScopeHelp').textContent = scope === 'selected' && canSelect
+      ? '规则模式下接管所选软件的 TCP 和 UDP。可在「分流与程序」设置。'
+      : '全局 TUN 接管系统流量，可用程序规则指定出口。';
+    $('tunWorkHelp').textContent = scope === 'selected' && canSelect
+      ? '签名驱动按可执行文件路径接管，系统默认路由保持原设置。'
+      : '开启后自动设置路由、选择出口接口，并接管进入网卡的 53 端口 DNS 请求。';
+    $('tunStackLabel').textContent = scope === 'selected' && canSelect ? 'gVisor 协议栈' : 'Mixed 协议栈';
 
     const isRunning = Boolean(liveStatus?.running);
     const mixIn = $<HTMLInputElement>('portMixedInput');
@@ -2658,6 +2682,13 @@ rules:
     if (!existing) $<HTMLInputElement>('gsName').focus();
   }
 
+  const TUN_PREFERENCES = { inherit: '继承', on: '开启', off: '关闭' } as const;
+
+  function programTunPreference(path: string): keyof typeof TUN_PREFERENCES {
+    const key = programRuleKey(path);
+    return Object.entries(liveProfile?.tunTargets || {}).find(([target]) => programRuleKey(target) === key)?.[1] ?? 'inherit';
+  }
+
   function findInstanceRule(instance: ProcessInstance): number {
     return liveProfile?.ruleInstances?.findIndex(rule => rule?.pid === instance.pid
       && rule.startedAt === instance.startedAt && rule.path === instance.path) ?? -1;
@@ -3086,7 +3117,27 @@ rules:
       }
 
       if (kind === 'tun-scope') {
-        await commitProfileEdit({ kind: 'tunScope', scope: 'all' }, '已选择全局 TUN 范围');
+        if (!liveStatus?.selectedTunAvailable) {
+          await commitProfileEdit({ kind: 'tunScope', scope: 'all' }, '已选择全局 TUN 范围');
+          return;
+        }
+        openMacMenu(popTrigger, [
+          { value: 'all', label: '全部受支持流量' },
+          { value: 'selected', label: '仅指定分组和程序' },
+        ], val, scope => {
+          if (scope !== 'all' && scope !== 'selected') return;
+          void commitProfileEdit({ kind: 'tunScope', scope }, 'TUN 接管范围已保存');
+        });
+        return;
+      }
+
+      if (kind === 'program-tun') {
+        const scope = liveProfile?.subscriptionScope ?? '';
+        openMacMenu(popTrigger, Object.entries(TUN_PREFERENCES).map(([value, label]) => ({ value, label })),
+          val, mode => {
+            if (mode !== 'inherit' && mode !== 'on' && mode !== 'off') return;
+            void commitProfileEdit({ kind: 'setRuleTun', target: key, mode }, '程序 TUN 设置已保存', scope);
+          });
         return;
       }
 
@@ -3294,6 +3345,12 @@ rules:
   // Delegated switches
   document.addEventListener('change', e => {
     const input = e.target as HTMLInputElement;
+    if (input.dataset.groupTun !== undefined) {
+      const enabled = input.checked;
+      input.checked = !enabled;
+      void commitProfileEdit({ kind: 'toggleGroupTun', name: input.dataset.groupTun, enabled }, '分组 TUN 设置已保存');
+      return;
+    }
     if (input.dataset.toggleRuleIdx !== undefined) {
       const enabled = input.checked;
       input.checked = !enabled;

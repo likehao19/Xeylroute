@@ -1,5 +1,5 @@
 // Prepares the pinned Mihomo sidecar in src-tauri/binaries/. Windows builds from the
-// pinned source with the process-instance rule. Other targets use the official archive.
+// pinned source with the process routing patches. Other targets use the official archive.
 //
 //   node scripts/fetch-core.mjs [--target <rust-triple>]
 // Cached archives are verified against the official release digest on every build.
@@ -115,10 +115,45 @@ function download(url) {
   ], { maxBuffer: MAX_ARCHIVE_BYTES });
 }
 
+function verifiedDownload(name, url, expected) {
+  const cache = path.join(OUT_DIR, name);
+  let archive = fs.existsSync(cache) ? fs.readFileSync(cache) : null;
+  if (!archive || sha256(archive) !== expected) {
+    console.log(`Downloading ${name} ...`);
+    archive = download(url);
+    if (sha256(archive) !== expected) throw new Error(`SHA-256 mismatch for ${name}.`);
+    const temporary = `${cache}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, archive);
+    fs.renameSync(temporary, cache);
+  }
+  return { cache, archive };
+}
+
+function prepareWinDivert(lock) {
+  const { version, binary, source } = lock.winDivert;
+  const name = `WinDivert-${version.slice(1)}-A`;
+  const { cache } = verifiedDownload(`${name}.zip`,
+    `https://github.com/basil00/WinDivert/releases/download/${version}/${name}.zip`, binary);
+  verifiedDownload('WinDivert-source.tar.gz',
+    `https://codeload.github.com/basil00/WinDivert/tar.gz/refs/tags/${version}`, source);
+  for (const [file, member] of [
+    ['WinDivert.dll', 'x64/WinDivert.dll'], ['WinDivert64.sys', 'x64/WinDivert64.sys'],
+    ['WinDivert-LICENSE.txt', 'LICENSE'],
+  ]) {
+    const destination = path.join(OUT_DIR, file);
+    const contents = execFileSync('tar', ['-xOf', cache, `${name}/${member}`]);
+    if (!fs.existsSync(destination) || !contents.equals(fs.readFileSync(destination))) {
+      fs.writeFileSync(destination, contents);
+    }
+  }
+}
+
 function buildWindowsCore(triple, lock) {
   const { revision, go } = lock.windowsSource;
-  const patch = path.join(ROOT, 'scripts', 'mihomo-process-instance.patch');
-  const buildKey = sha256(`${revision}:${go}:${triple}:${sha256(fs.readFileSync(patch))}`);
+  const patches = ['mihomo-process-instance.patch', 'mihomo-windows-tun.patch']
+    .map(filename => path.join(ROOT, 'scripts', filename));
+  const patchHashes = patches.map(filename => sha256(fs.readFileSync(filename)));
+  const buildKey = sha256([revision, go, triple, ...patchHashes].join(':'));
   const cached = path.join(OUT_DIR, `mihomo-windows-${buildKey}.exe`);
   const digest = `${cached}.sha256`;
   if (fs.existsSync(cached) && fs.existsSync(digest)) {
@@ -140,7 +175,9 @@ function buildWindowsCore(triple, lock) {
       '--branch', lock.version, repository, source], { stdio: 'inherit' });
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim();
     if (head !== revision) throw new Error(`Unexpected Mihomo source revision: ${head}`);
-    execFileSync('git', ['apply', '--unidiff-zero', patch], { cwd: source, stdio: 'inherit' });
+    for (const patch of patches) {
+      execFileSync('git', ['apply', '--unidiff-zero', patch], { cwd: source, stdio: 'inherit' });
+    }
     execFileSync('go', ['build', '-p', '2', '-tags', 'with_gvisor', '-trimpath',
       '-ldflags', `-s -w -buildid= -X github.com/metacubex/mihomo/constant.Version=${lock.version}-xeylroute`,
       '-o', output, '.'], {
@@ -168,27 +205,20 @@ async function main() {
   const destination = path.join(OUT_DIR, sidecarName(triple));
   fs.mkdirSync(OUT_DIR, { recursive: true });
   if (triple.includes('windows')) {
+    prepareWinDivert(lock);
     const binary = buildWindowsCore(triple, lock);
     if (!fs.existsSync(destination) || sha256(fs.readFileSync(destination)) !== sha256(binary)) {
       const temporary = `${destination}.${process.pid}.tmp`;
       fs.writeFileSync(temporary, binary, { mode: 0o755 });
       fs.renameSync(temporary, destination);
     }
-    console.log(`Mihomo ${lock.version} with Windows process-instance rules is ready at ${path.relative(ROOT, destination)}.`);
+    console.log(`Mihomo ${lock.version} with Windows process routing is ready at ${path.relative(ROOT, destination)}.`);
     return;
   }
   const expected = lock.assets[asset];
   if (!expected) throw new Error(`Missing release digest for ${asset}.`);
-  const cache = path.join(OUT_DIR, asset);
-  let archive = fs.existsSync(cache) ? fs.readFileSync(cache) : null;
-  if (!archive || sha256(archive) !== expected) {
-    console.log(`Downloading ${asset} ...`);
-    archive = download(`https://github.com/MetaCubeX/mihomo/releases/download/${lock.version}/${asset}`);
-    if (sha256(archive) !== expected) throw new Error(`SHA-256 mismatch for ${asset}.`);
-    const temp = `${cache}.${process.pid}.tmp`;
-    fs.writeFileSync(temp, archive);
-    fs.renameSync(temp, cache);
-  }
+  const { archive } = verifiedDownload(asset,
+    `https://github.com/MetaCubeX/mihomo/releases/download/${lock.version}/${asset}`, expected);
 
   const binary = extractBinary(asset, archive);
   const temporary = `${destination}.${process.pid}.tmp`;

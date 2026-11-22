@@ -12,6 +12,7 @@ export type CoreStatus = {
   systemProxy: boolean;
   tun: boolean;
   tunScope: TunScope;
+  selectedTunAvailable: boolean;
   httpPort?: number | null;
   dnsMode?: 'off' | 'fake-ip' | 'redir-host' | 'enabled' | null;
   tunDnsHijack?: boolean;
@@ -334,6 +335,9 @@ export function platformLabel(platform?: Platform): string {
 }
 
 export function tunElevationMessage(platform?: Platform, scope?: TunScope): string {
+  if (platform === 'windows' && scope === 'selected') {
+    return '规则模式下使用签名网络驱动接管所选程序。Windows 会请求 UAC 授权启动后台，主窗口继续以普通权限运行。';
+  }
   const scopeDesc = scope === 'selected'
     ? '当前已设为「仅指定分组和程序」，规则模式下仅对勾选 TUN 的分组/程序生效。'
     : '当前将接管系统全部受支持流量。';

@@ -24,6 +24,55 @@ pub fn tun_scope(profile: &Value) -> &str {
     }
 }
 
+pub fn selected_tun_paths(catalog: &Value) -> Vec<String> {
+    if catalog["mode"].as_str().unwrap_or("rule") != "rule" {
+        return Vec::new();
+    }
+    let scoped = scoped_profile(catalog);
+    let profile = scoped.as_ref();
+    let rule_program = |line: &str| {
+        let (condition, _) = line.rsplit_once(',')?;
+        let (kind, payload) = condition.split_once(',')?;
+        let program = crate::rule_conditions::decode(kind, payload)?.program;
+        (!program.is_empty()).then_some(program)
+    };
+    let mut configured: std::collections::HashSet<_> = entries(profile, "rules")
+        .filter_map(Value::as_str)
+        .filter_map(rule_program)
+        .map(|path| program_path_key(&path))
+        .collect();
+    configured.extend(shared_projection(profile).iter()
+        .filter_map(|(_, line)| rule_program(line))
+        .map(|path| program_path_key(&path)));
+    let overrides: std::collections::HashMap<_, _> = profile["routepilot-tun-targets"]
+        .as_object().into_iter().flatten()
+        .filter_map(|(path, mode)| Some((program_path_key(path), (path, mode.as_str()?))))
+        .collect();
+    let mut paths = std::collections::BTreeMap::new();
+    for (key, (path, mode)) in &overrides {
+        if *mode == "on" && !configured.contains(key) {
+            paths.insert(key.clone(), (*path).clone());
+        }
+    }
+    let runtime = effective_config(catalog);
+    for line in entries(&runtime, "rules").filter_map(Value::as_str) {
+        let Some(path) = rule_program(line) else { continue; };
+        let key = program_path_key(&path);
+        let group_tun = rule_exit(line).is_some_and(|exit| {
+            entries(profile, "routepilot-tun-groups").any(|name| name.as_str() == Some(exit))
+        });
+        let capture = match overrides.get(&key).map(|(_, mode)| *mode) {
+            Some("on") => true,
+            Some("off") => false,
+            _ => group_tun,
+        };
+        if capture {
+            paths.insert(key, path);
+        }
+    }
+    paths.into_values().collect()
+}
+
 
 /// True when this application owns the rule list being run: a profile it created, or any profile
 /// narrowed to a subscription. A complete configuration the user imported is left as written.
@@ -1328,7 +1377,10 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
             }
         }
         Edit::SetRuleTun { target, mode } => {
-            if !clean(&target) || !matches!(mode.as_str(), "inherit" | "on" | "off") {
+            if !std::path::Path::new(&target).is_absolute()
+                || target.chars().any(char::is_control)
+                || !matches!(mode.as_str(), "inherit" | "on" | "off")
+            {
                 return Err("无效的 TUN 规则设置。".into());
             }
             let map = profile
@@ -1338,9 +1390,9 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 .or_insert_with(|| json!({}))
                 .as_object_mut()
                 .ok_or("Invalid tun targets")?;
-            if mode == "inherit" {
-                map.remove(&target);
-            } else {
+            let key = program_path_key(&target);
+            map.retain(|path, _| program_path_key(path) != key);
+            if mode != "inherit" {
                 map.insert(target, json!(mode));
             }
         }
@@ -1351,6 +1403,25 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_tun_uses_enabled_rules_groups_and_program_overrides() {
+        let program = if cfg!(windows) { r"C:\Apps\" } else { "/Apps/" };
+        let path = |name| format!("{program}{name}");
+        let rule = |name, exit| format!("PROCESS-PATH,{},{}", path(name), exit);
+        let mut catalog = json!({
+            "mode":"rule",
+            "rules":[rule("Selected","Group"), rule("OptOut","Group"), rule("Muted","Off"),
+                rule("RuleDisabled","Group"), "MATCH,DIRECT"],
+            "routepilot-tun-groups":["Group","Off"],
+            "routepilot-tun-targets":{(path("OptOut")):"off", (path("Standalone")):"on"},
+            "routepilot-disabled-groups":["Off"],
+            "routepilot-disabled-rules":[rule("RuleDisabled","Group")],
+        });
+        assert_eq!(selected_tun_paths(&catalog), vec![path("Selected"), path("Standalone")]);
+        catalog["mode"] = json!("global");
+        assert!(selected_tun_paths(&catalog).is_empty());
+    }
 
     #[test]
     fn subscription_node_exit_roundtrips_rules_and_group_members_in_its_scope() {

@@ -4,6 +4,11 @@
     "revision": "0455d0d28c4526937380505153e65a843d8612e8",
     "go": "go1.26.11"
   },
+  "winDivert": {
+    "version": "v2.2.2",
+    "binary": "63cb41763bb4b20f600b6de04e991a9c2be73279e317d4d82f237b150c5f3f15",
+    "source": "300c1b14e08652e0f8647bf06e9b212f924af76cb2459bd0f88da481c9b08336"
+  },
   "assets": {
     "mihomo-windows-amd64-compatible-v1.19.34.zip": "cd6738d4648cc1a5f48049a1343b697ab510889d648f045c5c780fc1ab443a79",
     "mihomo-darwin-amd64-compatible-v1.19.34.gz": "703bceaa494732fa456f47e6ac2f06bf0bc5593d4c927d5f61e10f1a31039c37",
