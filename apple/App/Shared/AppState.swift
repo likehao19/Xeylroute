@@ -118,7 +118,8 @@ public final class AppState {
     public var probeConcurrency: Int {
         didSet { UserDefaults.standard.set(probeConcurrency, forKey: "xeylroute-probe-concurrency") }
     }
-    private(set) var refreshingProviders: Set<String> = []
+    private var downloads: [String: Task<String, Error>] = [:]
+    var refreshingProviders: Set<String> { Set(downloads.keys) }
     private(set) var subscriptionErrors: [String: String] = [:]
     public var nodeDelays: [String: DelayMeasurement] = [:]
     public var testingNodes: Set<String> = []
@@ -128,6 +129,7 @@ public final class AppState {
     // Logs, Active Routes & Processes
     public var connectionLogs: [ConnectionLogRow] = []
     public var activeRoutes: [ActiveRoute] = []
+    public private(set) var scanningProcesses = false
     public var runningProcesses: [RunningProcess] = []
     public var groupedApps: [GroupedRunningApp] = []
 
@@ -248,6 +250,10 @@ public final class AppState {
             }
         }
 
+        for group in profile.groups where group.enabled && !seen.contains(group.name) && group.name != "GLOBAL" {
+            seen.insert(group.name)
+            result.append(ProxyNode(name: group.name, type: group.type, isPolicy: true))
+        }
         for node in profile.standaloneNodes where !seen.contains(node.name) {
             seen.insert(node.name)
             result.append(node)
@@ -313,10 +319,12 @@ public final class AppState {
     }
 
     public func refreshProcesses() async {
-        guard runtime.supportsProcessRouting else { return }
+        guard runtime.supportsProcessRouting, !scanningProcesses else { return }
+        scanningProcesses = true
+        defer { scanningProcesses = false }
         let procs = await runtime.scanRunningProcesses()
         runningProcesses = procs
-        groupedApps = RunningAppGrouper.group(procs)
+        groupedApps = RunningAppGrouper.group(procs).filter { $0.bundlePath != nil }
     }
 
     public func refreshNetworkDetails() async {
@@ -395,10 +403,17 @@ public final class AppState {
             }
             if let client = await runtime.activeClient() {
                 try await client.selectProxy(group: group, name: name)
+                // Older generated profiles routed unmatched traffic directly to AUTO.
+                if group == "GLOBAL", profile.mode == .rule, name != "AUTO",
+                   profile.rules.last(where: \.isDefaultMatch)?.exit == "AUTO" {
+                    profile = try await runtime.profileStore.setDefaultExit("GLOBAL")
+                    try await runtime.reloadIfRunning()
+                    try await client.selectProxy(group: group, name: name)
+                }
                 await refreshAll(fullSnapshot: true)
                 notify("已切换出口至 \(name)")
             } else {
-                notify("已记录所选节点 \(name)")
+                throw MihomoAPIError.notRunning
             }
         } catch {
             notify(error.localizedDescription, isError: true)
@@ -444,6 +459,15 @@ public final class AppState {
         guard !targets.isEmpty else {
             notify("当前没有可测延迟的节点", isError: true)
             return
+        }
+        if !status.running {
+            do {
+                status = try await runtime.startLocalCore()
+                await refreshAll(fullSnapshot: true)
+            } catch {
+                notify(error.localizedDescription, isError: true)
+                return
+            }
         }
         await ProbeQueue.run(items: targets, concurrency: probeConcurrency) { [weak self] node in
             await self?.measureDelay(for: node)
@@ -538,7 +562,7 @@ public final class AppState {
     public func mutateProfile(_ action: () async throws -> ProfileSummary, successMessage: String? = nil) async {
         do {
             profile = try await action()
-            try? await runtime.reloadIfRunning()
+            try await runtime.reloadIfRunning()
             await refreshAll(fullSnapshot: true)
             if let successMessage {
                 notify(successMessage)
@@ -549,53 +573,50 @@ public final class AppState {
     }
 
     public func refreshSubscription(name: String) async {
-        guard !refreshingProviders.contains(name) else { return }
+        guard downloads[name] == nil else { return }
         do {
             try await fetchSubscription(name: name)
-            notify("订阅「\(name)」已刷新")
+            notify("已更新「\(name)」")
         } catch {
-            notify("刷新「\(name)」失败：\(error.localizedDescription)", isError: true)
+            notify(subscriptionErrors[name] ?? error.localizedDescription, isError: true)
         }
     }
 
-    func fetchSubscription(name: String, reloadConfiguration: Bool = false) async throws {
-        let needsReload = reloadConfiguration || subscriptionErrors[name] != nil
-        refreshingProviders.insert(name)
+    func cancelSubscription(name: String) {
+        downloads[name]?.cancel()
+    }
+
+    func fetchSubscription(name: String) async throws {
+        guard downloads[name] == nil else { throw ProfileStoreError.ioError("订阅正在更新。") }
+        guard let provider = profile.providers.first(where: { $0.name == name }),
+              let address = provider.url, let url = URL(string: address) else {
+            throw ProfileStoreError.missingResource("找不到订阅地址。")
+        }
+
+        let task = Task { try await SubscriptionDownload.fetch(url) }
+        downloads[name] = task
         subscriptionErrors[name] = nil
-        defer { refreshingProviders.remove(name) }
+        defer { downloads[name] = nil }
         do {
-            if needsReload { try await runtime.reloadIfRunning() }
-            if let client = await runtime.activeClient() {
-                try await client.refreshProvider(name: name)
-                await refreshAll(fullSnapshot: true)
-            } else if let provider = profile.providers.first(where: { $0.name == name }),
-                      let urlString = provider.url,
-                      let url = URL(string: urlString)
-            {
-                let (data, response) = try await URLSession.shared.data(from: url)
-                guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                      let text = String(data: data, encoding: .utf8)
-                else {
-                    throw ProfileStoreError.ioError("远端订阅响应无效。")
-                }
-                let yamlContent: String
-                if ShareLinkParser.looksLikeShareLinks(text) {
-                    let nodes = try ShareLinkParser.parseBundle(text)
-                    yamlContent = SimpleYAML.emit(.object(["proxies": .array(nodes)]))
-                } else {
-                    guard let proxies = try SimpleYAML.parse(text)["proxies"]?.arrayValue, !proxies.isEmpty else {
-                        throw ProfileStoreError.invalidProfile("订阅内容中没有节点，请检查订阅地址。")
-                    }
-                    yamlContent = text
-                }
-                try await runtime.profileStore.saveProviderPayload(name: name, yamlContent: yamlContent)
-                await refreshAll(fullSnapshot: true)
-            } else {
-                throw ProfileStoreError.missingResource("找不到可刷新的远程订阅。")
-            }
+            let payload = try await task.value
+            try await runtime.profileStore.saveProviderPayload(name: name, yamlContent: payload, expectedURL: address)
+            profile = await runtime.profileStore.summary()
+            try await runtime.reloadIfRunning()
+            await refreshAll(fullSnapshot: true)
         } catch {
-            subscriptionErrors[name] = error.localizedDescription
-            throw error
+            let message: String
+            if let error = error as? URLError {
+                switch error.code {
+                case .cancelled: message = "下载已取消。"
+                case .timedOut: message = "订阅服务器响应超时，请检查网络后重试。"
+                case .cannotFindHost, .dnsLookupFailed: message = "无法解析订阅服务器域名。"
+                default: message = error.localizedDescription
+                }
+            } else {
+                message = error.localizedDescription
+            }
+            subscriptionErrors[name] = message
+            throw ProfileStoreError.ioError(message)
         }
     }
 

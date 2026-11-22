@@ -26,7 +26,7 @@ public enum ShareLinkParser {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         if containsSupportedScheme(trimmed) { return true }
-        if !trimmed.contains("://"), !trimmed.contains("\n"), let decoded = decodeBase64(trimmed) {
+        if !trimmed.contains("://"), let decoded = decodeBase64(trimmed) {
             return containsSupportedScheme(decoded)
         }
         return false

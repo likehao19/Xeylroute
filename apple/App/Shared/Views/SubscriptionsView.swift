@@ -521,7 +521,7 @@ struct ConnectionSourceEditor: View {
                 let added = try await store.createRemoteSubscription(name: title, urlString: trimmed)
                 appState.profile = await store.summary()
                 do {
-                    try await appState.fetchSubscription(name: added, reloadConfiguration: true)
+                    try await appState.fetchSubscription(name: added)
                 } catch {
                     await appState.refreshAll(fullSnapshot: true)
                     appState.selectedDestination = .subscriptions

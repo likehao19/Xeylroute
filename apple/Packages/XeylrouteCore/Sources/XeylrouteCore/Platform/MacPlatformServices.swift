@@ -3,6 +3,22 @@ import Foundation
 import Darwin
 import Security
 
+enum MacCommand {
+    static func output(_ executable: String, _ arguments: [String]) throws -> (status: Int32, text: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        // Drain while the child is running. A full pipe prevents it from exiting.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+}
+
 // MARK: - macOS System Proxy Manager (with crash-recovery ownership journal)
 
 public enum MacSystemProxyError: LocalizedError, Sendable {
@@ -178,22 +194,11 @@ public actor MacSystemProxyManager {
     }
 
     private func runNetworkSetup(_ args: [String]) throws -> String {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
-        proc.arguments = args
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = errPipe
-        try proc.run()
-        proc.waitUntilExit()
-        let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        guard proc.terminationStatus == 0 else {
-            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MacSystemProxyError.commandFailed(detail.isEmpty ? stdout : detail)
+        let result = try MacCommand.output("/usr/sbin/networksetup", args)
+        guard result.status == 0 else {
+            throw MacSystemProxyError.commandFailed(result.text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        return stdout
+        return result.text
     }
 }
 
@@ -210,12 +215,12 @@ public enum MacProcessScanner {
 
     public static func scanProcesses() -> [RunningProcess] {
         let threads = readThreadCounts()
-        guard let output = runCommand("/bin/ps", ["-axo", "pid=,lstart=,comm="]) else { return [] }
+        guard let output = runCommand("/bin/ps", ["-axww", "-o", "pid=,lstart=,comm="]) else { return [] }
         var results: [RunningProcess] = []
         for rawLine in output.components(separatedBy: .newlines) {
             guard let parsed = parsePSLine(rawLine) else { continue }
             guard parsed.path.hasPrefix("/"),
-                  !systemRoots.contains(where: { parsed.path.hasPrefix($0) })
+                  (parsed.path.hasPrefix("/System/Applications/") || parsed.path.hasPrefix("/System/Library/CoreServices/Finder.app/") || !systemRoots.contains(where: { parsed.path.hasPrefix($0) }))
             else { continue }
             let url = URL(fileURLWithPath: parsed.path)
             let exe = url.lastPathComponent
@@ -317,16 +322,8 @@ public enum MacProcessScanner {
     }
 
     private static func runCommand(_ path: String, _ args: [String]) -> String? {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: path)
-        proc.arguments = args
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
-        guard (try? proc.run()) != nil else { return nil }
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else { return nil }
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+        guard let result = try? MacCommand.output(path, args), result.status == 0 else { return nil }
+        return result.text
     }
 }
 
@@ -343,6 +340,7 @@ public actor MacMihomoRuntime: CoreRuntime {
     private let runtimeConfigURL: URL
     private let logURL: URL
 
+    private var localStartup: Task<CoreStatus, Error>?
     private var localProcess: Process?
     private var tunPID: Int32?
     private var client: MihomoClient?
@@ -384,11 +382,18 @@ public actor MacMihomoRuntime: CoreRuntime {
     }
 
     public func startLocalCore() async throws -> CoreStatus {
+        if let localStartup { return try await localStartup.value }
+        if checkRunning() { return await status() }
+        let startup = Task { try await launchLocalCore() }
+        localStartup = startup
+        defer { localStartup = nil }
+        return try await startup.value
+    }
+
+    private func launchLocalCore() async throws -> CoreStatus {
         guard let binary = findMihomoBinary() else {
             throw ProfileStoreError.missingResource("未找到随包 Mihomo 内核，请先运行 npm run core 或检查应用包资源。")
         }
-        try await stopCoreInternal(restoreProxy: false)
-
         let controllerPort = try findUnusedLoopbackPort()
         let probePort = try findUnusedLoopbackPort()
         let secret = randomHexToken(bytes: 24)
@@ -420,11 +425,17 @@ public actor MacMihomoRuntime: CoreRuntime {
         self.localProcess = process
         self.client = newClient
 
-        try await waitForControllerReady(newClient)
+        do {
+            try await waitForControllerReady(newClient)
+        } catch {
+            try await stopCoreInternal(restoreProxy: false)
+            throw error
+        }
         return await status()
     }
 
     public func startTUN() async throws -> CoreStatus {
+        if let localStartup { _ = try await localStartup.value }
         guard let binary = findMihomoBinary() else {
             throw ProfileStoreError.missingResource("未找到随包 Mihomo 内核。")
         }
@@ -452,10 +463,10 @@ public actor MacMihomoRuntime: CoreRuntime {
         let errPipe = Pipe()
         auth.standardError = errPipe
         try auth.run()
+        let err = String(decoding: errPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         auth.waitUntilExit()
 
         guard auth.terminationStatus == 0 else {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             if err.contains("-128") || err.lowercased().contains("canceled") {
                 throw ProfileStoreError.ioError("已取消 macOS 管理员授权，虚拟网卡未开启。")
             }
@@ -474,6 +485,7 @@ public actor MacMihomoRuntime: CoreRuntime {
     }
 
     public func stopCore() async throws -> CoreStatus {
+        if let localStartup { _ = try? await localStartup.value }
         try await stopCoreInternal(restoreProxy: true)
         return await status()
     }
@@ -521,8 +533,8 @@ public actor MacMihomoRuntime: CoreRuntime {
         MacProcessScanner.readNetworkDetails()
     }
 
-    public func scanRunningProcesses() async -> [RunningProcess] {
-        MacProcessScanner.scanProcesses()
+    public nonisolated func scanRunningProcesses() async -> [RunningProcess] {
+        await Task.detached(priority: .utility) { MacProcessScanner.scanProcesses() }.value
     }
 
     // MARK: - Private Helpers
@@ -566,6 +578,7 @@ public actor MacMihomoRuntime: CoreRuntime {
 
     private func waitForControllerReady(_ client: MihomoClient) async throws {
         for _ in 0..<25 {
+            guard checkRunning() else { throw ProfileStoreError.ioError("内核已退出，请在「设置 → 诊断」查看启动日志。") }
             if (try? await client.fetchSnapshot(light: true)) != nil {
                 return
             }

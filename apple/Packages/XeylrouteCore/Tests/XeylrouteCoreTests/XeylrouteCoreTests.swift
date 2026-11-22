@@ -179,3 +179,52 @@ struct XeylrouteCoreTests {
         #expect(restored.mode == .rule)
     }
 }
+
+extension XeylrouteCoreTests {
+    #if os(macOS)
+    @Test("Subprocess output larger than the pipe capacity reaches EOF")
+    func drainLargeCommandOutput() throws {
+        let output = try MacCommand.output("/usr/bin/head", ["-c", "524288", "/dev/zero"])
+        #expect(output.status == 0)
+        #expect(output.text.utf8.count == 524288)
+    }
+    #endif
+
+    @Test("Subscription downloads validate HTTP, HTML, BOM and wrapped Base64")
+    func downloadFormats() throws {
+        let yaml = "\u{feff}proxies:\n- {name: Local, type: socks5, server: localhost, port: 1080}"
+        let payload = try SubscriptionDownload.validatedPayload(Data(yaml.utf8), status: 200)
+        #expect(try SimpleYAML.parse(payload)["proxies"]?.arrayValue?.first?["name"]?.stringValue == "Local")
+
+        let link = "trojan://fixture@localhost:443#Node"
+        let encoded = Data(link.utf8).base64EncodedString()
+        let wrapped = encoded.prefix(16) + "\r\n" + encoded.dropFirst(16)
+        let links = try SubscriptionDownload.validatedPayload(Data(wrapped.utf8), status: 200)
+        #expect(try SimpleYAML.parse(links)["proxies"]?.arrayValue?.count == 1)
+        for (status, body) in [(403, yaml), (200, "<html>Login</html>"), (200, "proxies: [broken]")] {
+            #expect(throws: (any Error).self) {
+                try SubscriptionDownload.validatedPayload(Data(body.utf8), status: status)
+            }
+        }
+    }
+}
+
+extension XeylrouteCoreTests {
+    @Test("Runtime selectors use the active source and rules resolve provider nodes")
+    func selectedProviderRouting() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try ProfileStore(dataDirectory: directory)
+        for name in ["First", "Second"] {
+            _ = try await store.importLocalSubscriptionYAML(name: name, content: "proxies:\n- {name: Node-\(name), type: http, server: localhost, port: 9001}")
+        }
+        _ = try await store.setSubscriptionScope("Second")
+        _ = try await store.setProgramExits(paths: ["/Applications/Demo.app/Contents/MacOS/Demo"], exit: "Node-Second")
+        let data = try await store.buildRuntimeConfig(controllerPort: 19190, secret: "fixture", probePort: 19191, enableTUN: false)
+        let groups = try #require(JSONValue.decode(from: data)["proxy-groups"]?.arrayValue)
+        for name in ["AUTO", "GLOBAL", "Node-Second"] {
+            let group = try #require(groups.first { $0["name"]?.stringValue == name })
+            #expect(group["use"]?.arrayValue == [.string("Second")])
+        }
+    }
+}

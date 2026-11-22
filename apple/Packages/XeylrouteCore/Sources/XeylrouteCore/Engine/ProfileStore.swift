@@ -75,7 +75,7 @@ public actor ProfileStore {
             "proxies": .array([]),
             "proxy-groups": .array([]),
             "proxy-providers": .object([:]),
-            "rules": .array([.string("MATCH,AUTO")]),
+            "rules": .array([.string("MATCH,GLOBAL")]),
             tunScopeKey: .string("all"),
             fallbackDirectKey: .bool(true),
         ])
@@ -168,7 +168,7 @@ public actor ProfileStore {
             manualOrder: manualOrder
         )
 
-        var exits = ["AUTO", "DIRECT", "REJECT"]
+        var exits = ["GLOBAL", "AUTO", "DIRECT", "REJECT"]
         for group in groups where !exits.contains(group.name) {
             exits.append(group.name)
         }
@@ -523,7 +523,10 @@ public actor ProfileStore {
         return SimpleYAML.emit(rootConfig)
     }
 
-    public func saveProviderPayload(name: String, yamlContent: String) throws {
+    public func saveProviderPayload(name: String, yamlContent: String, expectedURL: String? = nil) throws {
+        if let expectedURL, rootConfig["proxy-providers"]?[name]?["url"]?.stringValue != expectedURL {
+            throw ProfileStoreError.missingResource("订阅来源已变更，请重新刷新。")
+        }
         guard let path = rootConfig["proxy-providers"]?[name]?["path"]?.stringValue else {
             throw ProfileStoreError.missingResource("订阅「\(name)」不存在。")
         }
@@ -669,6 +672,19 @@ public actor ProfileStore {
         let allProviderNames = Array((runtime["proxy-providers"]?.objectValue ?? [:]).keys).sorted()
         let standaloneNames = (runtime["proxies"]?.arrayValue ?? []).compactMap { $0["name"]?.stringValue }
 
+        let scope = current.subscriptionScope ?? allProviderNames.first
+        let scopedProviders = scope.map { [JSONValue.string($0)] } ?? []
+        // Use the same client identification for Mihomo's scheduled refresh as for manual downloads.
+        for name in allProviderNames {
+            guard var entry = runtime["proxy-providers"]?[name], entry["type"]?.stringValue == "http" else { continue }
+            var headers = entry["header"]?.objectValue ?? [:]
+            if !headers.keys.contains(where: { $0.caseInsensitiveCompare("User-Agent") == .orderedSame }) {
+                headers["User-Agent"] = .array([.string(SubscriptionDownload.userAgent)])
+            }
+            entry["header"] = .object(headers)
+            runtime["proxy-providers"]?[name] = entry
+        }
+
         if !groups.contains(where: { $0["name"]?.stringValue == "AUTO" }) {
             var autoGroup: [String: JSONValue] = [
                 "name": .string("AUTO"),
@@ -677,8 +693,8 @@ public actor ProfileStore {
                 "interval": .int(300),
                 "tolerance": .int(50),
             ]
-            if !allProviderNames.isEmpty {
-                autoGroup["use"] = .array(allProviderNames.map(JSONValue.string))
+            if !scopedProviders.isEmpty {
+                autoGroup["use"] = .array(scopedProviders)
             }
             if !standaloneNames.isEmpty {
                 autoGroup["proxies"] = .array(standaloneNames.map(JSONValue.string))
@@ -688,13 +704,38 @@ public actor ProfileStore {
             groups.insert(.object(autoGroup), at: 0)
         }
 
+        if !groups.contains(where: { $0["name"]?.stringValue == "GLOBAL" }) {
+            let selectable = ["AUTO", "DIRECT", "REJECT"] + standaloneNames
+                + groups.compactMap { $0["name"]?.stringValue }.filter { $0 != "AUTO" }
+            groups.append(.object([
+                "name": .string("GLOBAL"), "type": .string("select"),
+                "proxies": .array(selectable.map(JSONValue.string)), "use": .array(scopedProviders),
+            ]))
+        }
+
+        // Provider nodes are not top-level policies in Mihomo. Bind only the names actually
+        // referenced by rules or group members, so those references survive a hot reload.
+        var known = Set(standaloneNames + groups.compactMap { $0["name"]?.stringValue } + ["DIRECT", "REJECT", "PASS"])
+        let targets = Set(current.effectiveRules.compactMap { RuleConditionsEngine.parseRuleLine($0)?.exit }
+                          + groups.flatMap { $0["proxies"]?.arrayValue?.compactMap(\.stringValue) ?? [] })
+        let orderedProviders = current.providers.filter { $0.name == scope } + current.providers.filter { $0.name != scope }
+        for provider in orderedProviders {
+            for node in provider.nodes where targets.contains(node.name) && known.insert(node.name).inserted {
+                groups.append(.object([
+                    "name": .string(node.name), "type": .string("select"), "hidden": .bool(true),
+                    "use": .array([.string(provider.name)]),
+                    "filter": .string("^" + NSRegularExpression.escapedPattern(for: node.name) + "$"),
+                ]))
+            }
+        }
+
         // Listeners: internal speed test + fixed loopback SOCKS5 bindings
         var listeners = runtime["listeners"]?.arrayValue ?? []
 
         // Internal speedtest select group + HTTP listener
         var probeMembers = ["DIRECT"] + standaloneNames
         for g in groups {
-            if let name = g["name"]?.stringValue, name != "GLOBAL" && name != Self.probeGroupName {
+            if let name = g["name"]?.stringValue, name != "GLOBAL", name != Self.probeGroupName, g["hidden"]?.boolValue != true {
                 probeMembers.append(name)
             }
         }
