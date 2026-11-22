@@ -2,6 +2,7 @@
 
 mod connection_log;
 mod fixed_socks;
+mod listener_ports;
 mod mihomo_api;
 mod processes;
 mod profile;
@@ -979,7 +980,18 @@ fn update_profile(
                 .iter()
                 .any(|key| config.get(key) != original.get(key))
             {
-                return Err("请停止内核后再修改监听端口。".into());
+                let mut ports_only = original.clone();
+                for key in listener_ports::KEYS {
+                    if let Some(value) = config.get(key) { ports_only[key] = value.clone(); }
+                    else { ports_only.as_object_mut().unwrap().remove(key); }
+                }
+                if ports_only != config {
+                    return Err("请单独保存监听端口，再修改其他配置。".into());
+                }
+                validate_config(&config.to_string())?;
+                let controller = mihomo_api::take(&app.state::<LiveController>())?;
+                tauri::async_runtime::block_on(listener_ports::update(&dir, &controller, &config))?;
+                return Ok(profile::summary(&config));
             }
             let controller = mihomo_api::take(&app.state::<LiveController>())?;
             let validated: Value = serde_json::from_slice(

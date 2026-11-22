@@ -188,6 +188,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
   // Operation guards
   let networkUpdating = false;
+  let savingPorts = false;
   let profileBusy = false;
   let selectingNode = false;
   let changingMode = false;
@@ -2154,14 +2155,11 @@ rules:
       httpIn.value = String(liveProfile.http ?? 0);
       socksIn.value = String(liveProfile.socks ?? 0);
     }
-    mixIn.disabled = httpIn.disabled = socksIn.disabled = isRunning;
-    $<HTMLButtonElement>('savePortsBtn').disabled = isRunning;
-    const editPortsBtn = $<HTMLButtonElement>('editPortsBtn');
-    editPortsBtn.hidden = !isRunning;
-    editPortsBtn.disabled = networkUpdating || changingSubscription;
-    editPortsBtn.title = '停止本地监听，并关闭系统代理和虚拟网卡，之后可修改端口';
+    const portsBusy = savingPorts || networkUpdating || changingSubscription || profileBusy;
+    mixIn.disabled = httpIn.disabled = socksIn.disabled = portsBusy;
+    $<HTMLButtonElement>('savePortsBtn').disabled = portsBusy;
     $('portHintSub').textContent = isRunning
-      ? '本地监听仍在运行 · 点击“停止内核并编辑”后修改，当前连接会中断'
+      ? '保存后立即生效并同步系统代理 · 端口切换可能影响当前连接'
       : '绑定 127.0.0.1 · 设为 0 表示关闭该端口，保存前自动校验冲突';
 
     const localIps = networkDetails?.error ? '读取失败' : (networkDetails?.addresses?.slice(0, 3).join(', ') || '—');
@@ -2901,20 +2899,24 @@ rules:
     if (file) void handleFileImport(file);
   });
 
-  $('editPortsBtn').addEventListener('click', async () => {
-    await performNetworkControl({ control: 'core', enabled: false });
-    if (!liveStatus?.running) $<HTMLInputElement>('portMixedInput').focus();
-  });
-
   $('savePortsBtn').addEventListener('click', async () => {
-    if (liveStatus?.running) {
-      notify('请先停止内核后再修改监听端口', true);
-      return;
-    }
+    if (savingPorts || networkUpdating || changingSubscription || profileBusy) return;
     const mixed = Number($<HTMLInputElement>('portMixedInput').value || 0);
     const http = Number($<HTMLInputElement>('portHttpInput').value || 0);
     const socks = Number($<HTMLInputElement>('portSocksInput').value || 0);
-    await commitProfileEdit({ kind: 'ports', http, socks, mixed }, '监听端口已保存，启动内核后生效');
+    if (![mixed, http, socks].every(port => Number.isInteger(port) && port >= 0 && port <= 65535)) {
+      notify('端口必须是 0 到 65535 的整数', true);
+      return;
+    }
+    savingPorts = true;
+    renderSettings();
+    try {
+      await commitProfileEdit({ kind: 'ports', http, socks, mixed },
+        liveStatus?.running ? '监听端口已更新并立即生效' : '监听端口已保存，启动内核后生效');
+    } finally {
+      savingPorts = false;
+      renderSettings();
+    }
   });
 
   $('copyEnvBtn').addEventListener('click', () => {

@@ -488,6 +488,52 @@ pub fn restore(dir: &Path) -> Result<(), String> {
     fs::remove_file(dir.join(JOURNAL)).map_err(|err| err.to_string())
 }
 
+/// Change only the proxy we still own, preserving the user's original recovery target.
+pub fn retarget(dir: &Path, port: u16, socks: Option<u16>) -> Result<(), String> {
+    forget_owned();
+    let old = load(dir)?.ok_or("系统代理已不再由本应用接管。")?;
+    if restore_target(&old, &query_matching(&old)?).is_none() {
+        return Err("系统代理已被其他应用修改，请刷新后重试。".into());
+    }
+    let next = Recovery {
+        previous: old.previous.clone(),
+        applied: platform::desired(port, socks, &old.previous),
+    };
+    save_recovery(dir, &next)?;
+    let result = platform::apply(&next.applied).and_then(|()| {
+        if query_matching(&next)? == next.applied { Ok(()) }
+        else { Err(platform::APPLY_MISMATCH_ERR.into()) }
+    });
+    if let Err(error) = result {
+        let current = query_matching(&next)?;
+        if current != next.applied && current != old.applied {
+            return Err(format!("{error}；系统代理状态已变化，保留恢复记录。"));
+        }
+        platform::apply(&old.applied)?;
+        save_recovery(dir, &old)?;
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn save_recovery(dir: &Path, recovery: &Recovery) -> Result<(), String> {
+    let contents = serde_json::to_vec(recovery).map_err(|err| err.to_string())?;
+    let temporary = dir.join("system-proxy-recovery.tmp");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&temporary)
+        .map_err(|err| err.to_string())?;
+    file.write_all(&contents)
+        .and_then(|_| file.sync_all())
+        .map_err(|err| err.to_string())?;
+    drop(file);
+    fs::rename(&temporary, dir.join(JOURNAL)).map_err(|err| err.to_string())?;
+
+    Ok(())
+}
+
 /// `socks` is the port that actually speaks SOCKS5 (the mixed port, or a dedicated SOCKS port).
 /// It is `None` when only an HTTP listener is configured.
 pub fn enable(dir: &Path, port: u16, socks: Option<u16>) -> Result<(), String> {
@@ -503,19 +549,7 @@ pub fn enable(dir: &Path, port: u16, socks: Option<u16>) -> Result<(), String> {
     }
 
     let recovery = Recovery { previous, applied };
-    let contents = serde_json::to_vec(&recovery).map_err(|err| err.to_string())?;
-    let temporary = dir.join("system-proxy-recovery.tmp");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&temporary)
-        .map_err(|err| err.to_string())?;
-    file.write_all(&contents)
-        .and_then(|_| file.sync_all())
-        .map_err(|err| err.to_string())?;
-    drop(file);
-    fs::rename(&temporary, dir.join(JOURNAL)).map_err(|err| err.to_string())?;
+    save_recovery(dir, &recovery)?;
 
     let result = platform::apply(&recovery.applied).and_then(|()| {
         if is_owned(dir)? {
@@ -554,6 +588,12 @@ mod tests {
             assert!(is_owned(&dir).unwrap());
             enable(&dir, port, None).unwrap();
             assert_eq!(load(&dir).unwrap().unwrap().previous, before);
+            let updated_port = second.local_addr().unwrap().port();
+            retarget(&dir, updated_port, Some(updated_port)).unwrap();
+            assert_eq!(platform::query().unwrap(), external);
+            assert_eq!(load(&dir).unwrap().unwrap().previous, before);
+            retarget(&dir, port, None).unwrap();
+            assert_eq!(platform::query().unwrap(), expected);
             restore(&dir).unwrap();
             assert_eq!(platform::query().unwrap(), before);
             assert!(load(&dir).unwrap().is_none());
