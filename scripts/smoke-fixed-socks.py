@@ -5,6 +5,7 @@ from http.client import HTTPConnection
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import struct
 import subprocess
@@ -61,11 +62,11 @@ def run(binary, config):
             node["port"] = server.server_port
         with ExitStack() as reservations:
             ports = []
-            for _ in range(4):
+            for _ in range(5):
                 sock = reservations.enter_context(socket.socket())
                 sock.bind(("127.0.0.1", 0))
                 ports.append(sock.getsockname()[1])
-        main, pin, ctl, clash = ports
+        main, pin, ctl, clash, dedicated = ports
         config["mixed-port"] = main
         config["listeners"][0]["port"] = pin
         config["external-controller"] = f"127.0.0.1:{ctl}"
@@ -86,17 +87,31 @@ def run(binary, config):
                 "--max-time", "3", "--proxy", f"socks5h://127.0.0.1:{port}", "http://fixture.invalid/"],
                 capture_output=True, text=True)
 
-        # A second isolated Clash-compatible core matches curl as the selected app.
-        # A Python client using the same inbound continues through its original US exit.
+        # The dedicated inbound uses the fixed node without asking the OS for process ownership.
+        # CLASH_TEST_BIN enables the extra check with a front core that can identify curl.
+        authorized_clash = os.environ.get("CLASH_TEST_BIN")
+        curl = Path(shutil.which("curl")).resolve()
         clash_dir = stack.enter_context(tempfile.TemporaryDirectory())
         clash_path = Path(clash_dir, "config.json")
-        clash_path.write_text(json.dumps({"mixed-port": clash, "find-process-mode":"always", "log-level":"warning",
+        clash_path.write_text(json.dumps({"mixed-port": clash, "mode":"rule", "find-process-mode":"always", "log-level":"warning",
             "proxies":[{"name":"Pinned", "type":"socks5", "server":"127.0.0.1", "port":pin},
                        config["proxy-providers"]["sample"]["payload"][1]],
-            "rules":["PROCESS-NAME,curl,Pinned","MATCH,US"]}))
-        front = subprocess.Popen([os.environ.get("CLASH_TEST_BIN", binary), "-d", clash_dir, "-f", str(clash_path)])
+            "listeners":[{"name":"Pinned-in", "type":"socks", "listen":"127.0.0.1",
+                          "port":dedicated, "proxy":"Pinned", "udp":True}],
+            "rules":[f"PROCESS-PATH,{curl},Pinned","MATCH,US"]}))
+        front = subprocess.Popen([authorized_clash or binary, "-d", clash_dir, "-f", str(clash_path)])
         stack.callback(front.wait, timeout=5)
         stack.callback(front.terminate)
+        for _ in range(100):
+            if front.poll() is not None:
+                raise RuntimeError("The front core exited during startup")
+            try:
+                socket.create_connection(("127.0.0.1", dedicated), timeout=.1).close()
+                break
+            except OSError:
+                time.sleep(.05)
+        else:
+            raise RuntimeError("The front core did not open the dedicated port")
         for iteration in range(2):
             path.write_text(json.dumps(config if iteration else {**config, "listeners":[]}))
             proc = subprocess.Popen([binary, "-d", directory, "-f", str(path)], stdout=subprocess.DEVNULL)
@@ -115,8 +130,11 @@ def run(binary, config):
                     api("proxies/GLOBAL", "PUT", {"name": selected})
                     assert request(main).stdout == selected
                     assert request(pin).stdout == "JP"
-                    forwarded = request(clash)
+                    forwarded = request(dedicated)
                     assert forwarded.stdout == "JP", forwarded
+                    if authorized_clash:
+                        by_process = request(clash)
+                        assert by_process.stdout == "JP", by_process
                     conn = HTTPConnection("127.0.0.1", clash, timeout=3)
                     try:
                         conn.request("GET", "http://fixture.invalid/")
@@ -131,6 +149,7 @@ def run(binary, config):
                     payload.pop(0)
                     api("configs?force=true", "PUT", {"payload": json.dumps(config)})
                     assert request(pin).returncode != 0
+                    assert request(dedicated).returncode != 0
                     assert request(main).stdout == "US"
                     config["listeners"] = []
                     api("configs?force=true", "PUT", {"payload": json.dumps(config)})
@@ -139,6 +158,9 @@ def run(binary, config):
             finally:
                 proc.terminate()
                 proc.wait(timeout=5)
+    print("The Clash dedicated inbound kept its fixed exit and rejected a removed node.")
+    if authorized_clash:
+        print("The authorized front core also sent only the exact cURL path to the fixed exit.")
 
 
 if __name__ == "__main__":

@@ -36,7 +36,11 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 在「代理组与节点 → 固定 SOCKS5 入口」添加节点和本机端口。内核停止时点「启动本地监听」。入口仅监听 `127.0.0.1`，支持 TCP 和 UDP，UDP 转发还取决于所选节点。订阅节点按订阅及节点名绑定；切换首页出口后仍用原节点，订阅移除该节点后入口会拒绝连接。
 
-点「Clash 配置…」复制片段，将代理节点和 ChatGPT 进程规则分别并入 Clash 的现有配置。Clash 需要处于规则模式，能接管该应用并识别其联网进程。保留其他规则和默认出口；在此用法下，Xeylroute 只需本地监听。
+点「Clash 配置…」选择接入方式。按程序规则接入时，将代理节点和规则分别并入 Clash 的现有配置，更新同名顶层设置，并把程序规则放在通用规则前。可从运行列表选择实际联网的可执行文件路径。若 macOS 上 Clash 的连接记录没有进程信息，通过 Clash 客户端授权内核后重试。
+
+支持单独设置代理的程序可使用「专用 SOCKS5 端口」。填写一个供 Clash 监听的空闲端口，分别合并节点和监听配置，再把目标程序的代理设到该端口。专用监听固定转到 Xeylroute 的 SOCKS5 入口，无需从连接识别程序。Xeylroute 只需本地监听。
+
+用随包内核运行 `MIHOMO_BIN=<随包内核绝对路径> cargo test --manifest-path src-tauri/Cargo.toml fixed_socks_real_exits -- --ignored` 可验证专用监听、本地固定节点和节点移除后的拒绝行为。另设 `CLASH_TEST_BIN=<已授权的 Clash 内核绝对路径>` 会同时验证按程序路径分流。
 
 在 GitHub Actions 手动运行 **Windows network acceptance**，可选择 Windows Server 2022 x64 或 Windows 11 ARM64。测试会在一次性虚拟机里操作桌面开关，向回环 HTTP 服务发送请求，并检查 WinINet、实际出口网卡和 Mihomo 命中日志。Windows 11 另用一台临时机运行 sing-box 对照实验。
 

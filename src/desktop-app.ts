@@ -1442,20 +1442,68 @@ export function mountDesktopApp(shell: ShellController): void {
         return;
       }
       const alias = 'Xeylroute-' + binding.port;
-      const snippet = `proxies:
-  - { name: ${alias}, type: socks5, server: 127.0.0.1, port: ${binding.port}, udp: true }
-
-rules:
-  - PROCESS-NAME,${liveStatus?.platform === 'windows' ? 'ChatGPT.exe' : 'ChatGPT'},${alias}`;
+      const proxy = `proxies:
+  - { name: ${alias}, type: socks5, server: 127.0.0.1, port: ${binding.port}, udp: true }`;
+      const seen = new Set<string>();
+      const programs = liveProcesses.filter(process => {
+        const key = programRuleKey(process.path);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       openSheet({ title: '接入 Clash', subtitle: binding.node,
-        bodyHtml: `<p class="sheet-hint">将节点加入 Clash 的 proxies，把应用规则放在需要优先匹配的位置。保留其余规则和最后的 MATCH。在 Clash 规则模式下按进程匹配；示例使用 ChatGPT 主进程，可按连接记录补充实际联网的子进程。</p>
+        bodyHtml: `<div class="sheet-field"><label for="clashSocksMode">接入方式</label>
+            <select class="sheet-input" id="clashSocksMode"><option value="process">按程序规则</option><option value="listener">专用 SOCKS5 端口</option></select></div>
+          <div class="sheet-field" id="clashProgramField"><label for="clashSocksProgram">实际联网程序</label>
+            <select class="sheet-input" id="clashSocksProgram"><option value="">ChatGPT（按程序名）</option>
+              ${programs.map(program => `<option value="${esc(program.path)}">${esc(program.name)} · ${esc(program.path)}</option>`).join('')}
+            </select></div>
+          <div class="sheet-field" id="clashPortField" hidden><label for="clashSocksPort">Clash 专用端口</label>
+            <input type="number" class="sheet-input" id="clashSocksPort" min="1" max="65535" placeholder="填写一个未使用的端口"></div>
+          <p class="sheet-hint" id="clashSocksHelp"></p>
           <textarea id="clashSocksYaml" class="sheet-textarea selectable" rows="7" aria-label="Clash YAML 配置片段" readonly></textarea>`,
         actionsHtml: '<button class="glass-btn-soft" id="closeSocksYaml">完成</button><button class="glass-btn-primary" id="copySocksYaml">复制片段</button>' });
       const yaml = $<HTMLTextAreaElement>('clashSocksYaml');
-      yaml.value = snippet;
+      const mode = $<HTMLSelectElement>('clashSocksMode');
+      const program = $<HTMLSelectElement>('clashSocksProgram');
+      const listen = $<HTMLInputElement>('clashSocksPort');
+      const copy = $<HTMLButtonElement>('copySocksYaml');
+      const used = new Set([liveProfile?.http, liveProfile?.socks, liveProfile?.mixed, ...bindings.map(b => b.port)]);
+      function updateSnippet(): void {
+        const dedicated = mode.value === 'listener';
+        $('clashProgramField').hidden = dedicated;
+        $('clashPortField').hidden = !dedicated;
+        if (dedicated) {
+          const port = listen.valueAsNumber;
+          const valid = Number.isInteger(port) && port > 0 && port <= 65535 && !used.has(port);
+          $('clashSocksHelp').textContent = listen.value && !valid
+            ? '请选择 1 至 65535 之间的空闲端口，避开 Xeylroute 的监听端口。'
+            : '将节点和监听分别并入 Clash 的 proxies 和 listeners，再把目标程序的 SOCKS5 代理设为这个专用端口。';
+          yaml.value = valid ? `${proxy}
+
+listeners:
+  - { name: ${alias}-in, type: socks, listen: 127.0.0.1, port: ${port}, udp: true, proxy: ${alias} }` : '';
+        } else {
+          const path = program.value;
+          const name = liveStatus?.platform === 'windows' ? 'ChatGPT.exe' : 'ChatGPT';
+          const regex = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const match = path ? (path.includes(',') ? `PROCESS-PATH-REGEX,^${regex}$` : `PROCESS-PATH,${path}`) : `PROCESS-NAME,${name}`;
+          $('clashSocksHelp').textContent = '在 Clash 更新同名顶层设置，将程序规则放在通用规则前。用 Clash 的连接记录核对程序和出口。macOS 若显示未识别进程，请通过 Clash 客户端授权内核后重新连接。';
+          yaml.value = `mode: rule
+find-process-mode: always
+
+${proxy}
+
+rules:
+  - ${JSON.stringify(`${match},${alias}`)}`;
+        }
+        copy.disabled = !yaml.value;
+      }
+      mode.onchange = program.onchange = listen.oninput = updateSnippet;
+      updateSnippet();
       $('closeSocksYaml').onclick = closeSheet;
-      $('copySocksYaml').onclick = async () => {
-        try { await navigator.clipboard.writeText(snippet); notify('已复制 Clash 配置片段'); }
+      copy.onclick = async () => {
+        try { await navigator.clipboard.writeText(yaml.value); notify('已复制 Clash 配置片段'); }
         catch { yaml.focus(); yaml.select(); notify('已选中片段，请复制'); }
       };
     };
