@@ -2936,7 +2936,6 @@
 
     .settings-fields { min-width: 0; margin: 0 0 18px; }
     .settings-fields .mac-row > div { min-width: 0; }
-    #view-settings { max-width: 880px; }
     #view-settings .section-label { margin-inline: 14px; }
     #view-settings .mac-row + .mac-row::before { left: 14px; }
     #view-settings .mac-row > :last-child { margin-inline-start: auto; }
