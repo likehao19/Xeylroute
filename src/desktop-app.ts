@@ -124,6 +124,7 @@ export function mountDesktopApp(shell: ShellController): void {
     if (root.classList.contains(`platform-${platform}`)) return;
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
+    $(platform === 'windows' ? 'windowTitlebar' : 'toolbarActions').append($('winControls'));
   }
   const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
   applyPlatformClass(ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : 'linux');
@@ -142,6 +143,9 @@ export function mountDesktopApp(shell: ShellController): void {
   $('winCloseBtn').addEventListener('click', () => { void tauriApi.windowClose(); });
   $('toolbarDragSpacer').addEventListener('dblclick', () => {
     toggleMaximize();
+  });
+  $('windowTitlebar').addEventListener('dblclick', e => {
+    if (e.target === e.currentTarget) toggleMaximize();
   });
 
   $('tunScopeHelp').textContent = '全局 TUN 接管系统流量，可用程序规则指定出口。';

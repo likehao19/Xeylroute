@@ -2549,7 +2549,17 @@
     .platform-windows .glass-capsule { gap: 2px; overflow: visible; }
     .platform-windows .glass-capsule .cap-sep { display: none; }
     .platform-windows .glass-capsule button { padding-inline: 9px; border-radius: var(--radius-control); }
-    .platform-windows .glass-toolbar { padding-right: 150px; }
+    .window-titlebar { display: none; }
+    :root.tauri-native.platform-windows .mac-window { padding-top: 40px; }
+    :root.tauri-native.platform-windows .window-titlebar {
+      display: block;
+      position: absolute;
+      inset: 0 0 auto;
+      height: 40px;
+      z-index: 6;
+      background: var(--window-bg);
+      border-bottom: 1px solid var(--win-line);
+    }
     .platform-windows .win-controls {
       position: absolute;
       top: 0;
