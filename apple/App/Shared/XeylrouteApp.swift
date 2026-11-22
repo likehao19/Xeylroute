@@ -11,6 +11,7 @@ struct XeylrouteAppleApp: App {
             RootView()
                 .environment(appState)
                 .preferredColorScheme(appState.appearance.colorScheme)
+                .frame(minWidth: 860, minHeight: 580)
                 .task {
                     await appState.bootstrap()
                 }

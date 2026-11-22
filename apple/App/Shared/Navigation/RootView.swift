@@ -141,14 +141,12 @@ public struct RootView: View {
     private var sidebarControlHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 30, height: 30)
-                    Image(systemName: "arrow.triangle.swap")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+                Image("AppBrandLogo")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Xeylroute")
                         .font(.headline)

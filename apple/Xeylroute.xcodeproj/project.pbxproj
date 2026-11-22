@@ -23,7 +23,9 @@
 		66FAFFB91104CF3482317BAF /* XeylrouteCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3584D567767C22D395BBB567 /* XeylrouteCore */; };
 		8ABF68E0302E3195A70F5635 /* NodesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA1C5BB028590B1793CA83C /* NodesView.swift */; };
 		91A49458B4AC68C9EF4EE2E0 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0740DA687CB23D51D766FCC4 /* AppState.swift */; };
+		91D8E2198D8DFF639A400845 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7677AF1CD1FD7E0E8128998D /* Assets.xcassets */; };
 		93E7FAC81A5154A9A5B5BF37 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7B5364A147B7C8F2CF81E89 /* LogsView.swift */; };
+		A61625750927DB996112223B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7677AF1CD1FD7E0E8128998D /* Assets.xcassets */; };
 		AF96C675C9FD36469C60126F /* NativeSurfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */; };
 		BFB3971CFDB52EC754112122 /* SplitRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */; };
 		C0F867C7D220C273100EB259 /* XeylrouteTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CDC07DB2410BDEA5E9341DFF /* XeylrouteTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -67,6 +69,7 @@
 		6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitRoutingView.swift; sourceTree = "<group>"; };
 		73EE2F02259B25D95833BE26 /* XeylrouteMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XeylrouteMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		74DDCBC4FDC38AE97C4A6350 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		7677AF1CD1FD7E0E8128998D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7E3ADF15AAEFC3E47F174B94 /* XeylrouteCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = XeylrouteCore; path = Packages/XeylrouteCore; sourceTree = SOURCE_ROOT; };
 		C0A7A1ADD3FD7A839B94BDE1 /* PacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PacketTunnel.entitlements; sourceTree = "<group>"; };
 		C7814189B3A7FA15445C7995 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
@@ -141,6 +144,7 @@
 			isa = PBXGroup;
 			children = (
 				0740DA687CB23D51D766FCC4 /* AppState.swift */,
+				7677AF1CD1FD7E0E8128998D /* Assets.xcassets */,
 				DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */,
 				25F096F536ABBBA440A944A8 /* Components */,
 				869D0AAEE2B9C2D4A07929FC /* Navigation */,
@@ -192,6 +196,7 @@
 			buildConfigurationList = CA918814C2639C0E1D91AF8A /* Build configuration list for PBXNativeTarget "XeylrouteiOS" */;
 			buildPhases = (
 				DA9E1547FCBECAF30F10691D /* Sources */,
+				52906AC4283160E50EE82978 /* Resources */,
 				7BF5A92B27535F1432C94D9F /* Frameworks */,
 				8B27E2C3D4DE9CBA722DBF1A /* Embed Foundation Extensions */,
 			);
@@ -230,6 +235,7 @@
 			buildConfigurationList = 0182BA438EEF78D1093A8DB6 /* Build configuration list for PBXNativeTarget "XeylrouteMac" */;
 			buildPhases = (
 				19CADB5C64032BA68BC2739A /* Sources */,
+				6E55ABFEC4708CAAB7A1275E /* Resources */,
 				8CD7E908FCFF430978D9EC35 /* Frameworks */,
 				3F6DC9938DB79145D6EA902C /* Bundle Mihomo Sidecar (if available) */,
 			);
@@ -288,6 +294,25 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		52906AC4283160E50EE82978 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91D8E2198D8DFF639A400845 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6E55ABFEC4708CAAB7A1275E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A61625750927DB996112223B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		3F6DC9938DB79145D6EA902C /* Bundle Mihomo Sidecar (if available) */ = {

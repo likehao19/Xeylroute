@@ -386,43 +386,56 @@ public struct ConnectView: View {
                     .font(.caption2)
                 }
 
-                Chart(appState.trafficTracker.samples) { sample in
-                    AreaMark(
-                        x: .value("时间", sample.id),
-                        y: .value("下载", sample.downloadBytesPerSec / 1024.0)
-                    )
-                    .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.28), .blue.opacity(0.0)], startPoint: .top, endPoint: .bottom))
-                    .interpolationMethod(.catmullRom)
+                ZStack {
+                    Chart(appState.trafficTracker.samples) { sample in
+                        AreaMark(
+                            x: .value("时间", sample.id),
+                            y: .value("下载", sample.downloadBytesPerSec / 1024.0)
+                        )
+                        .foregroundStyle(LinearGradient(colors: [.blue.opacity(0.28), .blue.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.catmullRom)
 
-                    LineMark(
-                        x: .value("时间", sample.id),
-                        y: .value("下载", sample.downloadBytesPerSec / 1024.0)
-                    )
-                    .foregroundStyle(.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    .interpolationMethod(.catmullRom)
+                        LineMark(
+                            x: .value("时间", sample.id),
+                            y: .value("下载", sample.downloadBytesPerSec / 1024.0)
+                        )
+                        .foregroundStyle(.blue)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .interpolationMethod(.catmullRom)
 
-                    LineMark(
-                        x: .value("时间", sample.id),
-                        y: .value("上传", sample.uploadBytesPerSec / 1024.0)
-                    )
-                    .foregroundStyle(.teal)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
-                    .interpolationMethod(.catmullRom)
-                }
-                .chartXAxis(.hidden)
-                .chartYAxis {
-                    AxisMarks(position: .trailing) { val in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let kb = val.as(Double.self) {
-                                Text(TrafficTracker.formatRate(kb * 1024.0))
-                                    .font(.caption2.monospacedDigit())
+                        LineMark(
+                            x: .value("时间", sample.id),
+                            y: .value("上传", sample.uploadBytesPerSec / 1024.0)
+                        )
+                        .foregroundStyle(.teal)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                    }
+                    .chartXAxis(.hidden)
+                    .chartYAxis {
+                        AxisMarks(position: .trailing) { val in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let kb = val.as(Double.self) {
+                                    Text(TrafficTracker.formatRate(kb * 1024.0))
+                                        .font(.caption2.monospacedDigit())
+                                }
                             }
                         }
                     }
+                    .frame(height: 150)
+
+                    if appState.trafficTracker.samples.isEmpty {
+                        VStack(spacing: 4) {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.title3)
+                                .foregroundStyle(.tertiary)
+                            Text(appState.status.running ? "正在采集实时流量…" : "启动监听后显示实时流量波形")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .frame(height: 150)
 
                 HStack {
                     let peak = appState.trafficTracker.samples.map(\.downloadBytesPerSec).max() ?? 0
@@ -449,16 +462,24 @@ public struct ConnectView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Chart(appState.trafficTracker.samples) { sample in
-                    BarMark(
-                        x: .value("采样", sample.id),
-                        y: .value("连接", sample.activeConnections)
-                    )
-                    .foregroundStyle(.blue.gradient)
-                    .cornerRadius(2)
+                ZStack {
+                    Chart(appState.trafficTracker.samples) { sample in
+                        BarMark(
+                            x: .value("采样", sample.id),
+                            y: .value("连接", sample.activeConnections)
+                        )
+                        .foregroundStyle(.blue.gradient)
+                        .cornerRadius(2)
+                    }
+                    .chartXAxis(.hidden)
+                    .frame(height: 100)
+
+                    if appState.trafficTracker.samples.isEmpty {
+                        Text(appState.status.running ? "等待连接采样…" : "未启动内核")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .chartXAxis(.hidden)
-                .frame(height: 100)
             }
         }
     }
