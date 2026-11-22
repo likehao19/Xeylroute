@@ -24,7 +24,8 @@ class Origin(BaseHTTPRequestHandler):
         pass
 
 
-CLIENT = """+import socket, sys
+CLIENT = r"""
+import socket, sys
 for command in sys.stdin:
     proxy, origin = map(int, command.split())
     try:
