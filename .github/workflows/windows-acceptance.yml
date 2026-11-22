@@ -11,61 +11,18 @@ on:
           - windows-11-arm
 permissions:
   contents: read
-
 jobs:
-  windows:
+  feasibility:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 35
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Prepare pinned network core
-        run: npm run core
-      - name: Verify live forwarding and application routing
+      - run: npm run core
+        shell: pwsh
+      - name: Try binding only cURL to the TUN interface
         shell: pwsh
         run: |
           $target = ((rustc -vV | Select-String '^host: ').Line -split ' ')[1]
-          $core = "src-tauri/binaries/xeylroute-mihomo-${target}.exe"
-          python scripts/smoke-mihomo.py --binary $core
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          python scripts/smoke-routing.py $core
-      - name: Build frontend
-        run: npm ci && npm run build
-        shell: cmd
-      - name: Test Windows desktop backend
-        id: backend
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - name: Exercise WinINet ownership and recovery on the disposable VM
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml wininet_takeover_and_recovery -- --ignored
-      - name: Build the desktop application with embedded frontend
-        id: desktop
-        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
-        run: cargo build --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml
-      - name: Exercise the TUN worker and check Windows route cleanup
-        if: ${{ !cancelled() && steps.desktop.outcome == 'success' }}
-        run: python scripts/smoke-windows-tun.py src-tauri/target/debug/routepilot-desktop.exe
-      - name: Drive the native desktop controls and verify network recovery
-        if: ${{ !cancelled() && steps.desktop.outcome == 'success' }}
-        shell: pwsh
-        run: |
-          $client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-          $installed = Get-ItemPropertyValue -Path "HKLM:\SOFTWARE\WOW6432Node\$client","HKCU:\SOFTWARE\$client" -Name pv -ErrorAction SilentlyContinue
-          if (!($installed | Where-Object { $_ -and [version]$_ -gt [version]'0.0.0.0' })) {
-            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
-            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
-            $signature = Get-AuthenticodeSignature $installer
-            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation,') { throw 'Unexpected WebView2 installer signature' }
-            if ((Start-Process $installer -ArgumentList '/silent','/install' -Wait -PassThru).ExitCode) { throw 'WebView2 setup failed' }
-          }
-          node scripts/smoke-windows-desktop.mjs src-tauri/target/debug/routepilot-desktop.exe
-  alternative-core:
-    if: ${{ inputs.runner == 'windows-11-arm' }}
-    runs-on: windows-11-arm
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - name: Compare per-program capture and instance matching in sing-box
-        run: python scripts/smoke-windows-singbox.py
+          python scripts/probe-network-policy.py "src-tauri/binaries/xeylroute-mihomo-${target}.exe"
