@@ -12,37 +12,45 @@ on:
 permissions:
   contents: read
 jobs:
-  signed-driver:
+  process-tun:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 8
+    timeout-minutes: 18
     steps:
-      - name: Validate and load the signed Windows packet driver
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.11'
+          cache: false
+      - name: Build the isolated process TUN core
         shell: pwsh
         run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'xeyl-windivert'
-          New-Item -ItemType Directory -Path $dir
-          $zip = Join-Path $dir 'driver.zip'
+          $src = Join-Path $env:RUNNER_TEMP 'mihomo-src'
+          git -c core.autocrlf=false clone --depth 1 --branch v1.19.34 https://github.com/MetaCubeX/mihomo.git $src
+          if ($LASTEXITCODE -ne 0 -or (git -C $src rev-parse HEAD) -ne '0455d0d28c4526937380505153e65a843d8612e8') { exit 1 }
+          git -C $src apply --unidiff-zero (Resolve-Path 'scripts/mihomo-process-tun-experiment.patch')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:CGO_ENABLED = '0'
+          $env:GOTOOLCHAIN = 'local'
+          Push-Location $src
+          try {
+            go build -p 2 -tags with_gvisor -trimpath -o "$env:RUNNER_TEMP/mihomo-selected-tun.exe" .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+      - name: Prepare the signed driver
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP/WinDivert.zip"
           curl.exe --fail --location --silent --show-error --retry 2 --max-time 90 https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip -o $zip
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           if ((Get-FileHash -Algorithm SHA256 $zip).Hash -ne '63cb41763bb4b20f600b6de04e991a9c2be73279e317d4d82f237b150c5f3f15') { throw 'Unexpected WinDivert download' }
-          Expand-Archive $zip $dir
-          $files = Join-Path $dir 'WinDivert-2.2.2-A/x64'
-          $signature = Get-AuthenticodeSignature (Join-Path $files 'WinDivert64.sys')
-          Write-Host "Driver signature: $($signature.Status)"
-          if ($signature.Status -ne 'Valid') { throw 'The driver signature failed verification' }
-          $env:XEYL_TEST_DRIVER_DLL = Join-Path $files 'WinDivert.dll'
-          @'
-          import ctypes as c
-          import os
-          driver = c.WinDLL(os.environ["XEYL_TEST_DRIVER_DLL"], use_last_error=True)
-          driver.WinDivertOpen.argtypes = [c.c_char_p, c.c_int, c.c_int16, c.c_uint64]
-          driver.WinDivertOpen.restype = c.c_void_p
-          driver.WinDivertClose.argtypes = [c.c_void_p]
-          handle = driver.WinDivertOpen(b"false", 0, 0, 1 | 4)
-          if handle == c.c_void_p(-1).value:
-              raise c.WinError(c.get_last_error())
-          if not driver.WinDivertClose(handle):
-              raise c.WinError(c.get_last_error())
-          print("Windows accepted the signed kernel driver and closed the empty capture.")
-          '@ | python -
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Expand-Archive $zip $env:RUNNER_TEMP
+          $files = Join-Path $env:RUNNER_TEMP 'WinDivert-2.2.2-A/x64'
+          if ((Get-AuthenticodeSignature (Join-Path $files 'WinDivert64.sys')).Status -ne 'Valid') { throw 'Unexpected kernel driver signature' }
+          Copy-Item "$files/WinDivert.dll","$files/WinDivert64.sys" $env:RUNNER_TEMP
+      - name: Observe traffic before and after process selection
+        shell: pwsh
+        run: python scripts/smoke-windows-process-tun.py "$env:RUNNER_TEMP/mihomo-selected-tun.exe"
