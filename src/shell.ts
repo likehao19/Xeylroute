@@ -15,6 +15,7 @@ const VIEW_TITLES: Record<ViewId, string> = {
 
 export type ThemeChoice = 'light' | 'dark' | 'auto';
 const THEME_KEY = 'xeylroute-theme';
+const STARTUP_VIEW_KEY = 'xeylroute-startup-view';
 
 export type ShellController = {
   getView(): ViewId;
@@ -161,7 +162,20 @@ export function initShell(): ShellController {
     $('sheetCloseHelp').onclick = closeSheet;
   });
 
+  const startupView = $<HTMLSelectElement>('settingsStartupView');
+  for (const [view, title] of Object.entries(VIEW_TITLES)) {
+    startupView.add(new Option(title, view));
+  }
+  const savedView = localStorage.getItem(STARTUP_VIEW_KEY);
+  startupView.value = savedView && Object.hasOwn(VIEW_TITLES, savedView) ? savedView : 'connect';
+  startupView.addEventListener('change', () => {
+    if (Object.hasOwn(VIEW_TITLES, startupView.value)) {
+      localStorage.setItem(STARTUP_VIEW_KEY, startupView.value);
+    }
+  });
+
   applyTheme(theme);
+  switchView(startupView.value as ViewId);
 
   return {
     getView: () => currentView,
