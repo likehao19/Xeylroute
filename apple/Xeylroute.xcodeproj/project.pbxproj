@@ -1,0 +1,671 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		015617EAC641A002F51F8014 /* XeylrouteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */; };
+		03FF53ACF5B6E6394C95DAF4 /* SplitRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */; };
+		188C75B397A85B62DE10FE68 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CED9B85DFC2B4DA7AFB2B57 /* ConnectView.swift */; };
+		2E6EDBA5AFB1FAF6E35529B7 /* XeylrouteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */; };
+		35FFA6362C0111287A57EF09 /* SubscriptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF347FF8FA5BA0333DA6D4FB /* SubscriptionsView.swift */; };
+		372D6911D78481618C5E0678 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DDCBC4FDC38AE97C4A6350 /* SettingsView.swift */; };
+		3895D97707920EA65610B825 /* SubscriptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF347FF8FA5BA0333DA6D4FB /* SubscriptionsView.swift */; };
+		3F2DC1080659D9BC2B110B34 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0740DA687CB23D51D766FCC4 /* AppState.swift */; };
+		437C003A222A9FCC8CBA1725 /* NodesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA1C5BB028590B1793CA83C /* NodesView.swift */; };
+		48972CD556EE777240E08231 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DDCBC4FDC38AE97C4A6350 /* SettingsView.swift */; };
+		4CF69E04E25D3FAEE47CD551 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CED9B85DFC2B4DA7AFB2B57 /* ConnectView.swift */; };
+		571DA3F87BFF603803044DEE /* XeylrouteCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5454C58B0211B912E58E8D9B /* XeylrouteCore */; };
+		582972CE7F477D94A817D434 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D02471FE3CC90DF96449F36 /* RootView.swift */; };
+		66FAFFB91104CF3482317BAF /* XeylrouteCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3584D567767C22D395BBB567 /* XeylrouteCore */; };
+		8ABF68E0302E3195A70F5635 /* NodesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA1C5BB028590B1793CA83C /* NodesView.swift */; };
+		91A49458B4AC68C9EF4EE2E0 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0740DA687CB23D51D766FCC4 /* AppState.swift */; };
+		93E7FAC81A5154A9A5B5BF37 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7B5364A147B7C8F2CF81E89 /* LogsView.swift */; };
+		AF96C675C9FD36469C60126F /* NativeSurfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */; };
+		BFB3971CFDB52EC754112122 /* SplitRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */; };
+		C0F867C7D220C273100EB259 /* XeylrouteTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CDC07DB2410BDEA5E9341DFF /* XeylrouteTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C215D7BB94C2984AB2826B5C /* NativeSurfaceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */; };
+		C4ECF8B168752019F26D11FB /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7B5364A147B7C8F2CF81E89 /* LogsView.swift */; };
+		C6E678308452C8215C11F9E9 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7814189B3A7FA15445C7995 /* PacketTunnelProvider.swift */; };
+		E5F5318A585C4433870A181D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D02471FE3CC90DF96449F36 /* RootView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		EDD21FC01966CFCB8877B9CC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 45CACADB7A5DBFF425FE93E2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 76C6A5E2F913FB70FE24D935;
+			remoteInfo = XeylrouteTunnel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		8B27E2C3D4DE9CBA722DBF1A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C0F867C7D220C273100EB259 /* XeylrouteTunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSurfaceComponents.swift; sourceTree = "<group>"; };
+		0740DA687CB23D51D766FCC4 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		226EE172C3211FD4B685E470 /* XeylrouteiOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = XeylrouteiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		26AC0402A83D5927C7A2FD6B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3D02471FE3CC90DF96449F36 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		5CED9B85DFC2B4DA7AFB2B57 /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
+		6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitRoutingView.swift; sourceTree = "<group>"; };
+		73EE2F02259B25D95833BE26 /* XeylrouteMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XeylrouteMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		74DDCBC4FDC38AE97C4A6350 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		7E3ADF15AAEFC3E47F174B94 /* XeylrouteCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = XeylrouteCore; path = Packages/XeylrouteCore; sourceTree = SOURCE_ROOT; };
+		C0A7A1ADD3FD7A839B94BDE1 /* PacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PacketTunnel.entitlements; sourceTree = "<group>"; };
+		C7814189B3A7FA15445C7995 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		CDC07DB2410BDEA5E9341DFF /* XeylrouteTunnel.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = XeylrouteTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF347FF8FA5BA0333DA6D4FB /* SubscriptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionsView.swift; sourceTree = "<group>"; };
+		DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XeylrouteApp.swift; sourceTree = "<group>"; };
+		F7B5364A147B7C8F2CF81E89 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		FDA1C5BB028590B1793CA83C /* NodesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodesView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7BF5A92B27535F1432C94D9F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66FAFFB91104CF3482317BAF /* XeylrouteCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CD7E908FCFF430978D9EC35 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				571DA3F87BFF603803044DEE /* XeylrouteCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0245DE083E35E71253D8F9FF /* App */ = {
+			isa = PBXGroup;
+			children = (
+				31498CE98A5B309F05EC471F /* PacketTunnel */,
+				5FB71ABA71DC1C5CC7093C55 /* Shared */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		17D77C45A5E04E8F36A3A4F2 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				5CED9B85DFC2B4DA7AFB2B57 /* ConnectView.swift */,
+				F7B5364A147B7C8F2CF81E89 /* LogsView.swift */,
+				FDA1C5BB028590B1793CA83C /* NodesView.swift */,
+				74DDCBC4FDC38AE97C4A6350 /* SettingsView.swift */,
+				6A6E1F7EC4C30B02A1DE26DE /* SplitRoutingView.swift */,
+				CF347FF8FA5BA0333DA6D4FB /* SubscriptionsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		25F096F536ABBBA440A944A8 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				015530768959099D42E70AA8 /* NativeSurfaceComponents.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		31498CE98A5B309F05EC471F /* PacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				26AC0402A83D5927C7A2FD6B /* Info.plist */,
+				C0A7A1ADD3FD7A839B94BDE1 /* PacketTunnel.entitlements */,
+				C7814189B3A7FA15445C7995 /* PacketTunnelProvider.swift */,
+			);
+			path = PacketTunnel;
+			sourceTree = "<group>";
+		};
+		5FB71ABA71DC1C5CC7093C55 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0740DA687CB23D51D766FCC4 /* AppState.swift */,
+				DE11D44B918938CEB6F8B2AE /* XeylrouteApp.swift */,
+				25F096F536ABBBA440A944A8 /* Components */,
+				869D0AAEE2B9C2D4A07929FC /* Navigation */,
+				17D77C45A5E04E8F36A3A4F2 /* Views */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		869D0AAEE2B9C2D4A07929FC /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				3D02471FE3CC90DF96449F36 /* RootView.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		9F77D7A732AF09FAD53B3487 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				7E3ADF15AAEFC3E47F174B94 /* XeylrouteCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		B71229EA98CBBBCE881C020E = {
+			isa = PBXGroup;
+			children = (
+				0245DE083E35E71253D8F9FF /* App */,
+				9F77D7A732AF09FAD53B3487 /* Packages */,
+				BF9F17D66A5DD926D4200A37 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BF9F17D66A5DD926D4200A37 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				226EE172C3211FD4B685E470 /* XeylrouteiOS.app */,
+				73EE2F02259B25D95833BE26 /* XeylrouteMac.app */,
+				CDC07DB2410BDEA5E9341DFF /* XeylrouteTunnel.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		62B982AFE467EDB67D823C6B /* XeylrouteiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CA918814C2639C0E1D91AF8A /* Build configuration list for PBXNativeTarget "XeylrouteiOS" */;
+			buildPhases = (
+				DA9E1547FCBECAF30F10691D /* Sources */,
+				7BF5A92B27535F1432C94D9F /* Frameworks */,
+				8B27E2C3D4DE9CBA722DBF1A /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ACC160E53D6B0380E7F58205 /* PBXTargetDependency */,
+			);
+			name = XeylrouteiOS;
+			packageProductDependencies = (
+				3584D567767C22D395BBB567 /* XeylrouteCore */,
+			);
+			productName = XeylrouteiOS;
+			productReference = 226EE172C3211FD4B685E470 /* XeylrouteiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		76C6A5E2F913FB70FE24D935 /* XeylrouteTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15FB4BA60CEDB6A0AFD9B25E /* Build configuration list for PBXNativeTarget "XeylrouteTunnel" */;
+			buildPhases = (
+				C920F80048B2B3083CFB7AE5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XeylrouteTunnel;
+			packageProductDependencies = (
+			);
+			productName = XeylrouteTunnel;
+			productReference = CDC07DB2410BDEA5E9341DFF /* XeylrouteTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		84E2B72F091EAD4EBD3BEF2C /* XeylrouteMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0182BA438EEF78D1093A8DB6 /* Build configuration list for PBXNativeTarget "XeylrouteMac" */;
+			buildPhases = (
+				19CADB5C64032BA68BC2739A /* Sources */,
+				8CD7E908FCFF430978D9EC35 /* Frameworks */,
+				3F6DC9938DB79145D6EA902C /* Bundle Mihomo Sidecar (if available) */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XeylrouteMac;
+			packageProductDependencies = (
+				5454C58B0211B912E58E8D9B /* XeylrouteCore */,
+			);
+			productName = XeylrouteMac;
+			productReference = 73EE2F02259B25D95833BE26 /* XeylrouteMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		45CACADB7A5DBFF425FE93E2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					62B982AFE467EDB67D823C6B = {
+						ProvisioningStyle = Automatic;
+					};
+					76C6A5E2F913FB70FE24D935 = {
+						ProvisioningStyle = Automatic;
+					};
+					84E2B72F091EAD4EBD3BEF2C = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 5F92F63F60F4FF5D1A7189C0 /* Build configuration list for PBXProject "Xeylroute" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B71229EA98CBBBCE881C020E;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E87FFAC5E82B224D324E56A3 /* XCLocalSwiftPackageReference "Packages/XeylrouteCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = BF9F17D66A5DD926D4200A37 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				84E2B72F091EAD4EBD3BEF2C /* XeylrouteMac */,
+				76C6A5E2F913FB70FE24D935 /* XeylrouteTunnel */,
+				62B982AFE467EDB67D823C6B /* XeylrouteiOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		3F6DC9938DB79145D6EA902C /* Bundle Mihomo Sidecar (if available) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle Mihomo Sidecar (if available)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "BIN=\"${PROJECT_DIR}/../src-tauri/binaries/xeylroute-mihomo-aarch64-apple-darwin\"\nDEST_DIR=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nDEST=\"${DEST_DIR}/xeylroute-mihomo\"\nif [ -f \"$BIN\" ]; then\n  mkdir -p \"$DEST_DIR\"\n  cp -f \"$BIN\" \"$DEST\"\n  chmod +x \"$DEST\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		19CADB5C64032BA68BC2739A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F2DC1080659D9BC2B110B34 /* AppState.swift in Sources */,
+				188C75B397A85B62DE10FE68 /* ConnectView.swift in Sources */,
+				93E7FAC81A5154A9A5B5BF37 /* LogsView.swift in Sources */,
+				AF96C675C9FD36469C60126F /* NativeSurfaceComponents.swift in Sources */,
+				437C003A222A9FCC8CBA1725 /* NodesView.swift in Sources */,
+				582972CE7F477D94A817D434 /* RootView.swift in Sources */,
+				372D6911D78481618C5E0678 /* SettingsView.swift in Sources */,
+				03FF53ACF5B6E6394C95DAF4 /* SplitRoutingView.swift in Sources */,
+				3895D97707920EA65610B825 /* SubscriptionsView.swift in Sources */,
+				2E6EDBA5AFB1FAF6E35529B7 /* XeylrouteApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C920F80048B2B3083CFB7AE5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C6E678308452C8215C11F9E9 /* PacketTunnelProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA9E1547FCBECAF30F10691D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91A49458B4AC68C9EF4EE2E0 /* AppState.swift in Sources */,
+				4CF69E04E25D3FAEE47CD551 /* ConnectView.swift in Sources */,
+				C4ECF8B168752019F26D11FB /* LogsView.swift in Sources */,
+				C215D7BB94C2984AB2826B5C /* NativeSurfaceComponents.swift in Sources */,
+				8ABF68E0302E3195A70F5635 /* NodesView.swift in Sources */,
+				E5F5318A585C4433870A181D /* RootView.swift in Sources */,
+				48972CD556EE777240E08231 /* SettingsView.swift in Sources */,
+				BFB3971CFDB52EC754112122 /* SplitRoutingView.swift in Sources */,
+				35FFA6362C0111287A57EF09 /* SubscriptionsView.swift in Sources */,
+				015617EAC641A002F51F8014 /* XeylrouteApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ACC160E53D6B0380E7F58205 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 76C6A5E2F913FB70FE24D935 /* XeylrouteTunnel */;
+			targetProxy = EDD21FC01966CFCB8877B9CC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		062C6438B22D2D88FC2411A2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/macOS/Xeylroute.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = App/macOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.xeylroute.apple.macos;
+				PRODUCT_NAME = Xeylroute;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		3F39E3B37F186294B1BA4D71 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		8364B5F9BE05E7F76CC2C8F5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/iOS/Xeylroute.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = App/iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.xeylroute.apple.ios;
+				PRODUCT_NAME = Xeylroute;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9D0C3647D7B0FB9515DBB1EB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = App/PacketTunnel/PacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = App/PacketTunnel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.xeylroute.apple.ios.tunnel;
+				PRODUCT_NAME = XeylrouteTunnel;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C9493FA0790140E2C8FB59D0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/macOS/Xeylroute.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = App/macOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.xeylroute.apple.macos;
+				PRODUCT_NAME = Xeylroute;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		CE56B1DE69F28DAD08AE6154 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/iOS/Xeylroute.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = App/iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.xeylroute.apple.ios;
+				PRODUCT_NAME = Xeylroute;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		EBA2EF1155612614E1C48B54 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		ED38635C14C8AD3EC782B325 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = App/PacketTunnel/PacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = App/PacketTunnel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.xeylroute.apple.ios.tunnel;
+				PRODUCT_NAME = XeylrouteTunnel;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0182BA438EEF78D1093A8DB6 /* Build configuration list for PBXNativeTarget "XeylrouteMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				062C6438B22D2D88FC2411A2 /* Debug */,
+				C9493FA0790140E2C8FB59D0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		15FB4BA60CEDB6A0AFD9B25E /* Build configuration list for PBXNativeTarget "XeylrouteTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED38635C14C8AD3EC782B325 /* Debug */,
+				9D0C3647D7B0FB9515DBB1EB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5F92F63F60F4FF5D1A7189C0 /* Build configuration list for PBXProject "Xeylroute" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3F39E3B37F186294B1BA4D71 /* Debug */,
+				EBA2EF1155612614E1C48B54 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CA918814C2639C0E1D91AF8A /* Build configuration list for PBXNativeTarget "XeylrouteiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8364B5F9BE05E7F76CC2C8F5 /* Debug */,
+				CE56B1DE69F28DAD08AE6154 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E87FFAC5E82B224D324E56A3 /* XCLocalSwiftPackageReference "Packages/XeylrouteCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/XeylrouteCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3584D567767C22D395BBB567 /* XeylrouteCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = XeylrouteCore;
+		};
+		5454C58B0211B912E58E8D9B /* XeylrouteCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = XeylrouteCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 45CACADB7A5DBFF425FE93E2 /* Project object */;
+}

@@ -7,3 +7,6 @@ output/
 __pycache__/
 public/site-icons/claude.ai.bin
 src-tauri/binaries/
+apple/.build/
+apple/Packages/XeylrouteCore/.build/
+xcuserdata/

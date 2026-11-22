@@ -1,0 +1,128 @@
+name: Xeylroute
+options:
+  bundleIdPrefix: app.xeylroute.apple
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  XeylrouteCore:
+    path: Packages/XeylrouteCore
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+
+targets:
+  XeylrouteMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: App/Shared
+    dependencies:
+      - package: XeylrouteCore
+    info:
+      path: App/macOS/Info.plist
+      properties:
+        CFBundleDisplayName: Xeylroute
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: "Copyright © Xeylroute"
+    entitlements:
+      path: App/macOS/Xeylroute.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    settings:
+      base:
+        PRODUCT_NAME: Xeylroute
+        PRODUCT_BUNDLE_IDENTIFIER: app.xeylroute.apple.macos
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Automatic
+    postBuildScripts:
+      - name: Bundle Mihomo Sidecar (if available)
+        basedOnDependencyAnalysis: false
+        script: |
+          BIN="${PROJECT_DIR}/../src-tauri/binaries/xeylroute-mihomo-aarch64-apple-darwin"
+          DEST_DIR="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          DEST="${DEST_DIR}/xeylroute-mihomo"
+          if [ -f "$BIN" ]; then
+            mkdir -p "$DEST_DIR"
+            cp -f "$BIN" "$DEST"
+            chmod +x "$DEST"
+          fi
+
+  XeylrouteiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/Shared
+    dependencies:
+      - package: XeylrouteCore
+      - target: XeylrouteTunnel
+        embed: true
+    info:
+      path: App/iOS/Info.plist
+      properties:
+        CFBundleDisplayName: Xeylroute
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: App/iOS/Xeylroute.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.xeylroute.apple
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+    settings:
+      base:
+        PRODUCT_NAME: Xeylroute
+        PRODUCT_BUNDLE_IDENTIFIER: app.xeylroute.apple.ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+
+  XeylrouteTunnel:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/PacketTunnel
+    info:
+      path: App/PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: Xeylroute Tunnel
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).PacketTunnelProvider"
+    entitlements:
+      path: App/PacketTunnel/PacketTunnel.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.xeylroute.apple
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+    settings:
+      base:
+        PRODUCT_NAME: XeylrouteTunnel
+        PRODUCT_BUNDLE_IDENTIFIER: app.xeylroute.apple.ios.tunnel
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
