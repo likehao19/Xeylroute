@@ -1947,12 +1947,16 @@ mod tests {
 
     #[test]
     fn scoped_tun_preferences_are_saved_outside_the_core_configuration() {
+        let folder = if cfg!(windows) { r"C:\Apps\" } else { "/Apps/" };
+        let chrome = format!("{folder}Chrome");
+        let claude = format!("{folder}Claude");
+        let codex = format!("{folder}Codex");
         let mut config = json!({
             "routepilot-created": true,
             "proxy-groups": [{"name":"AI","type":"select","proxies":["DIRECT"]}],
             "rules": [
-                "PROCESS-PATH,/Applications/Claude.app/Contents/MacOS/Claude,AI",
-                "PROCESS-PATH,/Applications/Chrome.app/Contents/MacOS/Chrome,AI",
+                format!("PROCESS-PATH,{claude},AI"),
+                format!("PROCESS-PATH,{chrome},AI"),
                 "MATCH,DIRECT"
             ]
         });
@@ -1974,7 +1978,7 @@ mod tests {
         edit(
             &mut config,
             Edit::SetRuleTun {
-                target: "/Applications/Chrome.app/Contents/MacOS/Chrome".into(),
+                target: chrome,
                 mode: "off".into(),
             },
         )
@@ -1982,7 +1986,7 @@ mod tests {
         edit(
             &mut config,
             Edit::SetRuleTun {
-                target: "/Applications/Codex.app/Contents/MacOS/Codex".into(),
+                target: codex,
                 mode: "on".into(),
             },
         )
