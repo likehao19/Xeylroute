@@ -143,6 +143,7 @@ public struct SubscriptionsView: View {
                 #if os(macOS)
                 Menu {
                     Button("导入 YAML 文件…") { showFileImporter = true }
+                    Button("新建 YAML…") { editorTarget = EditorTarget(title: "新建本地 YAML", providerName: "", isNew: true) }
                     Button("编辑完整配置…") {
                         editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
                     }
@@ -159,9 +160,11 @@ public struct SubscriptionsView: View {
                         }
                     }
                 }
+                #if os(iOS)
                 Button("新建 YAML") {
                     editorTarget = EditorTarget(title: "新建本地 YAML", providerName: "", isNew: true)
                 }
+                #endif
                 Button {
                     showImportSheet = true
                 } label: {
@@ -258,6 +261,11 @@ public struct SubscriptionsView: View {
                 Spacer()
             }
 
+            if let error = appState.subscriptionErrors[provider.name] {
+                Label(error, systemImage: "exclamationmark.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
             if let usage, usage.total > 0 {
                 VStack(alignment: .leading, spacing: 4) {
                     ProgressView(value: usage.progress)
@@ -297,10 +305,15 @@ public struct SubscriptionsView: View {
                     Button {
                         Task { await appState.refreshSubscription(name: provider.name) }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        if appState.refreshingProviders.contains(provider.name) {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label(appState.subscriptionErrors[provider.name] == nil ? "刷新" : "重试", systemImage: "arrow.clockwise")
+                        }
                     }
                     .buttonStyle(.borderless)
-                    .help("刷新订阅")
+                    .disabled(appState.refreshingProviders.contains(provider.name))
+                    .help("重新获取订阅节点")
                 }
                 Button {
                     editorTarget = EditorTarget(title: "编辑订阅 · \(provider.name)", providerName: provider.name, isNew: false)
@@ -326,93 +339,148 @@ public struct SubscriptionsView: View {
 }
 
 struct ImportSubscriptionSheet: View {
-    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("导入订阅或节点").font(.title2.bold())
+                ConnectionSourceEditor(onClose: { dismiss() })
+            }
+            .padding(24)
+        }
+        #if os(macOS)
+        .frame(width: 520, height: 370)
+        #endif
+    }
+}
+
+struct ConnectionSourceEditor: View {
+    @Environment(AppState.self) private var appState
+    var onClose: (() -> Void)?
     @State private var name = ""
     @State private var content = ""
     @State private var errorText: String?
+    @State private var choosingFile = false
+    @State private var importing = false
 
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("订阅名称（仅添加 HTTPS 链接时可选）") {
-                    TextField("留空将自动使用订阅域名", text: $name)
-                }
-                Section {
-                    TextEditor(text: $content)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(minHeight: 150)
-                } header: {
-                    HStack {
-                        Text("粘贴 HTTPS 订阅地址、节点分享链接、Base64 或 YAML")
-                        Spacer()
-                        Button("从剪贴板粘贴") {
-                            if let clip = ClipboardHelper.read() {
-                                content = clip
-                            }
-                        }
-                        .font(.caption)
-                    }
-                }
-                if let errorText {
-                    Section {
-                        Text(errorText).foregroundStyle(.red).font(.caption)
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("导入订阅或节点")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("导入") {
-                        performImport()
-                    }
-                    .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-        }
-        .frame(minWidth: 500, minHeight: 380)
+    private var trimmed: String { content.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isRemote: Bool {
+        let value = trimmed.lowercased()
+        return !value.contains("\n") && (value.hasPrefix("http://") || value.hasPrefix("https://"))
     }
 
-    private func performImport() {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
-            do {
-                if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://"),
-                   !trimmed.contains("\n")
-                {
-                    let summary = try await appState.runtime.profileStore.addRemoteSubscription(
-                        name: name.isEmpty ? nil : name,
-                        urlString: trimmed
-                    )
-                    appState.profile = summary
-                    if let added = summary.providers.last?.name {
-                        await appState.refreshSubscription(name: added)
-                    }
-                    try? await appState.runtime.reloadIfRunning()
-                    await appState.refreshAll(fullSnapshot: true)
-                    appState.notify("已添加远程订阅")
-                } else if ShareLinkParser.looksLikeShareLinks(trimmed) {
-                    let (_, count) = try await appState.runtime.profileStore.importShareLinks(trimmed)
-                    try? await appState.runtime.reloadIfRunning()
-                    await appState.refreshAll(fullSnapshot: true)
-                    appState.notify("已导入 \(count) 个代理节点")
-                } else {
-                    _ = try await appState.runtime.profileStore.importLocalSubscriptionYAML(
-                        name: name.isEmpty ? "导入配置" : name,
-                        content: trimmed
-                    )
-                    try? await appState.runtime.reloadIfRunning()
-                    await appState.refreshAll(fullSnapshot: true)
-                    appState.notify("已导入本地 YAML 订阅")
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("链接或配置内容").font(.headline)
+                Spacer()
+                Button("粘贴") {
+                    if let value = ClipboardHelper.read(), !value.isEmpty { content = value }
+                    else { errorText = "剪贴板中没有可导入的文本。" }
                 }
-                dismiss()
-            } catch {
-                errorText = error.localizedDescription
+                Button("打开文件…") { choosingFile = true }
             }
+            TextEditor(text: $content)
+                .font(.body.monospaced())
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(height: 94)
+                .background(.background, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.secondary.opacity(0.35)))
+                .accessibilityLabel("链接或配置内容")
+            if !trimmed.isEmpty && !ShareLinkParser.looksLikeShareLinks(trimmed) {
+                TextField("名称（可选）", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("名称，可选")
+            }
+            if let errorText {
+                Label(errorText, systemImage: "exclamationmark.circle").font(.callout).foregroundStyle(.red)
+            } else {
+                Text("支持订阅地址、节点分享链接、Base64 和 Clash YAML。")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            HStack {
+                if importing {
+                    ProgressView().controlSize(.small)
+                    Text(isRemote ? "正在获取订阅节点…" : "正在导入…").foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let onClose {
+                    Button("取消", action: onClose).keyboardShortcut(.cancelAction)
+                }
+                Button("导入") {
+                    guard !importing else { return }
+                    importing = true
+                    Task { await performImport() }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .disabled(trimmed.isEmpty)
+            }
+        }
+        .disabled(importing)
+        .interactiveDismissDisabled(importing)
+        .onChange(of: content) { _, _ in errorText = nil }
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.yaml, .json, .plainText, .data]) { result in
+            do {
+                let url = try result.get()
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                let source = try String(contentsOf: url, encoding: .utf8)
+                guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    errorText = "文件是空的，请选择包含节点的配置。"
+                    return
+                }
+                content = source
+                name = url.deletingPathExtension().lastPathComponent
+            } catch {
+                if (error as NSError).code != NSUserCancelledError { errorText = error.localizedDescription }
+            }
+        }
+    }
+
+    private func performImport() async {
+        defer { importing = false }
+        errorText = nil
+        let store = appState.runtime.profileStore
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let message: String
+            if isRemote {
+                let added = try await store.createRemoteSubscription(name: title, urlString: trimmed)
+                appState.profile = await store.summary()
+                do {
+                    try await appState.fetchSubscription(name: added, reloadConfiguration: true)
+                } catch {
+                    await appState.refreshAll(fullSnapshot: true)
+                    appState.selectedDestination = .subscriptions
+                    appState.notify("已保存「\(added)」，获取节点失败。请在订阅中点「重试」。\(error.localizedDescription)", isError: true)
+                    onClose?()
+                    return
+                }
+                message = "已导入订阅「\(added)」"
+            } else {
+                if ShareLinkParser.looksLikeShareLinks(trimmed) {
+                    let (_, count) = try await store.importShareLinks(trimmed)
+                    message = "已导入 \(count) 个节点"
+                } else {
+                    _ = try await store.importLocalSubscriptionYAML(name: title.isEmpty ? "导入配置" : title, content: trimmed)
+                    message = "已导入本地配置"
+                }
+                do { try await appState.runtime.reloadIfRunning() }
+                catch {
+                    await appState.refreshAll(fullSnapshot: true)
+                    appState.notify("\(message)，重新加载失败：\(error.localizedDescription)", isError: true)
+                    onClose?()
+                    return
+                }
+            }
+            await appState.refreshAll(fullSnapshot: true)
+            appState.notify(message)
+            onClose?()
+        } catch {
+            errorText = error.localizedDescription
         }
     }
 }

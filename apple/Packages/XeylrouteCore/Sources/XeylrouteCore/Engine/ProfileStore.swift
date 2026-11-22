@@ -418,6 +418,11 @@ public actor ProfileStore {
     // MARK: - Subscriptions, Share Links & YAML Import
 
     public func addRemoteSubscription(name: String?, urlString: String, interval: Int = 3600) throws -> ProfileSummary {
+        _ = try createRemoteSubscription(name: name, urlString: urlString, interval: interval)
+        return summary()
+    }
+
+    public func createRemoteSubscription(name: String?, urlString: String, interval: Int = 3600) throws -> String {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
               let scheme = url.scheme?.lowercased(),
               (scheme == "https" || scheme == "http"),
@@ -446,7 +451,7 @@ public actor ProfileStore {
             rootConfig[Self.subscriptionScopeKey] = .string(uniqueName)
         }
         try persist()
-        return summary()
+        return uniqueName
     }
 
     public func updateSubscriptionURL(name: String, newURL: String, interval: Int? = nil) throws -> ProfileSummary {

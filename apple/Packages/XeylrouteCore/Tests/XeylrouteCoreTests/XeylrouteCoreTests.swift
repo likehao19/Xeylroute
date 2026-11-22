@@ -129,6 +129,21 @@ struct XeylrouteCoreTests {
         #expect(internalProbe == nil)
     }
 
+    @Test("Remote subscription imports return the exact provider to refresh")
+    func remoteImportIdentity() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try ProfileStore(dataDirectory: directory)
+        let original = try await store.addRemoteSubscription(name: "Z", urlString: "https://example.org/z")
+        #expect(original.providers.count == 1)
+        let first = try await store.createRemoteSubscription(name: "A", urlString: "https://example.org/one")
+        let next = try await store.createRemoteSubscription(name: "A", urlString: "https://example.org/two")
+        #expect(first == "A")
+        #expect(next == "A 2")
+        let summary = await store.summary()
+        #expect(summary.providers.first { $0.name == next }?.url == "https://example.org/two")
+    }
+
     @Test("ProfileStore manages rules, fixed SOCKS5 listeners, and runtime config synthesis")
     func profileStoreLifecycle() async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("xeylroute-test-\(UUID().uuidString)")

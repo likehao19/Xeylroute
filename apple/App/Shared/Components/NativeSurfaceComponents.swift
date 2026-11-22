@@ -6,6 +6,21 @@ import AppKit
 import UIKit
 #endif
 
+extension View {
+    func workspaceControlBar() -> some View {
+        #if os(macOS)
+        self.padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+        #else
+        self.padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+        #endif
+    }
+}
+
 public struct SectionHeaderBar<Trailing: View>: View {
     let title: String
     let trailing: Trailing

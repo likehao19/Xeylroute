@@ -6,7 +6,6 @@ public struct ConnectView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
     #if os(macOS)
-    @State private var showImport = false
     @State private var showInspector = false
     @State private var showConnections = false
     #endif
@@ -31,7 +30,6 @@ public struct ConnectView: View {
                         : (appState.status.running ? .orange : .secondary),
                     showDot: true
                 )
-                #endif
                 Button {
                     Task { await appState.toggleLocalCore() }
                 } label: {
@@ -40,11 +38,8 @@ public struct ConnectView: View {
                         systemImage: appState.status.running ? "stop.fill" : "play.fill"
                     )
                 }
-                #if os(macOS)
-                .labelStyle(.titleAndIcon)
-                #endif
                 .disabled(appState.isBusy)
-                #if os(macOS)
+                #else
                 if appState.status.configured || appState.status.running {
                     Button {
                         showInspector.toggle()
@@ -61,65 +56,84 @@ public struct ConnectView: View {
     #if os(macOS)
     private var macConnectionView: some View {
         let configured = appState.status.configured
-        let captured = appState.status.systemProxyEnabled || appState.status.tunEnabled
         return ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(appState.profile.mode.fullTitle, systemImage: "point.3.connected.trianglepath.dotted")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Text(configured ? appState.statusBadgeTitle : "设置网络连接")
-                        .font(.largeTitle.bold())
-                }
-
-                HStack(spacing: 0) {
-                    routeStation(title: "这台 Mac", detail: captured ? "流量接管已开启" : "系统流量未接管") {
-                        Image(systemName: "laptopcomputer")
-                            .font(.system(size: 34, weight: .light))
-                    }
-                    routeStation(title: "Xeylroute", detail: appState.status.running ? "内核运行中" : "内核已停止") {
-                        Image("AppBrandLogo").resizable().frame(width: 64, height: 64)
-                    }
-                    routeStation(title: configured ? appState.currentGlobalExit : "默认出口", detail: configured ? "当前默认节点" : "等待导入节点") {
-                        Image(systemName: "network")
-                            .font(.system(size: 32, weight: .light))
-                    }
-                }
-                .background(alignment: .top) {
-                    GeometryReader { geometry in
-                        let w = geometry.size.width
-                        Path { path in
-                            path.move(to: CGPoint(x: w / 6, y: 34))
-                            path.addLine(to: CGPoint(x: 5 * w / 6, y: 34))
-                        }
-                        .stroke(captured && appState.status.running ? Color.accentColor : .secondary.opacity(0.5),
-                                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: captured && appState.status.running ? [] : [2, 5]))
-                    }
-                }
-                .padding(.vertical, 20)
-                .background {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(LinearGradient(colors: [Color.accentColor.opacity(0.11), Color.teal.opacity(0.055)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                }
-
-                if !configured {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("添加第一个节点").font(.title2.bold())
-                        Text("粘贴订阅地址或节点链接，或在订阅管理中导入 YAML 文件。")
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(spacing: 14) {
+                    Image("AppBrandLogo").resizable().frame(width: 56, height: 56)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(configured ? appState.statusBadgeTitle : "添加网络配置")
+                            .font(.largeTitle.bold())
+                        Text(configured ? (appState.status.running ? "本地监听已启动" : "开启系统代理后即可连接。") : "从服务商复制订阅地址，或打开已有配置文件。")
                             .foregroundStyle(.secondary)
-                        HStack {
-                            Button("导入订阅或节点…") { showImport = true }
-                                .buttonStyle(.borderedProminent)
-                            Button("管理订阅") { appState.selectedDestination = .subscriptions }
-                        }
-                        .padding(.top, 4)
                     }
-                } else if !captured {
-                    capturePromptBanner
                 }
 
-                if configured || appState.status.running {
+                if configured {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Toggle(isOn: Binding(
+                            get: { appState.status.systemProxyEnabled },
+                            set: { enabled in Task { await appState.setSystemProxy(enabled) } }
+                        )) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("系统代理").font(.headline)
+                                Text("让遵循 Mac 系统代理设置的应用使用当前配置。")
+                                    .font(.callout).foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .toggleStyle(.switch)
+                        .disabled(appState.isBusy)
+                        .padding(16)
+                        Divider()
+                        HStack {
+                            Label("路由模式", systemImage: "arrow.triangle.branch")
+                            Spacer()
+                            Picker("路由模式", selection: Binding(
+                                get: { appState.profile.mode },
+                                set: { mode in Task { await appState.setMode(mode) } }
+                            )) {
+                                Text("按规则分流").tag(RoutingMode.rule)
+                                Text("全部使用默认出口").tag(RoutingMode.global)
+                                Text("全部直连").tag(RoutingMode.direct)
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        .padding(16)
+                        Divider()
+                        HStack {
+                            Label("默认出口", systemImage: "network")
+                            Spacer()
+                            Menu {
+                                ForEach(appState.selectableNodes) { node in
+                                    Button {
+                                        Task { await appState.selectNode(node.name) }
+                                    } label: {
+                                        if node.name == appState.snapshot?.proxies["GLOBAL"]?.now {
+                                            Label(node.name, systemImage: "checkmark")
+                                        } else {
+                                            Text(node.name)
+                                        }
+                                    }
+                                }
+                            } label: { Text(appState.profile.mode == .direct ? "直连" : (appState.snapshot?.proxies["GLOBAL"]?.now ?? "选择节点…")).lineLimit(1) }
+                            .disabled(appState.profile.mode == .direct)
+                            .frame(maxWidth: 220, alignment: .trailing)
+                            .accessibilityLabel("切换默认出口")
+                            .help(appState.status.running ? "切换默认出口" : "选择节点会启动本地监听")
+                        }
+                        .padding(16)
+                    }
+                    .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+                } else {
+                    ConnectionSourceEditor()
+                        .padding(20)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+                }
+                if appState.status.running || !appState.trafficTracker.samples.isEmpty {
                     Divider()
                     HStack {
                         Text("网络活动").font(.title2.bold())
@@ -135,11 +149,10 @@ public struct ConnectView: View {
                     if showConnections { connectionsPlot } else { trafficPlot }
                 }
             }
-            .frame(maxWidth: 900, alignment: .leading)
-            .padding(32)
+            .frame(maxWidth: configured ? 780 : 600, alignment: .leading)
+            .padding(28)
             .frame(maxWidth: .infinity)
         }
-        .sheet(isPresented: $showImport) { ImportSubscriptionSheet() }
         .inspector(isPresented: $showInspector) {
             ScrollView {
                 VStack(spacing: 20) {
@@ -151,20 +164,6 @@ public struct ConnectView: View {
             }
             .inspectorColumnWidth(min: 270, ideal: 312, max: 380)
         }
-    }
-
-    private func routeStation<Icon: View>(title: String, detail: String, @ViewBuilder icon: () -> Icon) -> some View {
-        VStack(spacing: 4) {
-            icon()
-                .frame(width: 68, height: 68)
-                .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: .black.opacity(0.07), radius: 4, y: 2)
-                .padding(.bottom, 6)
-            Text(title).font(.headline).lineLimit(1).help(title)
-            Text(detail).font(.caption).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
     }
     #endif
 

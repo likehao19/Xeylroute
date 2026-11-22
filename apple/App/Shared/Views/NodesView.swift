@@ -15,6 +15,7 @@ public struct NodesView: View {
     #if os(macOS)
     @State private var selectedGroup = "GLOBAL"
     @State private var selectedNode: String?
+    @State private var showImport = false
     #endif
     @State private var selectedTab: NodesTab = .groups
     @State private var expandedGroups: Set<String> = ["GLOBAL"]
@@ -45,13 +46,24 @@ public struct NodesView: View {
                     .frame(maxWidth: 220)
                 #endif
 
+                #if os(macOS)
+                if selectedTab == .groups && appState.status.configured {
+                    Picker("策略组", selection: Binding(
+                        get: { appState.profile.groups.contains { $0.name == selectedGroup } ? selectedGroup : "GLOBAL" },
+                        set: { selectedGroup = $0 }
+                    )) {
+                        Text("默认出口").tag("GLOBAL")
+                        ForEach(appState.profile.groups) { Text($0.name).tag($0.name) }
+                    }
+                    .frame(maxWidth: 210)
+                }
+                #else
                 if let scope = appState.profile.subscriptionScope {
                     StatusPill(text: scope, tint: .blue)
                 }
+                #endif
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
+            .workspaceControlBar()
 
             #if os(macOS)
             if selectedTab == .groups && appState.status.configured {
@@ -65,7 +77,7 @@ public struct NodesView: View {
         }
         .navigationTitle("代理组与节点")
         #if os(macOS)
-        .searchable(text: $filterText, placement: .toolbar, prompt: selectedTab == .sites ? "搜索网站" : "搜索节点或协议")
+        .searchable(text: $filterText, placement: .toolbar, prompt: selectedTab == .sites ? "搜索网站" : (selectedTab == .socks ? "搜索节点、端口或订阅" : "搜索节点或协议"))
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -98,6 +110,9 @@ public struct NodesView: View {
                 }
             }
         }
+        #if os(macOS)
+        .sheet(isPresented: $showImport) { ImportSubscriptionSheet() }
+        #endif
         .sheet(isPresented: $showAddSocksSheet) {
             AddFixedSocksSheet()
                 .environment(appState)
@@ -130,21 +145,9 @@ public struct NodesView: View {
         let nodes = group.map(groupMembers) ?? appState.selectableNodes
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
         let rows = nodes.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.type.localizedCaseInsensitiveContains(query) }
-        let active = group == nil ? appState.currentGlobalExit : appState.snapshot?.proxies[groupName]?.now
+        let active = appState.snapshot?.proxies[groupName]?.now
 
         return VStack(spacing: 0) {
-            HStack {
-                Picker("策略组", selection: Binding(get: { groupName }, set: { selectedGroup = $0 })) {
-                    Text("全局默认出口").tag("GLOBAL")
-                    ForEach(appState.profile.groups) { Text($0.name).tag($0.name) }
-                }
-                .fixedSize()
-                Spacer()
-                Text("\(rows.count) 个节点").font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-
             Table(rows, selection: $selectedNode) {
                 TableColumn("节点") { node in
                     HStack(spacing: 8) {
@@ -162,6 +165,7 @@ public struct NodesView: View {
                             Label("使用中", systemImage: "checkmark").foregroundStyle(.tint)
                         } else {
                             Button("使用") { Task { await appState.selectNode(node.name, inGroup: groupName) } }
+                                .help(appState.status.running ? "切换到这个节点" : "启动本地监听并切换到这个节点")
                         }
                         if !node.isPolicy || node.name == "AUTO" {
                             Button("测速") { Task { await appState.measureDelay(for: node) } }
@@ -205,11 +209,15 @@ public struct NodesView: View {
                             .foregroundStyle(.secondary)
                         Text("还没有代理节点")
                             .font(.headline)
-                        Text("前往「订阅管理」导入订阅链接、节点分享链接或 YAML 配置文件。")
+                        Text("导入订阅或节点后，可以在这里切换出口、测试延迟。")
                             .font(.system(size: 12.5))
                             .foregroundStyle(.secondary)
-                        Button("前往导入") {
+                        Button("导入订阅或节点…") {
+                            #if os(macOS)
+                            showImport = true
+                            #else
                             appState.selectedDestination = .subscriptions
+                            #endif
                         }
                         .buttonStyle(.borderedProminent)
                         .padding(.top, 4)
@@ -359,6 +367,11 @@ public struct NodesView: View {
 
     private var fixedSocksContent: some View {
         let palette = XeylPalette(colorScheme)
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bindings = appState.profile.fixedSocks.filter {
+            query.isEmpty || $0.node.localizedCaseInsensitiveContains(query)
+                || String($0.port).contains(query) || ($0.provider?.localizedCaseInsensitiveContains(query) ?? false)
+        }
         return VStack(alignment: .leading, spacing: 14) {
             NativeCard(padding: 15) {
                 HStack(spacing: 12) {
@@ -378,7 +391,9 @@ public struct NodesView: View {
             }
 
             NativeCard(padding: 0) {
-                if appState.profile.fixedSocks.isEmpty {
+                if bindings.isEmpty && !query.isEmpty {
+                    ContentUnavailableView.search(text: query)
+                } else if bindings.isEmpty {
                     Text("尚未创建固定 SOCKS5 入口，点击右上角「添加固定入口」创建。")
                         .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
@@ -386,12 +401,12 @@ public struct NodesView: View {
                         .padding(32)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(appState.profile.fixedSocks.enumerated()), id: \.element.id) { idx, binding in
+                        ForEach(Array(bindings.enumerated()), id: \.element.id) { idx, binding in
                             GroupedRow(
                                 title: binding.node,
                                 subtitle: binding.provider.map { "订阅：\($0)" } ?? "独立节点"
                             ) {
-                                Text("127.0.0.1:\(binding.port)")
+                                Text("127.0.0.1:\(String(binding.port))")
                                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 5)
@@ -416,7 +431,7 @@ public struct NodesView: View {
                                     .buttonStyle(.borderless)
                                 }
                             }
-                            if idx < appState.profile.fixedSocks.count - 1 {
+                            if idx < bindings.count - 1 {
                                 HairlineDivider()
                             }
                         }

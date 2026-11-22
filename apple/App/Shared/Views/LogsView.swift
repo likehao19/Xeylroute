@@ -18,6 +18,8 @@ public struct LogsView: View {
     @State private var filterText = ""
     @State private var probeHost = "github.com"
     @State private var probeSummary: String?
+    @State private var probing = false
+    @State private var probeFailed = false
     @State private var prefillRule: RuleConditions?
 
     public var body: some View {
@@ -43,19 +45,20 @@ public struct LogsView: View {
                     InlineSearchField(text: $probeHost, placeholder: "测试域名")
                         .frame(width: 160)
                         .onSubmit { runDomainProbe() }
-                    Button("实测连通") { runDomainProbe() }
+                    Button(probing ? "检测中…" : "检测连接") { runDomainProbe() }
+                        .disabled(probing || probeHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .help("通过本地代理检测网址，必要时启动监听")
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
+            .workspaceControlBar()
 
             if let probeSummary {
                 NativeCard(padding: 10, radius: 10) {
                     HStack(spacing: 8) {
-                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
+                        Image(systemName: probeFailed ? "exclamationmark.circle" : "checkmark.circle")
+                            .foregroundStyle(probeFailed ? Color.orange : .green)
                         Text(probeSummary).font(.system(size: 12.5))
                         Spacer()
                         Button("关闭") { self.probeSummary = nil }
@@ -69,7 +72,6 @@ public struct LogsView: View {
             }
 
             #if os(macOS)
-            Divider()
             switch selectedTab {
             case .history: logsHistoryContent
             case .active: activeRoutesContent
@@ -260,20 +262,27 @@ public struct LogsView: View {
 
     private func runDomainProbe() {
         let target = probeHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !target.isEmpty else { return }
+        guard !target.isEmpty, !probing else { return }
+        probing = true
+        probeSummary = nil
+        probeFailed = false
         Task {
+            defer { probing = false }
             do {
                 if !appState.status.running {
                     _ = try await appState.runtime.startLocalCore()
                     await appState.refreshAll(fullSnapshot: true)
                 }
                 guard let client = await appState.runtime.activeClient() else {
-                    probeSummary = "内核未运行，无法检测"
+                    probeFailed = true
+                    probeSummary = "本地监听尚未就绪，请稍后重试。"
                     return
                 }
                 let result = try await client.probeWebsite(host: target, localProxyPort: appState.status.effectiveHTTPPort)
+                probeFailed = !(200..<400).contains(result.status)
                 probeSummary = "\(target)：HTTP \(result.status) · 响应 \(result.ms) ms"
             } catch {
+                probeFailed = true
                 probeSummary = "\(target)：检测失败（\(error.localizedDescription)）"
             }
         }

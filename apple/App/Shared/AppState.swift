@@ -118,6 +118,8 @@ public final class AppState {
     public var probeConcurrency: Int {
         didSet { UserDefaults.standard.set(probeConcurrency, forKey: "xeylroute-probe-concurrency") }
     }
+    private(set) var refreshingProviders: Set<String> = []
+    private(set) var subscriptionErrors: [String: String] = [:]
     public var nodeDelays: [String: DelayMeasurement] = [:]
     public var testingNodes: Set<String> = []
     public var isBatchProbing = false
@@ -546,11 +548,25 @@ public final class AppState {
     }
 
     public func refreshSubscription(name: String) async {
+        guard !refreshingProviders.contains(name) else { return }
         do {
+            try await fetchSubscription(name: name)
+            notify("订阅「\(name)」已刷新")
+        } catch {
+            notify("刷新「\(name)」失败：\(error.localizedDescription)", isError: true)
+        }
+    }
+
+    func fetchSubscription(name: String, reloadConfiguration: Bool = false) async throws {
+        let needsReload = reloadConfiguration || subscriptionErrors[name] != nil
+        refreshingProviders.insert(name)
+        subscriptionErrors[name] = nil
+        defer { refreshingProviders.remove(name) }
+        do {
+            if needsReload { try await runtime.reloadIfRunning() }
             if let client = await runtime.activeClient() {
                 try await client.refreshProvider(name: name)
                 await refreshAll(fullSnapshot: true)
-                notify("订阅「\(name)」已刷新")
             } else if let provider = profile.providers.first(where: { $0.name == name }),
                       let urlString = provider.url,
                       let url = URL(string: urlString)
@@ -566,14 +582,19 @@ public final class AppState {
                     let nodes = try ShareLinkParser.parseBundle(text)
                     yamlContent = SimpleYAML.emit(.object(["proxies": .array(nodes)]))
                 } else {
+                    guard let proxies = try SimpleYAML.parse(text)["proxies"]?.arrayValue, !proxies.isEmpty else {
+                        throw ProfileStoreError.invalidProfile("订阅内容中没有节点，请检查订阅地址。")
+                    }
                     yamlContent = text
                 }
                 try await runtime.profileStore.saveProviderPayload(name: name, yamlContent: yamlContent)
                 await refreshAll(fullSnapshot: true)
-                notify("订阅「\(name)」已拉取更新")
+            } else {
+                throw ProfileStoreError.missingResource("找不到可刷新的远程订阅。")
             }
         } catch {
-            notify("刷新「\(name)」失败：\(error.localizedDescription)", isError: true)
+            subscriptionErrors[name] = error.localizedDescription
+            throw error
         }
     }
 

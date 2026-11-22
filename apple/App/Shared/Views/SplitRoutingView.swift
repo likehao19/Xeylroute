@@ -81,13 +81,10 @@ public struct SplitRoutingView: View {
                     .frame(width: 140)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
+            .workspaceControlBar()
 
             #if os(macOS)
             if selectedTab == .rules {
-                Divider()
                 rulesListContent
             } else {
                 tabContent
@@ -466,15 +463,28 @@ public struct RuleEditorSheet: View {
         _selectedExit = State(initialValue: existing?.exit ?? defaultExit)
     }
 
+    private var validationHint: String? {
+        do {
+            _ = try RuleConditionsEngine.compile(conditions)
+            return nil
+        } catch RuleConditionError.emptyConditions {
+            return appState.runtime.supportsProcessRouting
+                ? "应用、目标地址和端口至少填一项。填写多项时须同时匹配。"
+                : "目标地址和端口至少填一项。填写两项时须同时匹配。"
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     public var body: some View {
         NavigationStack {
             Form {
                 if appState.runtime.supportsProcessRouting {
-                    Section("程序路径（可选）") {
+                    Section("应用（可选）") {
                         HStack {
                             TextField("/Applications/.../MacOS/...", text: $conditions.program)
                             #if os(macOS)
-                            Button("选择…") {
+                            Button("选取应用…") {
                                 pickExecutable()
                             }
                             #endif
@@ -484,7 +494,7 @@ public struct RuleEditorSheet: View {
 
                 Section("目标地址（可选）") {
                     TextField("域名、网址、IP 或 CIDR 网段", text: $conditions.target)
-                    Toggle("同时匹配所有子域名 (DOMAIN-SUFFIX)", isOn: $conditions.suffix)
+                    Toggle("包括该域名的子域名", isOn: $conditions.suffix)
                 }
 
                 Section("目标端口（可选）") {
@@ -492,13 +502,16 @@ public struct RuleEditorSheet: View {
                 }
 
                 Section("出口策略") {
-                    Picker("命中后走", selection: $selectedExit) {
+                    Picker("匹配时使用", selection: $selectedExit) {
                         ForEach(appState.profile.exits, id: \.self) { exit in
                             Text(exit).tag(exit)
                         }
                     }
                 }
 
+                if let validationHint {
+                    Text(validationHint).font(.callout).foregroundStyle(.secondary)
+                }
                 if let errorText {
                     Section {
                         Text(errorText).foregroundStyle(.red).font(.caption)
@@ -529,6 +542,7 @@ public struct RuleEditorSheet: View {
                             }
                         }
                     }
+                    .disabled(validationHint != nil)
                     .buttonStyle(.borderedProminent)
                 }
             }
