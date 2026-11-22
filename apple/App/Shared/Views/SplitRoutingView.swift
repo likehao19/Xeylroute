@@ -40,7 +40,11 @@ public struct SplitRoutingView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                #if os(macOS)
+                .fixedSize()
+                #else
                 .frame(maxWidth: 320)
+                #endif
 
                 Spacer()
 
@@ -87,7 +91,7 @@ public struct SplitRoutingView: View {
             if selectedTab == .rules {
                 rulesListContent
             } else if selectedTab == .apps {
-                processDirectory.task { await appState.refreshProcesses() }
+                processDirectory.macTableSurface().task { await appState.refreshProcesses() }
             } else {
                 tabContent
             }
@@ -95,7 +99,7 @@ public struct SplitRoutingView: View {
             tabContent
             #endif
         }
-        .navigationTitle("分流与程序")
+        .workspaceTitle(.split)
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .automatic) {
@@ -113,7 +117,7 @@ public struct SplitRoutingView: View {
                     } label: {
                         Label("添加规则", systemImage: "plus")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .workspaceToolbarPrimary()
                 } else if selectedTab == .groups {
                     Button {
                         editingGroup = nil
@@ -121,7 +125,7 @@ public struct SplitRoutingView: View {
                     } label: {
                         Label("新建分组", systemImage: "plus")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .workspaceToolbarPrimary()
                 } else {
                     Button {
                         Task { await appState.refreshProcesses() }
@@ -177,32 +181,37 @@ public struct SplitRoutingView: View {
         #if os(macOS)
         if items.isEmpty {
             if query.isEmpty {
-                ScrollView {
-                    RouteSetupPanel(title: "为特定流量指定出口",
-                                    detail: "规则从上到下匹配。你可以让某个网站走代理，也可以让一个应用始终直连。",
-                                    source: "应用或地址", destination: "指定出口",
-                                    sourceIcon: "macwindow", destinationIcon: "arrow.up.right",
-                                    actionTitle: "创建分流规则…") {
-                        editingRule = nil
-                        showAddRule = true
-                    }
+                WorkspacePlaceholder(symbol: "arrow.triangle.branch", title: "还没有分流规则",
+                                     detail: "可以让指定网站走代理，或让某个应用始终直连。规则按列表顺序匹配。",
+                                     actionTitle: "创建分流规则…") {
+                    editingRule = nil
+                    showAddRule = true
                 }
             } else {
                 ContentUnavailableView.search(text: filterText)
             }
         } else {
-            Table(items, selection: $selectedRule) {
-                TableColumn("匹配条件") { rule in
-                    Label(rule.payload.isEmpty ? rule.kind : rule.payload, systemImage: iconForRule(rule))
+            GeometryReader { area in
+                Table(items, selection: $selectedRule) {
+                    TableColumn("匹配条件") { rule in
+                        Label(rule.payload.isEmpty ? rule.kind : rule.payload, systemImage: iconForRule(rule))
+                    }
+                    TableColumn("类型") { rule in
+                        Text(rule.kind).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    }.width(ideal: 105)
+                    TableColumn("出口") { rule in
+                        StatusPill(text: rule.exit, tint: rule.exit == "DIRECT" ? .teal : (rule.exit == "REJECT" ? .red : .blue))
+                    }.width(ideal: 82)
+                    TableColumn("操作") { rule in
+                        HStack(spacing: 10) { ruleControls(rule) }
+                    }
+                    .width(106)
                 }
-                TableColumn("类型", value: \.kind).width(ideal: 105)
-                TableColumn("出口", value: \.exit).width(ideal: 82)
-                TableColumn("操作") { rule in
-                    HStack(spacing: 10) { ruleControls(rule) }
-                }
-                .width(106)
+                .alternatingRowBackgrounds(.disabled)
+                .environment(\.defaultMinListRowHeight, 35)
+                .frame(height: min(max(0, area.size.height - 18), 35 * CGFloat(items.count) + 36))
+                .macTableSurface()
             }
-            .alternatingRowBackgrounds(.disabled)
         }
         #else
         NativeCard(padding: 0) {

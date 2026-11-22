@@ -33,12 +33,20 @@ public struct NodesView: View {
             HStack(spacing: 12) {
                 Picker("视图", selection: $selectedTab) {
                     ForEach(availableTabs) { tab in
+                        #if os(macOS)
+                        Text(tab == .socks ? "固定入口" : (tab == .sites ? "网站测速" : tab.rawValue)).tag(tab)
+                        #else
                         Text(tab.rawValue).tag(tab)
+                        #endif
                     }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                #if os(macOS)
+                .fixedSize()
+                #else
                 .frame(maxWidth: 340)
+                #endif
 
                 Spacer()
 
@@ -48,9 +56,9 @@ public struct NodesView: View {
                 #endif
 
                 #if os(macOS)
-                if selectedTab == .groups && appState.status.configured {
+                if selectedTab == .groups && appState.profile.groups.contains(where: { $0.enabled && $0.name != "GLOBAL" }) {
                     Picker("策略组", selection: Binding(
-                        get: { appState.profile.groups.contains { $0.name == selectedGroup } ? selectedGroup : "GLOBAL" },
+                        get: { appState.profile.groups.contains { $0.name == selectedGroup && $0.enabled } ? selectedGroup : "GLOBAL" },
                         set: { selectedGroup = $0 }
                     )) {
                         Text("默认出口").tag("GLOBAL")
@@ -68,14 +76,11 @@ public struct NodesView: View {
 
             #if os(macOS)
             if selectedTab == .socks && appState.profile.fixedSocks.isEmpty && filterText.isEmpty {
-                ScrollView {
-                    RouteSetupPanel(title: "为应用保留一个固定出口",
-                                    detail: "把本机端口绑定到一个节点。其他应用可以通过这个端口连接，切换默认节点时仍使用原出口。",
-                                    source: "本机端口", destination: "固定节点",
-                                    sourceIcon: "desktopcomputer", destinationIcon: "network",
-                                    actionTitle: hasBindableNodes ? "创建 SOCKS5 入口…" : "先导入节点…") {
-                        if hasBindableNodes { showAddSocksSheet = true } else { showImport = true }
-                    }
+                WorkspacePlaceholder(symbol: "point.topleft.down.to.point.bottomright.curvepath",
+                                     title: "还没有固定入口",
+                                     detail: "将本机 SOCKS5 端口绑定到一个节点，应用就能始终使用这个出口。",
+                                     actionTitle: hasBindableNodes ? "创建 SOCKS5 入口…" : "先导入节点…") {
+                    if hasBindableNodes { showAddSocksSheet = true } else { showImport = true }
                 }
             } else if selectedTab == .groups && (hasBindableNodes || !appState.profile.groups.isEmpty) {
                 macNodeCatalog
@@ -86,7 +91,7 @@ public struct NodesView: View {
             tabContent
             #endif
         }
-        .navigationTitle("代理组与节点")
+        .workspaceTitle(.nodes)
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .automatic) {
@@ -96,6 +101,15 @@ public struct NodesView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 switch selectedTab {
                 case .groups:
+                    #if os(macOS)
+                    Menu {
+                        Button("全部测延迟") { Task { await appState.measureAllDelays() } }
+                        Button("测全部带宽") { Task { await appState.measureAllBandwidth() } }
+                    } label: {
+                        Label(appState.isBatchProbing ? "测速中…" : "批量测速", systemImage: "speedometer")
+                    }
+                    .disabled(appState.isBatchProbing || appState.proxyServers.isEmpty)
+                    #else
                     Button("测全部带宽") {
                         Task { await appState.measureAllBandwidth() }
                     }
@@ -104,14 +118,15 @@ public struct NodesView: View {
                     Button(appState.isBatchProbing ? "测速中…" : "全部测延迟") {
                         Task { await appState.measureAllDelays() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .workspaceToolbarPrimary()
                     .disabled(appState.isBatchProbing || !hasBindableNodes)
 
+                    #endif
                 case .sites:
                     Button("全部站点测速") {
                         Task { await appState.probeAllWebsites() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .workspaceToolbarPrimary()
 
                 case .socks:
                     Button {
@@ -120,7 +135,7 @@ public struct NodesView: View {
                         Label("添加固定入口", systemImage: "plus")
                     }
                     .disabled(!hasBindableNodes)
-                    .buttonStyle(.borderedProminent)
+                    .workspaceToolbarPrimary()
                 }
             }
         }
@@ -160,7 +175,7 @@ public struct NodesView: View {
 
     #if os(macOS)
     private var macNodeCatalog: some View {
-        let group = appState.profile.groups.first { $0.name == selectedGroup }
+        let group = appState.profile.groups.first { $0.name == selectedGroup && $0.enabled }
         let groupName = group?.name ?? "GLOBAL"
         let nodes = group.map(groupMembers) ?? appState.selectableNodes
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -168,79 +183,53 @@ public struct NodesView: View {
         let active = appState.snapshot?.proxies[groupName]?.now
         let policies = rows.filter(\.isPolicy)
         let servers = rows.filter { !$0.isPolicy }
+
+        let notices = servers.filter(\.isSubscriptionNote)
+        let endpoints = servers.filter { !$0.isSubscriptionNote }
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                if rows.isEmpty {
-                    CollectionEmptyState(title: "分组中还没有节点", systemImage: "network",
-                                         description: "编辑策略组或切换到默认出口。", query: query)
-                }
+            VStack(alignment: .leading, spacing: 17) {
                 if !policies.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("策略").font(.headline)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 122), spacing: 8)], spacing: 8) {
-                            ForEach(policies) { item in
-                                Button {
-                                    Task { await appState.selectNode(item.name, inGroup: groupName) }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: item.name == "DIRECT" ? "arrow.up.right" : item.name == "REJECT" ? "minus.circle" : "arrow.triangle.branch")
-                                            .foregroundStyle(.secondary)
-                                        Text(item.name).lineLimit(1)
-                                        Spacer(minLength: 2)
-                                        if item.name == active { Image(systemName: "checkmark").foregroundStyle(.teal) }
-                                    }
-                                    .padding(9).macPanel().contentShape(Rectangle())
-                                }.buttonStyle(.plain).help(item.type)
-                            }
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack {
+                            Text("出口策略").font(.headline)
+                            Spacer()
+                            if let active { Text("当前 · " + active).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
-                    }
-                }
-                if !servers.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("可用节点").font(.headline)
-                            Text(String(servers.count)).monospacedDigit().foregroundStyle(.secondary)
-                        }
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 218), spacing: 10)], spacing: 10) {
-                            ForEach(servers) { node in
-                                VStack(alignment: .leading, spacing: 12) {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(policies) { node in
+                                    let title = ["AUTO": "自动优选", "DIRECT": "直连", "REJECT": "阻断"][node.name] ?? node.name
                                     Button {
                                         Task { await appState.selectNode(node.name, inGroup: groupName) }
                                     } label: {
-                                        HStack(spacing: 9) {
-                                            CountryBadge(nodeName: node.name, isPolicy: false)
-                                            Text(node.name).font(.body.weight(.medium)).lineLimit(2)
-                                            Spacer(minLength: 2)
-                                            Image(systemName: node.name == active ? "checkmark.circle.fill" : "circle")
-                                                .foregroundStyle(node.name == active ? Color.teal : Color.secondary.opacity(0.4))
-                                        }.frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(appState.status.running ? "使用此节点" : "启动本地监听并切换至此节点")
-                                    HStack(spacing: 7) {
-                                        Text(node.type.uppercased()).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                        Spacer()
-                                        LatencyBadge(measurement: appState.nodeDelays[node.id], isTesting: appState.testingNodes.contains(node.id))
-                                        Button {
-                                            Task { await appState.measureDelay(for: node) }
-                                        } label: {
-                                            Image(systemName: "gauge.with.dots.needle.33percent")
+                                        HStack(spacing: 5) {
+                                            CountryBadge(nodeName: node.name, isPolicy: true)
+                                            Text(title)
+                                            if active == node.name { Image(systemName: "checkmark").foregroundStyle(.tint) }
                                         }
-                                        .buttonStyle(.borderless)
-                                        .disabled(appState.testingNodes.contains(node.id))
-                                        .accessibilityLabel("测试节点延迟").help("测试延迟")
-                                    }
+                                    }.controlSize(.small).help(node.name)
                                 }
-                                .padding(13)
-                                .macPanel()
-                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(node.name == active ? Color.teal : .clear, lineWidth: 1.4))
                             }
-                        }
+                        }.scrollIndicators(.automatic)
                     }
                 }
-            }
-            .padding(22)
+                if !endpoints.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("可用节点").font(.headline)
+                            Spacer()
+                            Text("\(endpoints.count) 个节点").font(.caption).foregroundStyle(.secondary)
+                        }
+                        WorkspaceNodeList(nodes: endpoints, selectedName: active) { node in
+                            Task { await appState.selectNode(node.name, inGroup: groupName) }
+                        }
+                    }
+                } else if rows.isEmpty {
+                    CollectionEmptyState(title: "分组中还没有节点", systemImage: "network",
+                                         description: "编辑策略组或切换到默认出口。", query: query)
+                }
+                SubscriptionNotes(notes: notices, searching: !query.isEmpty)
+            }.padding(20)
         }
     }
     #endif

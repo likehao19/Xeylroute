@@ -17,7 +17,7 @@ struct XeylrouteAppleApp: App {
                 }
         }
         .windowStyle(.automatic)
-        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+        .windowToolbarStyle(.unifiedCompact(showsTitle: true))
         .defaultSize(width: 1120, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {}
@@ -102,7 +102,7 @@ struct MenuBarPopoverView: View {
                 Text("快速切换默认节点")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                ForEach(appState.selectableNodes.prefix(6)) { node in
+                ForEach(appState.selectableNodes.filter { !$0.isSubscriptionNote }.prefix(6)) { node in
                     Button {
                         Task { await appState.selectNode(node.name) }
                     } label: {

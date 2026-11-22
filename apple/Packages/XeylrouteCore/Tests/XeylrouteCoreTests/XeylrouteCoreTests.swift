@@ -4,6 +4,20 @@ import Testing
 
 @Suite("XeylrouteCore Tests")
 struct XeylrouteCoreTests {
+    @Test("Display flags once and distinguish provider notices from selectable names")
+    func subscriptionLabels() {
+        let endpoint = ProxyNode(name: "🇭🇰 香港 01 · 100GB", type: "vless", provider: "test")
+        #expect(ProxyNode.leadingFlag(in: endpoint.name) == "🇭🇰")
+        #expect(endpoint.displayName == "香港 01 · 100GB")
+        #expect(endpoint.name == "🇭🇰 香港 01 · 100GB")
+        #expect(!endpoint.isSubscriptionNote)
+        for title in ["剩余流量：34.59 GB", "套餐到期: 2026-12-02", "服务官网2: https://example.invalid"] {
+            #expect(ProxyNode(name: title, type: "http", provider: "test").isSubscriptionNote)
+        }
+        #expect(!ProxyNode(name: "香港: 官网专线", type: "http", provider: "test").isSubscriptionNote)
+        #expect(!ProxyNode(name: "建议：Office", type: "http").isSubscriptionNote)
+    }
+
     @Test("Compound rule conditions compile and round-trip losslessly")
     func ruleConditionsRoundTrip() throws {
         let cond = RuleConditions(

@@ -14,14 +14,6 @@ public struct SettingsView: View {
     #if os(macOS)
     private enum Category: String, CaseIterable {
         case general = "常规", network = "连接", tests = "测速", diagnostics = "诊断"
-        var symbol: String {
-            switch self {
-            case .general: "paintpalette"
-            case .network: "network"
-            case .tests: "speedometer"
-            case .diagnostics: "stethoscope"
-            }
-        }
     }
     @State private var category: Category = .general
     private var showGeneral: Bool { category == .general }
@@ -34,7 +26,7 @@ public struct SettingsView: View {
 
     public var body: some View {
         settingsForm
-            .navigationTitle("网络与设置")
+            .workspaceTitle(.settings)
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {
@@ -106,30 +98,20 @@ public struct SettingsView: View {
     @ViewBuilder
     private var settingsForm: some View {
         #if os(macOS)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(spacing: 6) {
+        VStack(spacing: 0) {
+            HStack {
+                Picker("设置分类", selection: $category) {
                     ForEach(Category.allCases, id: \.self) { item in
-                        Button {
-                            category = item
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: item.symbol)
-                                Text(item.rawValue)
-                            }.frame(maxWidth: .infinity).padding(.vertical, 8)
-                            .foregroundStyle(category == item ? Color.accentColor : .secondary)
-                            .background(category == item ? Color.accentColor.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 7))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(category == item ? .isSelected : [])
+                        Text(item.rawValue).tag(item)
                     }
-                }.padding(4).macPanel()
-                preferenceSections
+                }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                Spacer()
+            }.workspaceControlBar()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) { preferenceSections }
+                    .frame(maxWidth: 860, alignment: .leading)
+                    .padding(20).frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: 740, alignment: .leading)
-            .padding(.horizontal, 24).padding(.bottom, 24)
-            .frame(maxWidth: .infinity)
         }
         #else
         ScrollView {
@@ -387,37 +369,34 @@ public struct SettingsView: View {
     #if os(macOS)
     private func appearanceSample(_ mode: AppearanceMode) -> some View {
         let dark = mode == .dark || (mode == .auto && colorScheme == .dark)
-        let ink: Color = dark ? .white : .black
         let chosen = appState.appearance == mode
         return Button {
             appState.appearance = mode
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 2) {
-                            ForEach(0..<3) { _ in Circle().fill(ink.opacity(0.35)).frame(width: 3, height: 3) }
-                        }
-                        RoundedRectangle(cornerRadius: 2).fill(.teal.opacity(0.45)).frame(height: 5)
-                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.15)).frame(height: 3)
-                        Spacer(minLength: 0)
-                    }.padding(7).frame(width: 37).background(ink.opacity(0.06))
-                    VStack(alignment: .leading, spacing: 5) {
-                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.38)).frame(width: 23, height: 4)
-                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.12)).frame(height: 5)
-                        RoundedRectangle(cornerRadius: 2).fill(ink.opacity(0.10)).frame(height: 5)
-                    }.padding(8)
-                }
-                .frame(height: 46)
-                .background(dark ? Color(white: 0.17) : Color(white: 0.97))
-                .clipShape(RoundedRectangle(cornerRadius: 6)).accessibilityHidden(true)
+                GeometryReader { area in
+                    ZStack(alignment: .topLeading) {
+                        Image("AlpineHorizon").resizable().scaledToFill()
+                            .frame(width: area.size.width, height: area.size.height).clipped()
+                        let night = Color(red: 0.045, green: 0.08, blue: 0.16).opacity(0.62)
+                        if mode == .auto {
+                            HStack(spacing: 0) { Color.clear; night }
+                        } else if dark { night }
+                        HStack(spacing: 3) {
+                            ForEach(0..<3) { _ in Circle().fill(.white.opacity(0.88)).frame(width: 4, height: 4) }
+                        }.padding(7)
+                        VStack(alignment: .leading, spacing: 5) {
+                            RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.85)).frame(width: 34, height: 4)
+                            RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.60)).frame(width: 23, height: 3)
+                        }.padding(7).frame(maxHeight: .infinity, alignment: .bottomLeading)
+                    }.clipShape(RoundedRectangle(cornerRadius: 7)).accessibilityHidden(true)
+                }.frame(height: 66)
                 HStack {
                     Text(mode.title).font(.callout)
                     Spacer()
                     if chosen { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
                 }
-            }.padding(10).macPanel()
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(chosen ? Color.accentColor : .clear))
+            }.padding(8).macPanel(radius: 11, selected: chosen)
         }.buttonStyle(.plain).accessibilityAddTraits(chosen ? .isSelected : [])
     }
     #endif
@@ -429,8 +408,7 @@ public struct SettingsView: View {
             Text(title).font(.title3.weight(.semibold)).padding(.bottom, 5)
             VStack(alignment: .leading, spacing: 0) { rows() }
                 .padding(.horizontal, 14)
-                .background(.background, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+                .macPanel()
         }
         #else
         VStack(alignment: .leading, spacing: 8) {
@@ -446,7 +424,8 @@ public struct SettingsView: View {
     ) -> some View {
         #if os(macOS)
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
+            HStack(spacing: 11) {
+                leading()
                 preferenceLabel(title, subtitle: subtitle)
                 Spacer(minLength: 12)
                 trailing().fixedSize()

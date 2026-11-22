@@ -8,9 +8,6 @@ public struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
     @State private var showTunConfirm = false
-    #if os(macOS)
-    @State private var showControls = false
-    #endif
 
     public init() {}
 
@@ -61,37 +58,15 @@ public struct RootView: View {
     private var splitViewShell: some View {
         NavigationSplitView {
             #if os(macOS)
-            VStack(spacing: 0) {
-                HStack(spacing: 9) {
-                    Image("AppBrandLogo").resizable().frame(width: 32, height: 32)
-                    Text("Xeylroute").font(.system(size: 18, weight: .semibold))
-                    Spacer()
-                }
-                .padding(.horizontal, 15).padding(.vertical, 14)
+            VStack(alignment: .leading, spacing: 0) {
                 sidebarNavigation
                 Divider()
-                Button {
-                    showControls.toggle()
-                } label: {
-                    HStack(spacing: 9) {
-                        Image(systemName: "switch.2").font(.title3).foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("网络控制").font(.body.weight(.medium))
-                            HStack(spacing: 5) {
-                                Circle().fill(statusDotColor).frame(width: 6, height: 6)
-                                Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.up").font(.caption2.bold()).foregroundStyle(.secondary)
-                    }.padding(14).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("路由模式与网络接管设置")
-                .popover(isPresented: $showControls) { macNetworkControls.frame(width: 278) }
+                macNetworkControls.padding(.horizontal, 15).padding(.vertical, 11)
+                Divider()
+                sidebarLiveFooter.padding(.horizontal, 15).padding(.vertical, 10)
             }
             .navigationTitle("Xeylroute")
-            .navigationSplitViewColumnWidth(min: 170, ideal: 188, max: 218)
+            .navigationSplitViewColumnWidth(min: 175, ideal: 192, max: 226)
             #else
             VStack(spacing: 0) {
                 sidebarControlHeader
@@ -109,17 +84,23 @@ public struct RootView: View {
         } detail: {
             StageCanvas {
                 #if os(macOS)
-                VStack(spacing: 0) {
-                    workspaceHeading
+                GeometryReader { area in
                     detailContent(for: appState.selectedDestination)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(width: area.size.width, height: area.size.height, alignment: .topLeading)
                 }
                 #else
                 detailContent(for: appState.selectedDestination)
                 #endif
             }
+            #if os(macOS)
+            .navigationTitle(appState.selectedDestination.desktopTitle)
+            #endif
         }
         .navigationSplitViewStyle(.balanced)
+        #if os(macOS)
+        .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        #endif
     }
 
     private var sidebarNavigation: some View {
@@ -130,7 +111,7 @@ public struct RootView: View {
             #if os(macOS)
             Section("网络") {
                 navRow(.connect)
-                navRow(.nodes, badge: appState.selectableNodes.filter { !$0.isPolicy }.count)
+                navRow(.nodes, badge: appState.proxyServers.count)
                 navRow(.logs)
             }
             Section("配置") {
@@ -152,83 +133,39 @@ public struct RootView: View {
             #endif
         }
         .listStyle(.sidebar)
-        #if os(iOS)
         .scrollContentBackground(.hidden)
-        #endif
     }
 
     #if os(macOS)
-    private var workspaceHeading: some View {
-        let page = appState.selectedDestination
-        let subtitle: String
-        switch page {
-        case .connect: subtitle = appState.status.coreVersionLabel + "  ·  " + appState.profile.mode.fullTitle
-        case .nodes: subtitle = appState.profile.subscriptionScope.map { "当前来源 · " + $0 } ?? "本机节点与策略组"
-        case .split: subtitle = "\(appState.activeRuleCount) 条启用规则  ·  \(appState.profile.groups.filter(\.enabled).count) 个自定义策略组"
-        case .logs: subtitle = "\(appState.connectionLogs.count) 条记录  ·  " + (appState.status.running ? "正在监听" : "监听已停止")
-        case .subscriptions: subtitle = "\(appState.profile.providers.count) 个来源  ·  \(appState.profile.standaloneNodes.count) 个独立节点"
-        case .settings: subtitle = "本机偏好与网络配置"
-        }
-        return HStack(spacing: 13) {
-            Image(systemName: page.systemImage)
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 21, weight: .medium))
-                .foregroundStyle(page.tint)
-                .frame(width: 43, height: 43)
-                .background(page.tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(page.desktopTitle).font(.system(size: 25, weight: .semibold))
-                Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 24).padding(.top, 5).padding(.bottom, 17)
-    }
-
     private var macNetworkControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "switch.2").font(.title2).foregroundStyle(.teal)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("网络控制").font(.headline)
-                    Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
-                }
+        VStack(spacing: 10) {
+            HStack {
+                Label("路由模式", systemImage: "arrow.triangle.branch")
+                Spacer(minLength: 4)
+                Picker("路由模式", selection: Binding(
+                    get: { appState.profile.mode },
+                    set: { mode in Task { await appState.setMode(mode) } }
+                )) {
+                    ForEach(RoutingMode.allCases) { Text($0.title).tag($0) }
+                }.labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
             }
-            Divider()
-            Text("路由模式").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            Picker("路由模式", selection: Binding(
-                get: { appState.profile.mode },
-                set: { mode in Task { await appState.setMode(mode) } }
-            )) {
-                ForEach(RoutingMode.allCases) { Text($0.title).tag($0) }
+            HStack {
+                Label("系统代理", systemImage: "globe")
+                Spacer()
+                Toggle("系统代理", isOn: Binding(get: { appState.status.systemProxyEnabled },
+                                           set: { on in Task { await appState.setSystemProxy(on) } }))
+                    .labelsHidden()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
-            Divider()
-            Toggle(isOn: Binding(
-                get: { appState.status.systemProxyEnabled },
-                set: { on in Task { await appState.setSystemProxy(on) } }
-            )) {
-                Label("系统代理", systemImage: "globe").frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Label("虚拟网卡", systemImage: "shield")
+                Spacer()
+                Toggle("虚拟网卡", isOn: Binding(get: { appState.status.tunEnabled }, set: { on in
+                    if on { showTunConfirm = true } else { Task { await appState.setTUN(false) } }
+                })).labelsHidden()
             }
-            Toggle(isOn: Binding(
-                get: { appState.status.tunEnabled },
-                set: { on in
-                    if on { showControls = false; showTunConfirm = true }
-                    else { Task { await appState.setTUN(false) } }
-                }
-            )) {
-                Label("虚拟网卡", systemImage: "shield.lefthalf.filled").frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Divider()
-            sidebarLiveFooter
         }
-        .tint(.accentColor)
-        .toggleStyle(.switch)
-        .controlSize(.small)
-        .disabled(appState.isBusy)
-        .padding(16)
+        .toggleStyle(.switch).controlSize(.small).font(.callout)
+        .foregroundStyle(.secondary).disabled(appState.isBusy)
     }
     #endif
 
@@ -381,16 +318,9 @@ public struct RootView: View {
     @ViewBuilder
     private func navRow(_ dest: AppDestination, badge: Int? = nil) -> some View {
         #if os(macOS)
-        Label {
-            Text(dest.desktopTitle)
-        } icon: {
-            Image(systemName: dest.systemImage)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(appState.selectedDestination == dest ? Color.primary : dest.tint)
-        }
-            .badge(badge ?? 0)
-            .padding(.vertical, 3)
-            .tag(dest)
+        Label(dest.desktopTitle, systemImage: dest.systemImage)
+        .symbolVariant(.none).symbolRenderingMode(.monochrome)
+        .badge(badge ?? 0).padding(.vertical, 2).tag(dest)
         #else
         let isSelected = appState.selectedDestination == dest
         HStack(spacing: 8) {
@@ -419,7 +349,7 @@ public struct RootView: View {
     private var sidebarLiveFooter: some View {
         let palette = XeylPalette(colorScheme)
         return VStack(alignment: .leading, spacing: 6) {
-            if appState.selectedDestination != .connect && appState.status.running {
+            if appState.status.running {
                 HStack(alignment: .center) {
                     Text("实时流量")
                         .font(.system(size: 11, weight: .medium))
@@ -436,6 +366,19 @@ public struct RootView: View {
                 }
                 palette.divider.frame(height: 0.5)
             }
+            #if os(macOS)
+            HStack(spacing: 8) {
+                Image("AppBrandLogo").resizable().frame(width: 23, height: 23).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Xeylroute").font(.callout.weight(.medium))
+                    Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 3)
+                Circle().fill(statusDotColor).frame(width: 6, height: 6)
+                Text(appState.status.coreVersionLabel.replacingOccurrences(of: "Mihomo ", with: ""))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+            }.help(appState.status.coreVersionLabel + " · " + appState.statusBadgeTitle)
+            #else
             HStack(spacing: 6) {
                 Circle()
                     .fill(statusDotColor)
@@ -452,6 +395,7 @@ public struct RootView: View {
             .font(.system(size: 11, design: .monospaced))
             .monospacedDigit()
             .foregroundStyle(.secondary)
+            #endif
         }
         #if os(iOS)
         .padding(.horizontal, 11)

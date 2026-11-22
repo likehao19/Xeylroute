@@ -263,6 +263,32 @@ public struct ProxyNode: Codable, Equatable, Hashable, Sendable, Identifiable {
 
     public var id: String { "\(provider ?? "standalone")|\(name)" }
 
+    public static func leadingFlag(in name: String) -> Character? {
+        guard let first = name.first, first.unicodeScalars.count == 2,
+              first.unicodeScalars.allSatisfy({ (0x1F1E6...0x1F1FF).contains($0.value) }) else { return nil }
+        return first
+    }
+
+    public var displayName: String {
+        guard Self.leadingFlag(in: name) != nil else { return name }
+        let remainder = name.dropFirst().trimmingCharacters(in: .whitespaces)
+        return remainder.isEmpty ? name : remainder
+    }
+
+    /// Some subscription feeds use named proxy entries for account notices.
+    /// Keep the original name for all Mihomo operations.
+    public var isSubscriptionNote: Bool {
+        guard provider != nil, !isPolicy,
+              let separator = name.firstIndex(where: { $0 == ":" || $0 == "：" }) else { return false }
+        let label = name[..<separator].trimmingCharacters(in: .whitespaces)
+        if ["剩余流量", "距离下次重置剩余", "下次重置", "套餐到期", "到期时间", "建议", "公告"].contains(label) {
+            return true
+        }
+        let value = name[name.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+        let siteLabel = label.trimmingCharacters(in: .decimalDigits)
+        return siteLabel.hasSuffix("官网") && (value.hasPrefix("https://") || value.hasPrefix("http://"))
+    }
+
     public init(
         name: String,
         type: String,

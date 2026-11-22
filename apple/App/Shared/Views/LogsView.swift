@@ -33,7 +33,11 @@ public struct LogsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                #if os(macOS)
+                .fixedSize()
+                #else
                 .frame(maxWidth: 220)
+                #endif
 
                 Spacer()
 
@@ -92,6 +96,16 @@ public struct LogsView: View {
             }
 
             #if os(macOS)
+            if appState.status.running {
+                HStack(spacing: 16) {
+                    Label("\(appState.snapshot?.connections?.activeCount ?? 0) 个连接", systemImage: "point.3.connected.trianglepath.dotted")
+                    Label(TrafficTracker.formatRate(appState.currentDownRate), systemImage: "arrow.down")
+                    Label(TrafficTracker.formatRate(appState.currentUpRate), systemImage: "arrow.up")
+                    Spacer()
+                }
+                .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                .padding(.horizontal, 20).padding(.top, 14)
+            }
             switch selectedTab {
             case .history: logsHistoryContent
             case .active:
@@ -103,16 +117,6 @@ public struct LogsView: View {
                     }
                 }
             }
-            HStack(spacing: 15) {
-                Label(appState.status.running ? "实时监听" : "已停止监听", systemImage: "waveform")
-                    .foregroundStyle(appState.status.running ? Color.teal : .secondary)
-                Spacer()
-                Label(TrafficTracker.formatRate(appState.currentDownRate), systemImage: "arrow.down")
-                Label(TrafficTracker.formatRate(appState.currentUpRate), systemImage: "arrow.up")
-            }
-            .monospacedDigit().font(.caption).foregroundStyle(.secondary)
-            .padding(.horizontal, 16).padding(.vertical, 8)
-
             #else
             ScrollView {
                 VStack(spacing: 14) {
@@ -127,7 +131,7 @@ public struct LogsView: View {
             }
             #endif
         }
-        .navigationTitle("连接记录")
+        .workspaceTitle(.logs)
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .automatic) {
@@ -191,6 +195,7 @@ public struct LogsView: View {
                 }
             }
             .alternatingRowBackgrounds(.enabled)
+            .macTableSurface()
         }
         #else
         NativeCard(padding: 0) {
@@ -258,6 +263,7 @@ public struct LogsView: View {
                 .width(74)
             }
             .alternatingRowBackgrounds(.enabled)
+            .macTableSurface()
         }
         #else
         NativeCard(padding: 0) {
@@ -296,17 +302,12 @@ public struct LogsView: View {
         if !query.isEmpty {
             ContentUnavailableView.search(text: filterText)
         } else {
-            ContentUnavailableView {
-                Label(title, systemImage: "waveform.path.ecg")
-            } description: {
-                Text(detail)
-            } actions: {
-                if appState.status.running {
-                    Button("检测连接…") { showProbe = true }
-                } else {
-                    Button("前往连接概览") { appState.selectedDestination = .connect }
-                }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            WorkspacePlaceholder(symbol: "waveform.path.ecg", title: title, detail: detail,
+                                 actionTitle: appState.status.running ? "检测连接…" : (appState.status.configured ? "启动本地监听" : "导入配置…")) {
+                if appState.status.running { showProbe = true }
+                else if appState.status.configured { Task { await appState.toggleLocalCore() } }
+                else { appState.selectedDestination = .subscriptions }
+            }
         }
     }
     #endif

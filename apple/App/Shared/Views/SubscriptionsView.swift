@@ -110,7 +110,7 @@ public struct SubscriptionsView: View {
             }
             #endif
         }
-        .navigationTitle("订阅管理")
+        .workspaceTitle(.subscriptions)
         .toolbar {
             #if os(macOS)
             ToolbarItem(placement: .automatic) {
@@ -148,7 +148,7 @@ public struct SubscriptionsView: View {
                 } label: {
                     Label("导入订阅或节点…", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .workspaceToolbarPrimary()
             }
         }
         #if os(macOS)
@@ -186,115 +186,100 @@ public struct SubscriptionsView: View {
     #if os(macOS)
     @ViewBuilder
     private func macSources(_ providers: [SubscriptionProvider], standalone: [ProxyNode], query: String) -> some View {
-        if providers.isEmpty && standalone.isEmpty {
-            if query.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Label("导入订阅或本地节点", systemImage: "square.and.arrow.down").font(.title3.weight(.semibold))
-                        ConnectionSourceEditor()
-                    }.padding(20).macPanel().frame(maxWidth: 640).padding(24).frame(maxWidth: .infinity)
+        let provider = providers.first { $0.name == appState.inspectedSubscription }
+            ?? providers.first { $0.name == appState.profile.subscriptionScope } ?? providers.first
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                if let provider {
+                    if providers.count > 1 {
+                        Picker("查看来源", selection: Binding(get: { provider.name }, set: { appState.inspectedSubscription = $0 })) {
+                            ForEach(providers) { Text($0.name).tag($0.name) }
+                        }.labelsHidden().frame(maxWidth: 240, alignment: .leading)
+                    } else {
+                        Label(provider.name, systemImage: provider.isRemote ? "icloud" : "doc.text")
+                            .lineLimit(1).truncationMode(.middle).help(provider.name)
+                    }
+                    Spacer(minLength: 6)
+                    sourceActions(provider, isSelected: provider.name == appState.profile.subscriptionScope)
+                } else {
+                    Label(standalone.isEmpty ? "订阅与本地配置" : "独立节点", systemImage: "tray")
+                    Spacer()
                 }
+            }.workspaceControlBar()
+            if providers.isEmpty && standalone.isEmpty {
+                if query.isEmpty {
+                    ScrollView {
+                        ConnectionSourceEditor().padding(18).macPanel().frame(maxWidth: 640)
+                            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else { ContentUnavailableView.search(text: filterText) }
             } else {
-                ContentUnavailableView.search(text: filterText)
-            }
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    if let provider = providers.first(where: { $0.name == appState.inspectedSubscription })
-                        ?? providers.first(where: { $0.name == appState.profile.subscriptionScope }) ?? providers.first {
-                        if providers.count > 1 {
-                            Picker("查看来源", selection: Binding(get: { provider.name }, set: { appState.inspectedSubscription = $0 })) {
-                                ForEach(providers) { Text($0.name).tag($0.name) }
-                            }.fixedSize()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 17) {
+                        if let provider {
+                            sourceSummary(provider)
+                            sourceDirectory(provider, query: query)
                         }
-                        providerInspector(provider, query: query)
-                    }
-                    if !standalone.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
+                        if !standalone.isEmpty {
                             Text("独立节点").font(.headline)
-                            ForEach(standalone) { node in standaloneRow(node) }
+                            VStack(spacing: 0) {
+                                ForEach(standalone) { node in standaloneRow(node) }
+                            }.macPanel()
                         }
-                    }
+                    }.padding(20)
                 }
-                .frame(maxWidth: 940, alignment: .leading)
-                .padding(.horizontal, 24).padding(.bottom, 20)
-                .frame(maxWidth: .infinity)
             }
         }
     }
 
-    private func providerInspector(_ provider: SubscriptionProvider, query: String) -> some View {
-        let selected = provider.name == appState.profile.subscriptionScope
+    private func sourceSummary(_ provider: SubscriptionProvider) -> some View {
         let live = appState.snapshot?.providers[provider.name]
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                if provider.name == appState.profile.subscriptionScope {
+                    Label("当前来源", systemImage: "checkmark.circle").foregroundStyle(.tint)
+                }
+                Text(provider.isRemote ? "远程订阅" : "本地配置")
+                Spacer(minLength: 4)
+                if let date = live?.updatedAt ?? provider.updatedAt {
+                    Text("更新于 " + date.formatted(date: .numeric, time: .shortened)).help(date.formatted())
+                }
+            }.font(.callout).foregroundStyle(.secondary)
+            if let usage = live?.usage ?? provider.usage, usage.total > 0 {
+                HStack(spacing: 9) {
+                    ProgressView(value: usage.progress).frame(maxWidth: 100)
+                    Text("\(TrafficTracker.formatBytes(usage.used)) / \(TrafficTracker.formatBytes(usage.total))")
+                    if let expiry = usage.expireDate { Text("到期 " + expiry.formatted(date: .numeric, time: .omitted)) }
+                }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            if let error = appState.subscriptionErrors[provider.name] {
+                Label(error, systemImage: "exclamationmark.triangle").font(.callout)
+                    .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func sourceDirectory(_ provider: SubscriptionProvider, query: String) -> some View {
         let nodes = sourceNodes(provider)
         let matches = nodes.filter { $0.name.localizedCaseInsensitiveContains(query) }
         let displayed = query.isEmpty || matches.isEmpty ? nodes : matches
         let pending = appState.refreshingProviders.contains(provider.name)
-        return VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 11) {
-                    Image(systemName: provider.isRemote ? "icloud.and.arrow.down" : "doc.text")
-                        .font(.title2).foregroundStyle(.orange)
-                        .frame(width: 39, height: 39).background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(provider.name).font(.title3.weight(.semibold)).lineLimit(1).help(provider.name)
-                        Text(provider.isRemote ? "远程订阅" : "本地配置").foregroundStyle(.secondary).font(.callout)
-                    }
-                    Spacer(minLength: 6)
-                    sourceActions(provider, isSelected: selected)
+        let endpoints = displayed.filter { !$0.isSubscriptionNote }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("节点清单").font(.headline)
+                Text("\(endpoints.count) 个节点").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if provider.name == appState.profile.subscriptionScope && !endpoints.isEmpty {
+                    Button("管理节点") { appState.selectedDestination = .nodes }.buttonStyle(.link)
                 }
-                Divider()
-                HStack(spacing: 14) {
-                    Label(selected ? "当前使用" : "备用来源", systemImage: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selected ? Color.teal : .secondary)
-                    Label("\(nodes.count) 个节点", systemImage: "network")
-                    Spacer()
-                    if let date = live?.updatedAt ?? provider.updatedAt {
-                        Text("更新于 " + date.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
-                    }
-                }.font(.callout)
-                if let usage = live?.usage ?? provider.usage, usage.total > 0 {
-                    ProgressView(value: usage.progress).tint(.teal)
-                    HStack {
-                        Text("\(TrafficTracker.formatBytes(usage.used)) / \(TrafficTracker.formatBytes(usage.total))")
-                        Spacer()
-                        if let expiry = usage.expireDate { Text("到期 " + expiry.formatted(date: .abbreviated, time: .omitted)) }
-                    }.font(.caption).foregroundStyle(.secondary)
-                }
-                if let error = appState.subscriptionErrors[provider.name] {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }.padding(17).macPanel()
-
+            }
             if nodes.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(pending ? "正在下载节点" : "尚无缓存节点", systemImage: "tray")
-                        .font(.headline)
-                    Text(pending ? "完成后，节点列表会在此显示。" : (provider.isRemote ? "点「刷新订阅」获取节点，或在来源菜单中修改地址。" : "编辑本地配置以添加节点。"))
-                        .font(.callout).foregroundStyle(.secondary)
-                }.padding(.vertical, 6)
+                Label(pending ? "正在下载节点…" : (provider.isRemote ? "尚无缓存节点，刷新订阅即可下载。" : "编辑本地配置以添加节点。"),
+                      systemImage: "tray").foregroundStyle(.secondary).padding(.vertical, 12)
             } else {
-                LazyVStack(alignment: .leading, spacing: 9) {
-                    HStack {
-                        Text("节点清单").font(.headline)
-                        Spacer()
-                        if selected {
-                            Button("管理节点") { appState.selectedDestination = .nodes }.buttonStyle(.link)
-                        }
-                    }
-                    ForEach(displayed) { node in
-                        HStack(spacing: 10) {
-                            CountryBadge(nodeName: node.name, isPolicy: false, size: .compact)
-                            Text(node.name).lineLimit(1)
-                            Spacer()
-                            Text(node.type.uppercased()).font(.caption.monospaced()).foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 3)
-                        if node.id != displayed.last?.id { Divider() }
-                    }
-                }.padding(16).macPanel()
+                if !endpoints.isEmpty { WorkspaceNodeList(nodes: endpoints) }
+                SubscriptionNotes(notes: displayed.filter(\.isSubscriptionNote), searching: !query.isEmpty)
             }
         }
     }

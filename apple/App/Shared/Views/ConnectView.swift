@@ -19,7 +19,7 @@ public struct ConnectView: View {
             dashboard
             #endif
         }
-        .navigationTitle("连接")
+        .workspaceTitle(.connect)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 #if os(iOS)
@@ -41,6 +41,9 @@ public struct ConnectView: View {
                 .disabled(appState.isBusy)
                 #else
                 if appState.status.configured || appState.status.running {
+                    Button(appState.status.running ? "停止内核" : "启动本地监听") {
+                        Task { await appState.toggleLocalCore() }
+                    }.disabled(appState.isBusy)
                     Button {
                         showInspector.toggle()
                     } label: {
@@ -65,127 +68,163 @@ public struct ConnectView: View {
 
     #if os(macOS)
     private var macConnectionView: some View {
-        let nodes = appState.selectableNodes.filter { !$0.isPolicy }.count
-        let waiting = !appState.profile.providers.isEmpty && nodes == 0 && !appState.status.running
+        let nodes = appState.proxyServers
+        let waiting = !appState.profile.providers.isEmpty && nodes.isEmpty && !appState.status.running
         let ready = appState.status.configured && !waiting
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 18) {
-                    ZStack {
-                        Circle().stroke(.white.opacity(0.18), lineWidth: 1)
-                        Image(systemName: appState.status.systemProxyEnabled || appState.status.tunEnabled ? "checkmark.shield" : "power")
-                            .font(.system(size: 24, weight: .medium))
-                    }
-                    .frame(width: 54, height: 54)
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(waiting ? "订阅等待更新" : (ready ? appState.statusBadgeTitle : "添加第一个配置"))
-                            .font(.system(size: 24, weight: .semibold))
-                        Text(waiting ? "获取节点后即可连接。" : (ready ? (appState.status.running ? "本机监听中" : "配置已就绪") : "使用订阅链接、节点链接或本地文件。"))
-                            .foregroundStyle(.white.opacity(0.82))
-                    }
-                    Spacer(minLength: 8)
-                    if waiting {
-                        Button("查看订阅") { appState.selectedDestination = .subscriptions }
-                            .buttonStyle(.bordered)
-                    } else if ready {
-                        Toggle("系统代理", isOn: Binding(
-                            get: { appState.status.systemProxyEnabled },
-                            set: { value in Task { await appState.setSystemProxy(value) } }
-                        )).toggleStyle(.switch).disabled(appState.isBusy)
-                    }
-                }
-                .foregroundStyle(.white)
-                .padding(22)
-                .background(
-                    LinearGradient(colors: [Color(red: 0.08, green: 0.18, blue: 0.23),
-                                            Color(red: 0.10, green: 0.33, blue: 0.36)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 14)
-                )
-
-                if ready {
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Label("路由模式", systemImage: "arrow.triangle.branch").font(.caption).foregroundStyle(.secondary)
-                            Picker("路由模式", selection: Binding(get: { appState.profile.mode }, set: { mode in
-                                Task { await appState.setMode(mode) }
-                            })) {
-                                ForEach(RoutingMode.allCases) { Text($0.fullTitle).tag($0) }
-                            }.labelsHidden().fixedSize()
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                        Divider()
-                        VStack(alignment: .leading, spacing: 7) {
-                            Label("全局出口", systemImage: "network").font(.caption).foregroundStyle(.secondary)
-                            Menu {
-                                ForEach(appState.selectableNodes) { node in
-                                    Button(node.name) { Task { await appState.selectNode(node.name) } }
-                                }
-                            } label: {
-                                Text(appState.profile.mode == .direct ? "直连" : appState.snapshot?.proxies["GLOBAL"]?.now ?? "选择节点…").lineLimit(1)
-                            }
-                            .help("选择节点会启动本地监听")
-                            .disabled(appState.profile.mode == .direct)
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.padding(16).macPanel()
-                } else if !waiting {
-                    ConnectionSourceEditor().padding(18).macPanel()
-                }
-
-                HStack(spacing: 10) {
-                    overviewLink(.subscriptions, value: appState.profile.providers.count)
-                    overviewLink(.nodes, value: nodes)
-                    overviewLink(.split, value: appState.activeRuleCount)
-                }
-
-                if ready {
-                    VStack(alignment: .leading, spacing: 15) {
-                        HStack {
-                            Text("网络活动").font(.headline)
-                            Spacer()
-                            if appState.status.running {
-                                Picker("图表", selection: $showConnections) {
-                                    Text("流量").tag(false)
-                                    Text("连接数").tag(true)
-                                }.pickerStyle(.segmented).labelsHidden().fixedSize()
-                            }
+        return VStack(spacing: 0) {
+            HStack {
+                Button { appState.selectedDestination = .subscriptions } label: {
+                    Label(appState.profile.subscriptionScope ?? "本机配置", systemImage: "doc.text")
+                        .lineLimit(1).truncationMode(.middle)
+                }.buttonStyle(.borderless).help("查看订阅来源与本地配置")
+                Spacer()
+                Label(appState.profile.mode.fullTitle, systemImage: "arrow.triangle.branch")
+                    .font(.callout).foregroundStyle(.secondary)
+            }.workspaceControlBar()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(spacing: 0) {
+                        connectionBanner(ready: ready, waiting: waiting)
+                        if ready {
+                            Divider()
+                            HStack(spacing: 15) {
+                                WorkspaceMetric(title: "下载速率", value: TrafficTracker.formatRate(appState.currentDownRate), symbol: "arrow.down", tint: .blue)
+                                Divider()
+                                WorkspaceMetric(title: "上传速率", value: TrafficTracker.formatRate(appState.currentUpRate), symbol: "arrow.up", tint: .teal)
+                                Divider()
+                                WorkspaceMetric(title: "活动连接", value: "\(appState.snapshot?.connections?.activeCount ?? 0)", symbol: "point.3.connected.trianglepath.dotted", tint: .indigo)
+                                Divider()
+                                WorkspaceMetric(title: "会话时长", value: formatDuration(appState.elapsedSeconds), symbol: "clock", tint: .orange)
+                            }.padding(.horizontal, 20).padding(.vertical, 13)
                         }
-                        if appState.status.running || !appState.trafficTracker.samples.isEmpty {
-                            if showConnections { connectionsPlot } else { trafficPlot }
-                        } else {
-                            HStack {
-                                Label("启动本地监听后显示实时流量。", systemImage: "waveform.path.ecg")
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Button("启动监听") { Task { await appState.toggleLocalCore() } }
-                                    .disabled(appState.isBusy)
-                            }
+                    }.clipShape(RoundedRectangle(cornerRadius: 10)).macPanel(radius: 10)
+
+                    if ready {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 14) {
+                                exitSummary(nodes).frame(minWidth: 235, maxWidth: 380)
+                                historySummary.frame(minWidth: 285, maxWidth: .infinity)
+                            }.fixedSize(horizontal: false, vertical: true)
+                            VStack(spacing: 14) { exitSummary(nodes); historySummary }
                         }
-                    }.padding(16).macPanel()
-                }
+                    } else if !waiting {
+                        ConnectionSourceEditor().padding(20).macPanel()
+                    }
+                }.frame(maxWidth: 1100).padding(20).frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: 880, alignment: .leading)
-            .padding(.horizontal, 24).padding(.bottom, 24)
-            .frame(maxWidth: .infinity)
         }
     }
 
-    private func overviewLink(_ page: AppDestination, value: Int) -> some View {
-        Button {
-            appState.selectedDestination = page
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Image(systemName: page.systemImage).foregroundStyle(page.tint)
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+    private func connectionBanner(ready: Bool, waiting: Bool) -> some View {
+        let on = appState.status.systemProxyEnabled
+        let tun = appState.status.tunEnabled
+        let title: String
+        let detail: String
+        if waiting {
+            title = "等待订阅节点"
+            detail = "刷新订阅后即可选择出口。"
+        } else if !ready {
+            title = "添加网络配置"
+            detail = "从服务商的订阅地址或本地文件开始。"
+        } else if on || tun {
+            title = appState.statusBadgeTitle
+            detail = "正在接管流量 · " + appState.profile.mode.fullTitle
+        } else if appState.status.running {
+            title = "本地监听中"
+            detail = "本机代理端口已开放。"
+        } else {
+            title = "准备连接"
+            detail = "节点已就绪，开启系统代理即可使用。"
+        }
+        return HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).font(.system(size: 24, weight: .semibold))
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+                if waiting || ready {
+                    Button {
+                        if waiting { appState.selectedDestination = .subscriptions }
+                        else if tun && !on { appState.selectedDestination = .logs }
+                        else { Task { await appState.setSystemProxy(!on) } }
+                    } label: {
+                        Label(waiting ? "查看订阅" : (on ? "关闭系统代理" : (tun ? "查看网络活动" : "开启系统代理")),
+                              systemImage: waiting || (tun && !on) ? "arrow.right" : "power")
+                    }.buttonStyle(.borderedProminent).disabled(appState.isBusy).padding(.top, 3)
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(String(value)).font(.title2.weight(.semibold)).monospacedDigit()
-                    Text(page == .split ? "启用规则" : page.desktopTitle).font(.callout).foregroundStyle(.secondary)
-                }
-            }.padding(14).macPanel().contentShape(Rectangle())
-        }.buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20).padding(.vertical, 16)
+        .frame(maxWidth: .infinity, minHeight: ready || waiting ? 120 : 96, alignment: .leading)
+        .background {
+            GeometryReader { area in
+                Image("AlpineHorizon").resizable().scaledToFill()
+                    .frame(width: area.size.width * 0.53, height: area.size.height).clipped()
+                    .saturation(0.78)
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0),
+                                                 .init(color: .black, location: 0.55)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }.accessibilityHidden(true)
+        }
     }
+
+    private func exitSummary(_ nodes: [ProxyNode]) -> some View {
+        let name = appState.snapshot?.proxies["GLOBAL"]?.now
+        let selectedNode = appState.selectableNodes.first { $0.name == name }
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Label("默认出口", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.headline)
+                Spacer()
+                Menu("切换") {
+                    ForEach(appState.selectableNodes.filter { !$0.isSubscriptionNote }) { item in
+                        Button(item.name) { Task { await appState.selectNode(item.name) } }
+                    }
+                }.fixedSize().controlSize(.small)
+                .disabled(appState.profile.mode == .direct)
+            }.padding(.bottom, 13)
+            HStack(spacing: 10) {
+                let direct = appState.profile.mode == .direct
+                CountryBadge(nodeName: direct ? "DIRECT" : (name ?? "AUTO"), isPolicy: direct || name == nil || selectedNode?.isPolicy == true, size: .large)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(direct ? "直连" : (name == "AUTO" ? "自动优选" : (selectedNode?.displayName ?? name ?? "选择代理节点"))).font(.title3.weight(.semibold)).lineLimit(1)
+                    Text(appState.profile.subscriptionScope ?? "本机配置").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+            }.padding(.bottom, 12)
+            Divider()
+            ForEach(nodes.prefix(3)) { node in
+                Button {
+                    Task { await appState.selectNode(node.name) }
+                } label: {
+                    HStack(spacing: 9) {
+                        CountryBadge(nodeName: node.name, isPolicy: false)
+                        Text(node.displayName).font(.callout).lineLimit(1)
+                        Spacer()
+                        if node.name == name {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
+                        } else {
+                            Text(node.type.uppercased()).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        }
+                    }.padding(.vertical, 7).contentShape(Rectangle())
+                }.buttonStyle(.plain).disabled(appState.profile.mode == .direct)
+            }
+        }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).macPanel()
+    }
+
+    private var historySummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("网络活动").font(.headline)
+                Spacer()
+                Picker("图表", selection: $showConnections) {
+                    Text("流量").tag(false)
+                    Text("连接数").tag(true)
+                }.pickerStyle(.segmented).labelsHidden().fixedSize().controlSize(.small)
+            }
+            if showConnections { connectionsPlot } else { trafficPlot }
+        }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).macPanel()
+    }
+
     #endif
 
     #if os(iOS)
@@ -580,16 +619,6 @@ public struct ConnectView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             }
-            #else
-            HStack(alignment: .bottom, spacing: 32) {
-                trafficReading("下载", icon: "arrow.down", rate: appState.currentDownRate, tint: .blue)
-                trafficReading("上传", icon: "arrow.up", rate: appState.currentUpRate, tint: .teal)
-                Spacer()
-                Label(formatDuration(appState.elapsedSeconds), systemImage: "clock")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .help("会话时长")
-            }
             #endif
 
             ZStack {
@@ -633,7 +662,24 @@ public struct ConnectView: View {
                         }
                     }
                 }
+                #if os(macOS)
+                .frame(height: 126)
+                .background {
+                    if appState.trafficTracker.samples.isEmpty {
+                        Canvas { context, size in
+                            for row in 1...3 {
+                                let y = size.height * CGFloat(row) / 4
+                                var path = Path()
+                                path.move(to: CGPoint(x: 0, y: y))
+                                path.addLine(to: CGPoint(x: size.width, y: y))
+                                context.stroke(path, with: .color(.secondary.opacity(0.22)), style: StrokeStyle(lineWidth: 0.5, dash: [3, 4]))
+                            }
+                        }.accessibilityHidden(true)
+                    }
+                }
+                #else
                 .frame(height: 152)
+                #endif
 
                 if appState.trafficTracker.samples.isEmpty {
                     VStack(spacing: 5) {
@@ -653,33 +699,19 @@ public struct ConnectView: View {
                 let peak = appState.trafficTracker.samples.map(\.downloadBytesPerSec).max() ?? 0
                 #if os(macOS)
                 Text("累计 \(TrafficTracker.formatBytes(appState.totalTrafficBytes))")
-                Text("\(appState.activeRuleCount) 条规则")
+
                 #endif
                 Text("峰值下载 \(TrafficTracker.formatRate(peak))")
                 Spacer()
+                #if os(iOS)
                 Text("127.0.0.1:\(String(appState.profile.mixedPort > 0 ? appState.profile.mixedPort : appState.profile.httpPort))")
+                #endif
             }
             .font(.system(size: 11, design: .monospaced))
             .monospacedDigit()
             .foregroundStyle(.secondary)
         }
     }
-
-    #if os(macOS)
-    private func trafficReading(_ title: String, icon: String, rate: Double, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label {
-                Text(title).foregroundStyle(.secondary)
-            } icon: {
-                Image(systemName: icon).foregroundStyle(tint)
-            }
-            .font(.caption)
-            Text(TrafficTracker.formatRate(rate))
-                .font(.title2.weight(.semibold))
-                .monospacedDigit()
-        }
-    }
-    #endif
 
     #if os(iOS)
     private var activeConnectionsChartCard: some View {

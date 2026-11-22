@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import XeylrouteCore
+#endif
 
 // MARK: - Calibrated Apple Graphite / Alabaster Design Tokens
 
@@ -103,11 +106,7 @@ public struct StageCanvas<Content: View>: View {
     public var body: some View {
         let palette = XeylPalette(colorScheme)
         ZStack {
-            palette.canvasBackground
-                #if os(macOS)
-                .overlay(Color.primary.opacity(0.025))
-                #endif
-                .ignoresSafeArea()
+            palette.canvasBackground.ignoresSafeArea()
             #if os(iOS)
             RadialGradient(
                 colors: [palette.canvasHighlight, .clear],
@@ -144,12 +143,12 @@ public struct NativeCard<Content: View>: View {
     }
 
     public var body: some View {
-        let palette = XeylPalette(colorScheme)
         #if os(macOS)
-        let shape = RoundedRectangle(cornerRadius: min(radius, 10), style: .continuous)
+        content.padding(padding).frame(maxWidth: .infinity, alignment: .leading)
+            .macPanel(radius: radius, selected: highlighted)
         #else
+        let palette = XeylPalette(colorScheme)
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        #endif
 
         content
             .padding(padding)
@@ -161,7 +160,6 @@ public struct NativeCard<Content: View>: View {
                     lineWidth: highlighted ? 1.25 : 0.75
                 )
             )
-            #if os(iOS)
             .overlay(alignment: .top) {
                 if palette.isDark {
                     shape
@@ -177,7 +175,7 @@ public struct NativeCard<Content: View>: View {
                 }
             }
             .shadow(color: palette.cardShadowColor, radius: palette.isDark ? 12 : 8, x: 0, y: palette.isDark ? 5 : 2)
-            #endif
+        #endif
     }
 }
 
@@ -338,6 +336,21 @@ public struct CountryBadge: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        Group {
+            if isPolicy {
+                let symbol = ["DIRECT": "arrow.up.right", "REJECT": "hand.raised", "AUTO": "sparkles"][nodeName] ?? "arrow.triangle.branch"
+                Image(systemName: symbol).foregroundStyle(.tint)
+            } else if let flag = ProxyNode.leadingFlag(in: nodeName) {
+                Text(String(flag))
+            } else if let code = inferredCountryCode {
+                Text(code.unicodeScalars.compactMap { UnicodeScalar($0.value + 127397).map(String.init) }.joined())
+            } else {
+                Image(systemName: "globe").foregroundStyle(.secondary)
+            }
+        }.font(.system(size: size == .large ? 24 : 16))
+            .frame(width: size.width, height: size.height).accessibilityHidden(true)
+        #else
         let shape = RoundedRectangle(cornerRadius: size.radius, style: .continuous)
         Group {
             if isPolicy {
@@ -351,6 +364,7 @@ public struct CountryBadge: View {
         .frame(width: size.width, height: size.height)
         .overlay(shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5))
         .shadow(color: Color.black.opacity(0.16), radius: 2, x: 0, y: 1)
+        #endif
     }
 
     @ViewBuilder
@@ -502,7 +516,9 @@ public struct CountryBadge: View {
             ("加拿大", "CA"), ("ca", "CA"),
             ("中国", "CN"), ("国内", "CN"), ("cn", "CN"),
         ]
-        for (keyword, code) in pairs where lower.contains(keyword) {
+        let tokens = Set(lower.components(separatedBy: CharacterSet.letters.inverted))
+        for (keyword, code) in pairs where keyword.count == 2 && keyword.allSatisfy(\.isASCII)
+            ? tokens.contains(keyword) : lower.contains(keyword) {
             return code
         }
         return nil

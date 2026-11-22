@@ -286,6 +286,10 @@ public final class AppState {
         return result
     }
 
+    var proxyServers: [ProxyNode] {
+        selectableNodes.filter { !$0.isPolicy && !$0.isSubscriptionNote }
+    }
+
     public var activeRuleCount: Int {
         profile.rules.filter { !$0.isDefaultMatch && $0.enabled }.count
     }
@@ -485,7 +489,7 @@ public final class AppState {
         isBatchProbing = true
         defer { isBatchProbing = false }
 
-        let targets = selectableNodes.filter { !$0.isPolicy }
+        let targets = proxyServers
         guard !targets.isEmpty else {
             notify("当前没有可测延迟的节点", isError: true)
             return
@@ -510,7 +514,7 @@ public final class AppState {
         isBatchProbing = true
         defer { isBatchProbing = false }
 
-        let targets = selectableNodes.filter { !$0.isPolicy }
+        let targets = proxyServers
         guard !targets.isEmpty else { return }
         do {
             if !status.running {

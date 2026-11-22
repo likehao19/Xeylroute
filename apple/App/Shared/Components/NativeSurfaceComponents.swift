@@ -7,11 +7,28 @@ import UIKit
 #endif
 
 extension View {
+    func workspaceTitle(_ page: AppDestination) -> some View {
+        #if os(macOS)
+        self
+        #else
+        navigationTitle(page.title)
+        #endif
+    }
+
+    func workspaceToolbarPrimary() -> some View {
+        #if os(macOS)
+        buttonStyle(.automatic)
+        #else
+        buttonStyle(.borderedProminent)
+        #endif
+    }
+
     func workspaceControlBar() -> some View {
         #if os(macOS)
-        self.padding(.horizontal, 24)
-            .padding(.bottom, 12)
-            .padding(.top, 2)
+        self.padding(.horizontal, 20)
+            .controlSize(.small)
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+            .background(Color(nsColor: .windowBackgroundColor))
             .overlay(alignment: .bottom) { Divider() }
         #else
         self.padding(.horizontal, 20)
@@ -23,9 +40,50 @@ extension View {
 
 #if os(macOS)
 extension View {
-    func macPanel() -> some View {
-        self.background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.09)))
+    func macPanel(radius: CGFloat = 9, selected: Bool = false) -> some View {
+        modifier(WorkspacePanel(radius: radius, selected: selected))
+    }
+
+    func macTableSurface() -> some View {
+        self.scrollContentBackground(.hidden)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .macPanel(radius: 8)
+            .padding(.horizontal, 20).padding(.vertical, 16)
+    }
+}
+
+private struct WorkspacePanel: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    let radius: CGFloat
+    let selected: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let dark = scheme == .dark
+        let surface = dark ? Color(white: 0.175) : Color(white: 0.995)
+        return content
+            .background(surface, in: shape)
+            .overlay {
+                shape.strokeBorder(selected ? Color.accentColor : (dark ? .white.opacity(0.09) : .black.opacity(0.10)),
+                                   lineWidth: selected ? 1.5 : 0.6)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
+struct WorkspaceMetric: View {
+    let title: String
+    let value: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label { Text(title) } icon: { Image(systemName: symbol).foregroundStyle(tint) }
+                .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            Text(value).font(.system(size: 20, weight: .semibold, design: .rounded))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -69,50 +127,104 @@ struct WorkspaceSearch: View {
     }
 }
 
-/// A route preview for pages where the user has not added any entries yet.
-struct RouteSetupPanel: View {
+struct WorkspacePlaceholder: View {
+    let symbol: String
     let title: String
     let detail: String
-    let source: String
-    let destination: String
-    let sourceIcon: String
-    let destinationIcon: String
     let actionTitle: String
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 14) {
-                endpoint(source, icon: sourceIcon)
-                Rectangle().fill(.teal.opacity(0.35)).frame(height: 1)
-                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.teal)
-                endpoint(destination, icon: destinationIcon)
-            }
-            .padding(24)
-            .background(LinearGradient(colors: [.teal.opacity(0.13), .indigo.opacity(0.07)], startPoint: .leading, endPoint: .trailing))
-            VStack(alignment: .leading, spacing: 10) {
-                Text(title).font(.title2.weight(.semibold))
-                Text(detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Button(actionTitle, action: action)
-                    .buttonStyle(.borderedProminent).padding(.top, 5)
-            }
-            .padding(24)
+        VStack(spacing: 9) {
+            Image(systemName: symbol).font(.system(size: 29, weight: .light))
+                .foregroundStyle(.secondary).accessibilityHidden(true).padding(.bottom, 3)
+            Text(title).font(.system(size: 18, weight: .semibold))
+            Text(detail).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: 340)
+            Button(actionTitle, action: action).padding(.top, 5)
         }
-        .background(.background, in: RoundedRectangle(cornerRadius: 15))
-        .clipShape(RoundedRectangle(cornerRadius: 15))
-        .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.separator))
-        .frame(maxWidth: 560)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.top, 36)
+        .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+struct WorkspaceNodeList: View {
+    @Environment(AppState.self) private var appState
+    let nodes: [ProxyNode]
+    var selectedName: String?
+    var select: ((ProxyNode) -> Void)?
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("节点名称")
+                Spacer()
+                Text("协议").frame(width: 78, alignment: .leading)
+                if select != nil { Text("延迟").frame(width: 72, alignment: .trailing) }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .padding(.horizontal, 14).frame(height: 29)
+            .background(Color.primary.opacity(0.035))
+            ForEach(nodes) { node in
+                Divider()
+                HStack(spacing: 12) {
+                    if let select {
+                        Button { select(node) } label: { nodeLabel(node) }
+                            .buttonStyle(.plain).help("使用 " + node.name)
+                        Button {
+                            Task { await appState.measureDelay(for: node) }
+                        } label: {
+                            if appState.nodeDelays[node.id] != nil || appState.testingNodes.contains(node.id) {
+                                LatencyBadge(measurement: appState.nodeDelays[node.id], isTesting: appState.testingNodes.contains(node.id))
+                            } else {
+                                Text("测速").font(.callout)
+                            }
+                        }
+                        .buttonStyle(.borderless).disabled(appState.testingNodes.contains(node.id))
+                        .frame(width: 72, alignment: .trailing)
+                        .accessibilityLabel("测试" + node.name + "的延迟")
+                    } else {
+                        nodeLabel(node)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .background(node.name == selectedName ? Color.accentColor.opacity(0.10) : .clear)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9)).macPanel()
     }
 
-    private func endpoint(_ title: String, icon: String) -> some View {
-        Label(title, systemImage: icon)
-            .font(.callout.weight(.semibold))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 11).padding(.vertical, 8)
-            .background(.background, in: RoundedRectangle(cornerRadius: 8))
+    private func nodeLabel(_ node: ProxyNode) -> some View {
+        HStack(spacing: 8) {
+            CountryBadge(nodeName: node.name, isPolicy: node.isPolicy)
+            Text(node.displayName).lineLimit(1).truncationMode(.middle)
+            if node.name == selectedName {
+                Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.tint)
+            }
+            Spacer(minLength: 4)
+            Text(node.type.uppercased()).font(.caption.monospaced()).foregroundStyle(.secondary)
+                .frame(width: 78, alignment: .leading)
+        }
+        .frame(minHeight: 34).contentShape(Rectangle()).help(node.name)
+    }
+}
+
+struct SubscriptionNotes: View {
+    let notes: [ProxyNode]
+    let searching: Bool
+    @State private var expanded = false
+
+    var body: some View {
+        if !notes.isEmpty {
+            DisclosureGroup(isExpanded: $expanded) {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(notes) { Text($0.name).textSelection(.enabled) }
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 5)
+            } label: {
+                Text("订阅说明（\(notes.count)）")
+            }
+            .font(.callout).foregroundStyle(.secondary)
+            .onChange(of: searching, initial: true) { _, value in expanded = value }
+        }
     }
 }
 #endif
