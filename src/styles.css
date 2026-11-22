@@ -2549,6 +2549,22 @@
     .platform-windows .glass-capsule { gap: 2px; overflow: visible; }
     .platform-windows .glass-capsule .cap-sep { display: none; }
     .platform-windows .glass-capsule button { padding-inline: 9px; border-radius: var(--radius-control); }
+    .platform-windows .glass-toolbar { padding-right: 150px; }
+    .platform-windows .win-controls {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 40px;
+      gap: 0;
+      border-radius: 0;
+    }
+    .platform-windows .win-controls button {
+      width: 46px;
+      padding: 0;
+      border-radius: 0;
+    }
+    .platform-windows .win-controls button:active { transform: none; }
+    .platform-windows .win-controls svg { width: 14px; height: 14px; stroke-width: 1.2; }
     .platform-windows .glass-circle:hover { background: var(--node-hover); }
     .platform-windows .online-pill { padding-inline: 6px; color: var(--muted); }
     .platform-windows .online-pill .dot { box-shadow: none; }
