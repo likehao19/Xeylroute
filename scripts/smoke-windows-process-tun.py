@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+import winreg
 from windows_routes import best_interface
 
 
@@ -65,7 +66,8 @@ def observe_physical_packets(driver_path):
     driver.WinDivertShutdown.argtypes = [c.c_void_p, c.c_int]
     driver.WinDivertRecv.argtypes = [c.c_void_p, c.c_void_p, c.c_uint32, c.POINTER(c.c_uint32), c.c_void_p]
     expression = f"outbound and ip.DstAddr == {DEST} and tcp.Syn and tcp.DstPort >= {TARGET} and tcp.DstPort <= {AFTER}"
-    handle = driver.WinDivertOpen(expression.encode(), 0, -100, 1 | 4)
+    # Sniff only. The observer must never load the driver image from the install directory.
+    handle = driver.WinDivertOpen(expression.encode(), 0, -100, 1 | 4 | 16)
     if handle == c.c_void_p(-1).value:
         raise c.WinError(c.get_last_error())
     seen = {}
@@ -97,6 +99,30 @@ def request_selected(port):
     return message
 
 
+def queued_driver_files():
+    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager") as key:
+        query = c.windll.advapi32.RegQueryValueExW
+        query.argtypes = [c.c_void_p, c.c_wchar_p, c.c_void_p, c.c_void_p, c.c_void_p, c.POINTER(c.c_uint32)]
+        query.restype = c.c_long
+        size = c.c_uint32()
+        value = "PendingFileRenameOperations"
+        handle = c.c_void_p(int(key))
+        result = query(handle, value, None, None, None, c.byref(size))
+        if result == 2:  # ERROR_FILE_NOT_FOUND
+            return set()
+        if result:
+            raise c.WinError(result)
+        data = (c.c_ubyte * size.value)()
+        result = query(handle, value, None, None, data, c.byref(size))
+        if result:
+            raise c.WinError(result)
+    # Empty destinations encode deletion. Read the raw value to preserve those entries.
+    moves = bytes(data[:size.value]).decode("utf-16-le").casefold().split("\0")
+    return {path for path, destination in zip(moves[::2], moves[1::2])
+            if not destination and "\\system32\\drivers\\xeylroute-" in path
+            and path.endswith("\\windivert64.sys")}
+
+
 def verify(binary):
     if not c.windll.shell32.IsUserAnAdmin():
         raise RuntimeError("Run on an elevated, disposable Windows runner")
@@ -121,20 +147,24 @@ def verify(binary):
                 "rules": [f"AND,((IP-CIDR,{DEST}/32,no-resolve),(NETWORK,UDP)),SelectedUdp",
                           f"IP-CIDR,{DEST}/32,SelectedExit,no-resolve", "MATCH,DIRECT"],
             }), encoding="utf-8")
-            with observe_physical_packets(binary.with_name("WinDivert.dll")) as physical:
-                with log.open("wb") as output:
-                    core = subprocess.Popen([binary, "-d", folder, "-f", config], stdout=output, stderr=output)
-                try:
-                    for _ in range(100):
-                        if core.poll() is not None:
-                            raise RuntimeError("Mihomo exited")
-                        if "Tun adapter listening" in log.read_text(encoding="utf-8", errors="replace"):
-                            break
-                        time.sleep(.05)
-                    else:
-                        raise RuntimeError("Selected software TUN did not start")
+            pending_before = queued_driver_files()
+            with log.open("wb") as output:
+                core = subprocess.Popen([binary, "-d", folder, "-f", config], stdout=output, stderr=output)
+            try:
+                for _ in range(100):
+                    if core.poll() is not None:
+                        raise RuntimeError("Mihomo exited")
+                    logged = log.read_text(encoding="utf-8", errors="replace")
+                    if "Tun adapter listening" in logged and "Start initial compatible provider default" in logged:
+                        break
+                    time.sleep(.05)
+                else:
+                    raise RuntimeError("Selected software TUN did not start")
+                assert queued_driver_files() - pending_before, "Running driver image has no queued restart cleanup"
+                with observe_physical_packets(binary.with_name("WinDivert.dll")) as physical:
                     assert best_interface(DEST) == original
-                    assert request_selected(TARGET).endswith(b"selected")
+                    response = request_selected(TARGET)
+                    assert response.endswith(b"selected"), (response, physical)
                     with socket.socket(type=socket.SOCK_DGRAM) as datagram:
                         datagram.settimeout(4)
                         datagram.sendto(b"request", (DEST, TARGET))
@@ -147,18 +177,21 @@ def verify(binary):
                     logged = log.read_text(encoding="utf-8", errors="replace")
                     assert f"{DEST}:{TARGET}" in logged and "using SelectedExit" in logged, logged
                     assert f"{DEST}:{BYPASS}" not in logged
-                except Exception:
-                    print(log.read_text(encoding="utf-8", errors="replace"))
-                    raise
-                finally:
                     core.terminate()
                     core.wait(timeout=5)
-                try:
-                    request_selected(AFTER)
-                except OSError:
-                    pass
-                assert best_interface(DEST) == original
-                assert physical.get(AFTER) == original, physical
+                    try:
+                        request_selected(AFTER)
+                    except OSError:
+                        pass
+                    assert best_interface(DEST) == original
+                    assert physical.get(AFTER) == original, physical
+            except Exception:
+                print(log.read_text(encoding="utf-8", errors="replace"))
+                raise
+            finally:
+                if core.poll() is None:
+                    core.terminate()
+                    core.wait(timeout=5)
         finally:
             origin.shutdown()
             udp.shutdown()

@@ -2,8 +2,7 @@
   "bundle": {
     "windows": {
       "nsis": {
-        "installMode": "perMachine",
-        "installerHooks": "windows-uninstall.nsh"
+        "installMode": "perMachine"
       }
     },
     "resources": {

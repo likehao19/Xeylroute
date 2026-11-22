@@ -96,16 +96,17 @@ index 3cfa17a..7c9dd52 100644
 +	}
 diff --git a/listener/sing_tun/process_capture_windows_amd64.go b/listener/sing_tun/process_capture_windows_amd64.go
 new file mode 100644
-index 0000000..d3bdc2e
+index 0000000..c6fe802
 --- /dev/null
 +++ b/listener/sing_tun/process_capture_windows_amd64.go
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,391 @@
 +//go:build with_gvisor
 +
 +package sing_tun
 +
 +import (
 +	"context"
++	"crypto/sha256"
 +	"encoding/binary"
 +	"errors"
 +	"fmt"
@@ -184,12 +185,68 @@ index 0000000..d3bdc2e
 +	return strings.ToLower(filepath.Clean(path))
 +}
 +
++// Stage the signed files outside the application directory because Windows may
++// retain the loaded driver image until the next boot. The system drivers
++// directory is writable only by administrators and system services.
++func stageCaptureDriver(executable string) (string, error) {
++	systemDirectory, err := windows.GetSystemDirectory()
++	if err != nil {
++		return "", err
++	}
++	folder, err := os.MkdirTemp(filepath.Join(systemDirectory, "drivers"), "Xeylroute-")
++	if err != nil {
++		return "", err
++	}
++	success := false
++	defer func() {
++		if !success {
++			_ = os.RemoveAll(folder)
++		}
++	}()
++	files := []struct{ name, digest string }{
++		{"WinDivert.dll", "c1e060ee19444a259b2162f8af0f3fe8c4428a1c6f694dce20de194ac8d7d9a2"},
++		{"WinDivert64.sys", "8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2"},
++	}
++	scheduleRemoval := func(path string) error {
++		name, err := windows.UTF16PtrFromString(path)
++		if err != nil {
++			return err
++		}
++		return windows.MoveFileEx(name, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
++	}
++	for _, file := range files {
++		data, err := os.ReadFile(filepath.Join(filepath.Dir(executable), file.name))
++		if err != nil {
++			return "", err
++		}
++		if fmt.Sprintf("%x", sha256.Sum256(data)) != file.digest {
++			return "", fmt.Errorf("unexpected digest for %s", file.name)
++		}
++		destination := filepath.Join(folder, file.name)
++		if err = os.WriteFile(destination, data, 0600); err != nil {
++			return "", err
++		}
++		if err = scheduleRemoval(destination); err != nil {
++			return "", err
++		}
++	}
++	if err = scheduleRemoval(folder); err != nil {
++		return "", err
++	}
++	success = true
++	return filepath.Join(folder, files[0].name), nil
++}
++
 +func openProcessTun(options tun.Options, paths []string) (tun.Tun, error) {
 +	executable, err := os.Executable()
 +	if err != nil {
 +		return nil, err
 +	}
-+	dll, err := windows.LoadDLL(filepath.Join(filepath.Dir(executable), "WinDivert.dll"))
++	driverLibrary, err := stageCaptureDriver(executable)
++	if err != nil {
++		return nil, fmt.Errorf("stage signed capture driver: %w", err)
++	}
++	dll, err := windows.LoadDLL(driverLibrary)
 +	if err != nil {
 +		return nil, fmt.Errorf("load signed capture driver library: %w", err)
 +	}
@@ -337,6 +394,11 @@ index 0000000..d3bdc2e
 +		peer = netip.AddrPort{}
 +	}
 +	owner := process.WindowsSocketOwner(flow.source, peer, flow.protocol == protoTCP, false)
++	if owner == 0 && newTCP {
++		// The first SYN can reach the capture layer before the owner row is visible.
++		time.Sleep(2 * time.Millisecond)
++		owner = process.WindowsSocketOwner(flow.source, peer, true, false)
++	}
 +	image, err := process.WindowsProcessImage(owner)
 +	key := pathKey(image)
 +	_, selected := t.paths[key]
