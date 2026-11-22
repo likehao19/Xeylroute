@@ -479,10 +479,10 @@
               <div class="mac-row-left">
                 <div>
                   <span class="mac-row-title">代理故障时恢复直连</span>
-                  <span class="mac-row-sub">节点故障自动回退 DIRECT（显式 REJECT 始终阻断）</span>
+                  <span class="mac-row-sub" id="fallbackHelp">出口探测失败且直连探测成功时，允许连接走 DIRECT</span>
                 </div>
               </div>
-              <label class="mac-switch lg"><input type="checkbox" id="setFallbackToggle" checked><i></i></label>
+              <label class="mac-switch lg"><input type="checkbox" id="setFallbackToggle" aria-label="代理故障时恢复直连" aria-describedby="fallbackHelp"><i></i></label>
             </div>
           </div>
 

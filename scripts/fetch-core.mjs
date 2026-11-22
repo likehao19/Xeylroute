@@ -150,7 +150,7 @@ function prepareWinDivert(lock) {
 
 function buildWindowsCore(triple, lock) {
   const { revision, go } = lock.windowsSource;
-  const patches = ['mihomo-process-instance.patch', 'mihomo-windows-tun.patch']
+  const patches = ['mihomo-process-instance.patch', 'mihomo-windows-tun.patch', 'mihomo-failure-fallback.patch']
     .map(filename => path.join(ROOT, 'scripts', filename));
   const patchHashes = patches.map(filename => sha256(fs.readFileSync(filename)));
   const buildKey = sha256([revision, go, triple, ...patchHashes].join(':'));

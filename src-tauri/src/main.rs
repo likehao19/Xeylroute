@@ -354,6 +354,8 @@ fn sanitize_imported_config(input: &str) -> Result<Value, String> {
         "external-controller-unix",
         "external-ui",
         "secret",
+        "routepilot-fallback-direct",
+        "routepilot-fallback-probe",
         "redir-port",
         "tproxy-port",
         "iptables",
@@ -611,6 +613,16 @@ fn tun_matches(actual: &Value, expected: &Value) -> bool {
 /// an edit made while the core runs cannot drop a setting that start-up added.
 fn runtime_config(configured: &Value, tun: bool) -> Result<Value, String> {
     let mut runtime = profile::effective_config(configured);
+    if let Some(map) = runtime.as_object_mut() {
+        map.remove("routepilot-fallback-direct");
+        map.remove("routepilot-fallback-probe");
+        if cfg!(windows) && configured["routepilot-fallback-direct"] == true {
+            map.insert(
+                "routepilot-fallback-probe".into(),
+                serde_json::json!("https://www.gstatic.com/generate_204?routepilot=fallback"),
+            );
+        }
+    }
     if tun {
         if let Some(map) = runtime.as_object_mut() {
             map.entry("dns").or_insert_with(|| {
@@ -1822,6 +1834,22 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{log_tail, parse_runtime_facts, sanitize_imported_config, subscription_usage, tun_config, validate_config};
+
+    #[test]
+    fn direct_fallback_requires_an_explicit_local_setting() {
+        let mut profile = serde_json::json!({
+            "mixed-port": 7890,
+            "routepilot-fallback-probe": "http://untrusted.invalid"
+        });
+        assert!(super::runtime_config(&profile, false).unwrap().get("routepilot-fallback-probe").is_none());
+        profile["routepilot-fallback-direct"] = true.into();
+        let runtime = super::runtime_config(&profile, false).unwrap();
+        assert!(runtime.get("routepilot-fallback-direct").is_none());
+        assert_eq!(runtime.get("routepilot-fallback-probe").is_some(), cfg!(windows));
+        let imported = sanitize_imported_config(&profile.to_string()).unwrap();
+        assert!(imported.get("routepilot-fallback-direct").is_none());
+        assert!(imported.get("routepilot-fallback-probe").is_none());
+    }
 
     #[test]
     fn backup_keeps_imported_provider_revision_until_reference_is_removed() {

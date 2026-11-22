@@ -36,6 +36,8 @@ jobs:
           python scripts/smoke-routing.py $core
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/smoke-windows-process-instance.py $core
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/smoke-failure-fallback.py $core
       - name: Build frontend
         run: npm ci && npm run build
         shell: cmd

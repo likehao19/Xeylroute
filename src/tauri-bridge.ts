@@ -49,6 +49,7 @@ export type CoreSettings = {
   ipv6: boolean;
   'tcp-concurrent': boolean;
   'unified-delay': boolean;
+  'routepilot-fallback-direct': boolean;
   'log-level': string;
 };
 

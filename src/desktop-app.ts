@@ -1149,7 +1149,12 @@ export function mountDesktopApp(shell: ShellController): void {
     const subLabel = selectedSubscription || (activeNodeObj?.standalone ? '独立导入节点' : '默认配置');
     const capture = captureSummary();
     const status = liveStatus?.running ? capture || '仅本地监听' : '未接管';
-    $('heroNodeMeta').textContent = [subLabel, status, liveStatus?.running && exitIp ? `出口 ${exitIp}` : ''].filter(Boolean).join(' · ');
+    const globalHistory = liveCore?.proxies?.proxies?.[activeExit === 'AUTO' ? autoNow || 'AUTO' : activeExit]?.history;
+    const globalFailure = currentMode() === 'global' && globalHistory?.at(-1)?.delay === 0;
+    $('heroNodeMeta').textContent = [
+      subLabel, status, liveStatus?.running && exitIp ? `出口 ${exitIp}` : '',
+      globalFailure ? '全局出口探测失败，请重新选择节点' : '',
+    ].filter(Boolean).join(' · ');
     $('chartModeBadge').textContent = `${{ rule: '规则', global: '全局', direct: '直连' }[currentMode()]}模式 · ${captureSummary() || (liveStatus?.running ? '本地监听' : '未接管')}`;
     $('homeAutoFoot').parentElement!.hidden = !hasAutoExit();
     $('homeAutoFoot').textContent = activeExit === 'AUTO'
@@ -2202,8 +2207,25 @@ rules:
     }
   });
 
+  const fallbackSwitch = $<HTMLInputElement>('setFallbackToggle');
+  let savingFallback = false;
+  fallbackSwitch.addEventListener('change', async () => {
+    savingFallback = true;
+    const value = fallbackSwitch.checked;
+    renderSettings();
+    try {
+      await commitProfileEdit({ kind: 'coreSetting', key: 'routepilot-fallback-direct', value }, '故障回退设置已保存');
+    } finally {
+      savingFallback = false;
+      renderSettings();
+    }
+  });
+
   function renderSettings(): void {
     const settings = liveProfile?.coreSettings;
+    $('setFallbackRow').hidden = liveStatus?.platform !== 'windows';
+    fallbackSwitch.disabled = !settings || savingFallback || changingSubscription || networkUpdating;
+    if (!savingFallback) fallbackSwitch.checked = settings?.['routepilot-fallback-direct'] ?? false;
     coreFields.disabled = savingCoreSetting || !settings || changingSubscription || networkUpdating || batchTesting;
     if (!savingCoreSetting && settings) {
       $<HTMLInputElement>('coreIpv6').checked = settings.ipv6;

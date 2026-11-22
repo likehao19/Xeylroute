@@ -741,6 +741,7 @@ pub fn summary(profile: &Value) -> Value {
             "ipv6": catalog["ipv6"].as_bool().unwrap_or(true),
             "tcp-concurrent": catalog["tcp-concurrent"].as_bool().unwrap_or(true),
             "unified-delay": catalog["unified-delay"].as_bool().unwrap_or(true),
+            "routepilot-fallback-direct": catalog["routepilot-fallback-direct"] == true,
             "log-level": catalog["log-level"].as_str().unwrap_or("info")
         },
         "sharedRules":shared_projection(profile).iter().filter_map(|(source,line)| {
@@ -960,7 +961,7 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
         }
         Edit::CoreSetting { key, value } => {
             let valid = match key.as_str() {
-                "ipv6" | "tcp-concurrent" | "unified-delay" => value.is_boolean(),
+                "ipv6" | "tcp-concurrent" | "unified-delay" | "routepilot-fallback-direct" => value.is_boolean(),
                 "log-level" => matches!(value.as_str(), Some("debug" | "info" | "warning" | "error" | "silent")),
                 _ => false,
             };
