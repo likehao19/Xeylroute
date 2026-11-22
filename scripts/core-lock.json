@@ -1,5 +1,9 @@
 {
   "version": "v1.19.34",
+  "windowsSource": {
+    "revision": "0455d0d28c4526937380505153e65a843d8612e8",
+    "go": "go1.26.11"
+  },
   "assets": {
     "mihomo-windows-amd64-compatible-v1.19.34.zip": "cd6738d4648cc1a5f48049a1343b697ab510889d648f045c5c780fc1ab443a79",
     "mihomo-darwin-amd64-compatible-v1.19.34.gz": "703bceaa494732fa456f47e6ac2f06bf0bc5593d4c927d5f61e10f1a31039c37",

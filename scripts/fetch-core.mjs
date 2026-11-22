@@ -1,5 +1,5 @@
-// Fetches the pinned Mihomo release for the build target into src-tauri/binaries/, where Tauri
-// picks it up as a sidecar and ships it inside the application.
+// Prepares the pinned Mihomo sidecar in src-tauri/binaries/. Windows builds from the
+// pinned source with the process-instance rule. Other targets use the official archive.
 //
 //   node scripts/fetch-core.mjs [--target <rust-triple>]
 // Cached archives are verified against the official release digest on every build.
@@ -16,6 +16,7 @@ const LOCK_PATH = path.join(ROOT, 'scripts', 'core-lock.json');
 const OUT_DIR = path.join(ROOT, 'src-tauri', 'binaries');
 const MAX_ARCHIVE_BYTES = 80 * 1024 * 1024;
 const MAX_BINARY_BYTES = 200 * 1024 * 1024;
+const sha256 = data => createHash('sha256').update(data).digest('hex');
 
 /** Rust target triple -> [Mihomo platform tag, archive extension]. */
 const TARGETS = {
@@ -114,6 +115,48 @@ function download(url) {
   ], { maxBuffer: MAX_ARCHIVE_BYTES });
 }
 
+function buildWindowsCore(triple, lock) {
+  const { revision, go } = lock.windowsSource;
+  const patch = path.join(ROOT, 'scripts', 'mihomo-process-instance.patch');
+  const buildKey = sha256(`${revision}:${go}:${triple}:${sha256(fs.readFileSync(patch))}`);
+  const cached = path.join(OUT_DIR, `mihomo-windows-${buildKey}.exe`);
+  const digest = `${cached}.sha256`;
+  if (fs.existsSync(cached) && fs.existsSync(digest)) {
+    const binary = fs.readFileSync(cached);
+    if (sha256(binary) === fs.readFileSync(digest, 'utf8').trim()) return binary;
+  }
+  const goEnv = { ...process.env, GOTOOLCHAIN: 'local' };
+  const version = execFileSync('go', ['version'], { env: goEnv, encoding: 'utf8' });
+  if (!version.startsWith(`go version ${go} `)) {
+    throw new Error(`The Windows Mihomo build needs ${go}. Found: ${version.trim()}`);
+  }
+
+  const work = fs.mkdtempSync(path.join(OUT_DIR, '.mihomo-build-'));
+  try {
+    const source = path.join(work, 'source');
+    const output = path.join(work, 'mihomo.exe');
+    const repository = 'https://github.com/MetaCubeX/mihomo.git';
+    execFileSync('git', ['-c', 'core.autocrlf=false', 'clone', '--quiet', '--depth', '1',
+      '--branch', lock.version, repository, source], { stdio: 'inherit' });
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim();
+    if (head !== revision) throw new Error(`Unexpected Mihomo source revision: ${head}`);
+    execFileSync('git', ['apply', '--unidiff-zero', patch], { cwd: source, stdio: 'inherit' });
+    execFileSync('go', ['build', '-p', '2', '-tags', 'with_gvisor', '-trimpath',
+      '-ldflags', `-s -w -buildid= -X github.com/metacubex/mihomo/constant.Version=${lock.version}-xeylroute`,
+      '-o', output, '.'], {
+      cwd: source, stdio: 'inherit',
+      env: { ...goEnv, GOOS: 'windows', GOARCH: triple.startsWith('aarch64') ? 'arm64' : 'amd64',
+        CGO_ENABLED: '0', GOAMD64: 'v1' },
+    });
+    const binary = fs.readFileSync(output);
+    fs.renameSync(output, cached);
+    fs.writeFileSync(digest, sha256(binary));
+    return binary;
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const targetIndex = args.indexOf('--target');
@@ -123,11 +166,20 @@ async function main() {
   const lock = JSON.parse(fs.readFileSync(LOCK_PATH, 'utf8'));
   const asset = assetFor(triple, lock.version);
   const destination = path.join(OUT_DIR, sidecarName(triple));
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  if (triple.includes('windows')) {
+    const binary = buildWindowsCore(triple, lock);
+    if (!fs.existsSync(destination) || sha256(fs.readFileSync(destination)) !== sha256(binary)) {
+      const temporary = `${destination}.${process.pid}.tmp`;
+      fs.writeFileSync(temporary, binary, { mode: 0o755 });
+      fs.renameSync(temporary, destination);
+    }
+    console.log(`Mihomo ${lock.version} with Windows process-instance rules is ready at ${path.relative(ROOT, destination)}.`);
+    return;
+  }
   const expected = lock.assets[asset];
   if (!expected) throw new Error(`Missing release digest for ${asset}.`);
-  fs.mkdirSync(OUT_DIR, { recursive: true });
   const cache = path.join(OUT_DIR, asset);
-  const sha256 = data => createHash('sha256').update(data).digest('hex');
   let archive = fs.existsSync(cache) ? fs.readFileSync(cache) : null;
   if (!archive || sha256(archive) !== expected) {
     console.log(`Downloading ${asset} ...`);

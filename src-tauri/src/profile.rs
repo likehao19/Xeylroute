@@ -218,6 +218,10 @@ pub enum Edit {
         targets: Vec<String>,
         exit: String,
     },
+    ProcessInstanceRule {
+        instance: crate::processes::ProcessInstance,
+        exit: Option<String>,
+    },
     ClearProgramRules {
         targets: Vec<String>,
     },
@@ -387,14 +391,15 @@ fn rule_priority(profile: &Value, line: &str) -> (u8, std::cmp::Reverse<usize>) 
         .and_then(|members| members[0].as_str())
         .unwrap_or(exit);
     let order = match (kind, effective) {
-        ("MATCH", _) => 7,
+        ("MATCH", _) => 8,
         (_, "REJECT" | "REJECT-DROP") => 0,
         (_, "DIRECT") => 1,
-        ("AND", _) => 2,
-        ("PROCESS-PATH" | "PROCESS-NAME", _) => 3,
-        ("DOMAIN", _) => 4,
-        ("DOMAIN-SUFFIX", _) => 5,
-        _ => 6,
+        ("PROCESS-INSTANCE", _) => 2,
+        ("AND", _) => 3,
+        ("PROCESS-PATH" | "PROCESS-NAME", _) => 4,
+        ("DOMAIN", _) => 5,
+        ("DOMAIN-SUFFIX", _) => 6,
+        _ => 7,
     };
     (
         order,
@@ -409,6 +414,9 @@ fn rule_priority(profile: &Value, line: &str) -> (u8, std::cmp::Reverse<usize>) 
 fn apply_rule_order(profile: &Value, rules: &mut Vec<Value>) {
     rules.retain(|item| {
         item.as_str().is_none_or(|rule| {
+            if !cfg!(windows) && rule.starts_with("PROCESS-INSTANCE,") {
+                return false;
+            }
             let enabled = !disabled(profile, "routepilot-disabled-rules", rule)
                 && !rule_exit(rule)
                     .is_some_and(|exit| disabled(profile, "routepilot-disabled-groups", exit));
@@ -697,6 +705,11 @@ pub fn summary(profile: &Value) -> Value {
             let (kind,target) = prefix.split_once(',')?;
             crate::rule_conditions::decode(kind,target)
         }).collect::<Vec<_>>(),
+        "ruleInstances": entries(profile, "rules").map(|item| {
+            let tail = item.as_str()?.strip_prefix("PROCESS-INSTANCE,")?;
+            let (payload, _) = tail.rsplit_once(',')?;
+            crate::processes::ProcessInstance::from_payload(payload)
+        }).collect::<Vec<_>>(),
         "rules":profile.get("rules"), "groups":groups, "providers":providers, "nodePins":node_pins, "exits":exits(profile),
         "disabledRules":profile.get("routepilot-disabled-rules"), "disabledGroups":profile.get("routepilot-disabled-groups"),
         "tunScope": tun_scope(catalog),
@@ -921,6 +934,25 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
             profile["socks-port"] = json!(socks);
             profile["mixed-port"] = json!(mixed);
         }
+        Edit::ProcessInstanceRule { instance, exit } => {
+            let target = instance.payload();
+            let prefix = format!("PROCESS-INSTANCE,{target},");
+            let existing = entries(profile, "rules").enumerate().find_map(|(index, item)| {
+                let line = item.as_str()?;
+                line.starts_with(&prefix).then(|| (index, line.to_owned()))
+            });
+            if let Some(exit) = exit {
+                if !instance.is_live() {
+                    return Err("该进程已退出或重新启动，请刷新列表。".into());
+                }
+                let (index, expected) = existing.unzip();
+                edit(profile, Edit::Rule {
+                    index, expected, category: "PROCESS-INSTANCE".into(), target, exit,
+                })?;
+            } else if let Some((index, expected)) = existing {
+                edit(profile, Edit::RemoveRule { index, expected })?;
+            }
+        }
         Edit::Rule {
             index,
             expected,
@@ -935,6 +967,7 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 "DOMAIN" | "DOMAIN-SUFFIX" | "IP-CIDR" | "IP-CIDR6" | "DST-PORT" | "AND" =>
                     crate::rule_conditions::decode(&category, &target).is_some(),
                 "PROCESS-PATH" => clean(&target) && std::path::Path::new(&target).is_absolute(),
+                "PROCESS-INSTANCE" => crate::processes::ProcessInstance::from_payload(&target).is_some(),
                 "MATCH" => target.is_empty(),
                 _ => false,
             };
@@ -993,7 +1026,12 @@ pub fn edit(profile: &mut Value, mutation: Edit) -> Result<(), String> {
                 } else {
                     rules
                         .iter()
-                        .position(|r| r.as_str().is_some_and(|r| r.starts_with("MATCH,")))
+                        .position(|r| r.as_str().is_some_and(|r| {
+                            r.starts_with("MATCH,")
+                                || (category == "PROCESS-INSTANCE"
+                                    && (r.starts_with("PROCESS-PATH,") || r.starts_with("PROCESS-NAME,"))
+                                    && !matches!(rule_exit(r), Some("DIRECT" | "REJECT" | "REJECT-DROP")))
+                        }))
                         .unwrap_or(rules.len())
                 };
                 rules.insert(position, json!(&text));

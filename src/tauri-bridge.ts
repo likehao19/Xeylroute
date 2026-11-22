@@ -65,6 +65,7 @@ export type ProfileSummary = {
   manualOrder?: boolean;
   effectiveRules?: string[];
   ruleConditions?: (RuleConditions | null)[];
+  ruleInstances?: (ProcessInstance | null)[];
   coreSettings: CoreSettings;
   subscriptionScope?: string | null;
   subscriptionScopeInitialized?: boolean;
@@ -182,6 +183,7 @@ export type RunningProcess = {
   threadCount: number;
   icon?: string | null;
 };
+export type ProcessInstance = Pick<RunningProcess, 'pid' | 'startedAt' | 'path'>;
 
 export type GroupedRunningApp = RunningProcess & {
   members: RunningProcess[];
@@ -224,6 +226,7 @@ export type ProfileEdit =
   | { kind: 'matchRule'; index?: number; expected?: string; conditions: RuleConditions; exit: string }
   | { kind: 'addProgramMatches'; targets: string[]; conditions: RuleConditions; exit: string; shared: boolean }
   | { kind: 'programRules'; targets: string[]; exit: string }
+  | { kind: 'processInstanceRule'; instance: ProcessInstance; exit: string | null }
   | { kind: 'clearProgramRules'; targets: string[] }
   | { kind: 'batchRules'; action: 'enable' | 'disable' | 'delete'; rules: { index: number; expected: string }[] }
   | { kind: 'removeRule'; index: number; expected: string }
@@ -308,6 +311,8 @@ export const tauriApi = {
   mihomoExitIp: () => invoke<string>('mihomo_exit_ip'),
   connectionLogs: (clear = false) => invoke<ConnectionLogRow[]>('connection_log_rows', { clear }),
   listRunningProcesses: () => invoke<RunningProcess[]>('list_running_processes'),
+  checkProcessInstances: (instances: ProcessInstance[]) =>
+    invoke<boolean[]>('check_process_instances', { instances }),
   listProcessThreads: (pid: number, startedAt: string) =>
     invoke<ProcessThread[]>('list_process_threads', { pid, startedAt }),
   systemNetworkDetails: () =>

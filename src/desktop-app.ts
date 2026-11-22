@@ -33,6 +33,7 @@ import {
   type MihomoSnapshot,
   type NetworkDetails,
   platformLabel,
+  type ProcessInstance,
   type ProfileEdit,
   type RuleConditions,
   type SharedRule,
@@ -162,6 +163,7 @@ export function mountDesktopApp(shell: ShellController): void {
   let liveCore: MihomoSnapshot | null = null;
   let liveError = '';
   let liveProcesses: RunningProcess[] = [];
+  let endedInstances = new Set<string>();
   let processStatus = '正在读取运行中的程序…';
   let liveApps: GroupedRunningApp[] = [];
   let liveLogs: ConnectionLogRow[] = [];
@@ -652,6 +654,20 @@ export function mountDesktopApp(shell: ShellController): void {
     }
   }
 
+  async function refreshInstanceLifetimes(): Promise<void> {
+    const profile = liveProfile;
+    const entries = profile?.ruleInstances?.flatMap((instance, index) => instance ? [{
+      instance, line: profile.rules?.[index] || '',
+    }] : []) ?? [];
+    if (!entries.length) return;
+    const alive = await tauriApi.checkProcessInstances(entries.map(entry => entry.instance));
+    if (profile !== liveProfile || shell.getView() !== 'split') return;
+    const ended = new Set(entries.filter((_, index) => alive[index] === false).map(entry => entry.line));
+    if (ended.size === endedInstances.size && [...ended].every(line => endedInstances.has(line))) return;
+    endedInstances = ended;
+    renderSplit();
+  }
+
   let lastFullSnapshot = 0;
 
   function refreshLiveState(afterChange = false): Promise<void> {
@@ -714,6 +730,7 @@ export function mountDesktopApp(shell: ShellController): void {
 
       if (shell.getView() === 'logs') void refreshConnectionLogs();
       if (shell.getView() === 'settings') void refreshNetworkDetails();
+      if (shell.getView() === 'split') void refreshInstanceLifetimes().catch(() => {});
     } catch (err) {
       liveError = cleanError(err);
     } finally {
@@ -1639,10 +1656,11 @@ rules:
         const payload = type === 'MATCH' ? '' : (rest.slice(0,-1).join(',') || '');
         const exit = liveProfile?.ruleExits?.[index] || rest[rest.length - 1] || '';
         const enabled = !disabledRules.has(line);
-        return { line, index, type, payload, exit, enabled, active: enabled && !disabledGroups.has(exit) };
+        const instance = liveProfile?.ruleInstances?.[index];
+        return { line, index, type, payload, exit, enabled, instance, active: enabled && !disabledGroups.has(exit) };
       })
       .filter(r => r.type !== 'MATCH')
-      .filter(r => matches(r.line, r.type, r.exit, r.active, appByPath.get(r.payload)?.name));
+      .filter(r => matches(r.line, r.type, r.exit, r.active, r.instance?.path || appByPath.get(r.payload)?.name));
     const buckets = new Map<string, typeof rules>();
     for (const rule of rules) {
       const app = rule.type === 'PROCESS-PATH' && appByPath.get(rule.payload);
@@ -1659,8 +1677,8 @@ rules:
       const scope = liveProfile?.subscriptionScope ?? '';
       openRuleBatch(groups.map(group => {
         const r = group[0];
-        return { title: group.length > 1 ? appByPath.get(r.payload)!.name : r.payload || r.type,
-          detail: group.length > 1 ? `${group.length} 条程序路径规则` : r.line,
+        return { title: group.length > 1 ? appByPath.get(r.payload)!.name : r.instance?.path || r.payload || r.type,
+          detail: group.length > 1 ? `${group.length} 条程序路径规则` : r.instance ? `PID ${r.instance.pid} · 本次运行` : r.line,
           count: group.length, enabled: group.every(row => row.enabled === r.enabled) ? r.enabled : null };
       }), (action, selected) => {
         const targets = selected.flatMap(i => groups[i].map(r => ({ index: r.index, expected: r.line })));
@@ -1677,30 +1695,33 @@ rules:
       const isDomain = r.type.startsWith('DOMAIN');
       const tone = r.exit === 'DIRECT' ? 'green' : r.exit === 'REJECT' ? 'red' : r.exit === 'PASS' ? 'purple' : 'blue';
       const conditions = liveProfile?.ruleConditions?.[r.index];
-      const shortName = conditions ? conditionLabel(conditions) : isProc ? (r.payload.split(/[\\/]/).at(-1) || r.payload) : r.payload;
+      const target = r.instance?.path || r.payload;
+      const ended = r.instance && endedInstances.has(r.line);
+      const kind = r.instance ? (ended ? '本次运行已结束' : `本次运行 · PID ${r.instance.pid}`) : r.type;
+      const shortName = conditions ? conditionLabel(conditions) : isProc ? (target.split(/[\\/]/).at(-1) || target) : target;
       const iconHtml = isProc
-        ? renderProgramIcon(processes.get(programRuleKey(r.payload))?.icon, shortName)
+        ? renderProgramIcon(processes.get(programRuleKey(target))?.icon, shortName)
         : isDomain
           ? renderSiteIcon(r.payload, shortName, 'blue')
           : `<span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>`;
-      const editable = Boolean(liveProfile?.ruleConditions?.[r.index]);
+      const editable = Boolean(conditions || r.instance);
       return `
         <div class="mac-row">
           <div class="mac-row-left">
             ${iconHtml}
             <div style="min-width:0">
               <span class="mac-row-title">${esc(shortName)}</span>
-              <span class="mac-row-sub">${esc(r.type)} · <span style="font-family:var(--font-mono)" title="${esc(r.payload)}">${esc(r.payload)}</span></span>
+              <span class="mac-row-sub">${esc(kind)} · <span style="font-family:var(--font-mono)" title="${esc(target)}">${esc(target)}</span></span>
             </div>
           </div>
           <div class="rule-right-cols live-cols">
-            <span class="pill ${r.active ? tone : 'orange'}">${esc(exitDisplayLabel(r.exit))}${r.active ? '' : ' · 停用'}</span>
+            <span class="pill ${r.active && !ended ? tone : 'orange'}">${esc(exitDisplayLabel(r.exit))}${r.active || ended ? '' : ' · 停用'}</span>
             <label class="mac-switch">
               <input type="checkbox" data-toggle-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" ${r.enabled ? 'checked' : ''}>
               <i></i>
             </label>
             <button type="button" class="sf-icon-btn" data-inspect-rule="${r.index}" aria-label="查看命中连接" data-tip="查看命中连接">${SF_DETAIL}</button>
-            <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" data-tip="${editable ? '编辑规则' : '编辑完整配置'}">${SF_EDIT}</button>
+            <button type="button" class="sf-icon-btn" data-edit-rule-idx="${r.index}" data-tip="${editable ? '编辑规则' : '编辑完整配置'}" ${ended ? 'disabled' : ''}>${SF_EDIT}</button>
             <button type="button" class="sf-icon-btn danger" data-del-rule-idx="${r.index}" data-rule-expected="${esc(r.line)}" data-tip="删除规则">${SF_TRASH}</button>
           </div>
         </div>
@@ -1766,11 +1787,12 @@ rules:
                   <summary style="cursor:pointer;color:var(--accent);font-weight:var(--weight-control)">管理组成员 (${members.length})</summary>
                   <div style="margin-top:8px;display:grid;gap:6px">
                     ${members.map(({ line, index }) => {
-                      const [, target] = line.split(',');
+                      const instance = liveProfile?.ruleInstances?.[index];
+                      const target = instance?.path || line.split(',')[1];
                       const short = target.split(/[\\/]/).at(-1) || target;
                       return `
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(target)}">${esc(short)}</span>
+                          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(target)}">${esc(short)}${instance ? (endedInstances.has(line) ? ' · 本次运行已结束' : ` · PID ${instance.pid}`) : ''}</span>
                           <button type="button" class="glass-btn-soft" style="height:24px;padding:0 9px;flex:none" data-detach-rule-idx="${index}" data-rule-expected="${esc(line)}">移出</button>
                         </div>
                       `;
@@ -1791,6 +1813,7 @@ rules:
       b.classList.toggle('active', b.dataset.scanType === procScanType)
     );
     const groupNamesSet = new Set((liveProfile?.groups || []).map(g => g.name));
+    const canEditInstance = liveStatus?.platform === 'windows';
     const pathRules = programPathExits();
     const matchQuery = (item: RunningProcess) =>
       !q || [item.name, item.exe, item.path, String(item.pid)].some(v => v.toLowerCase().includes(q));
@@ -1809,6 +1832,8 @@ rules:
           const assigned = assignedExits.size === 1 ? [...assignedExits][0] : null;
           const groupTag = assigned && groupNamesSet.has(assigned) ? assigned : '未分组';
           const metric = appItem ? `${appItem.instances} 个进程` : `PID ${item.pid} · ${item.threadCount} 线程`;
+          const instanceIndex = canEditInstance && !isApp ? findInstanceRule(item) : -1;
+          const instanceExit = liveProfile?.ruleExits?.[instanceIndex] || '';
           return `
             <div class="mac-row">
               <div class="mac-row-left">
@@ -1827,6 +1852,12 @@ rules:
                   popupKind: isApp ? 'app-exit' : 'process-exit',
                   popupKey: item.path,
                 })}
+                ${canEditInstance && !isApp ? macPopupBtnHtml({
+                  value: instanceExit,
+                  label: instanceExit ? `本次 · ${exitDisplayLabel(instanceExit)}` : '本次运行',
+                  popupKind: 'process-instance-exit',
+                  popupKey: `${item.pid}:${item.startedAt}`,
+                }) : ''}
                 <button type="button" class="sf-icon-btn" data-proc-detail-pid="${item.pid}" data-proc-detail-mode="${procScanType}" data-tip="${isApp ? '查看所属进程' : '查看线程详情'}">${SF_DETAIL}</button>
               </div>
             </div>
@@ -1838,7 +1869,8 @@ rules:
 
   function inspectRoutes(line?: string): void {
     const names: Record<string,string> = { DOMAIN:'Domain','DOMAIN-SUFFIX':'DomainSuffix',
-      'PROCESS-PATH':'ProcessPath', 'IP-CIDR':'IPCIDR', 'IP-CIDR6':'IPCIDR', 'DST-PORT':'DstPort', AND:'AND', MATCH:'Match' };
+      'PROCESS-PATH':'ProcessPath', 'PROCESS-INSTANCE':'ProcessInstance',
+      'IP-CIDR':'IPCIDR', 'IP-CIDR6':'IPCIDR', 'DST-PORT':'DstPort', AND:'AND', MATCH:'Match' };
     const signature = (rule: string): string => {
       const parts = rule.split(',');
       if (['no-resolve','src'].includes(parts.at(-1) || '')) parts.pop();
@@ -2626,6 +2658,24 @@ rules:
     if (!existing) $<HTMLInputElement>('gsName').focus();
   }
 
+  function findInstanceRule(instance: ProcessInstance): number {
+    return liveProfile?.ruleInstances?.findIndex(rule => rule?.pid === instance.pid
+      && rule.startedAt === instance.startedAt && rule.path === instance.path) ?? -1;
+  }
+
+  function openInstanceExit(trigger: HTMLElement, instance: ProcessInstance): void {
+    const scope = liveProfile?.subscriptionScope ?? '';
+    const index = findInstanceRule(instance);
+    const selected = liveProfile?.ruleExits?.[index] || '';
+    const items = buildExitPopupItems();
+    if (index >= 0) items.unshift({ value: '', label: '清除本次规则' }, { sep: true });
+    const { pid, startedAt, path } = instance;
+    openMacMenu(trigger, items, selected, exit => {
+      void commitProfileEdit({ kind: 'processInstanceRule', instance: { pid, startedAt, path }, exit: exit || null },
+        exit ? `PID ${pid} 本次运行出口已设为 ${exitDisplayLabel(exit)}` : '已清除本次运行的规则', scope);
+    });
+  }
+
   async function assignAppExit(pathKey: string, exit: string, wholeApp: boolean): Promise<void> {
     const scope = liveProfile?.subscriptionScope ?? '';
     const app = wholeApp ? liveApps.find(a => a.path === pathKey) : undefined;
@@ -3003,6 +3053,12 @@ rules:
         return;
       }
 
+      if (kind === 'process-instance-exit') {
+        const instance = liveProcesses.find(process => `${process.pid}:${process.startedAt}` === key);
+        if (instance) openInstanceExit(popTrigger, instance);
+        return;
+      }
+
       if (kind === 'app-exit' || kind === 'process-exit') {
         const items: PopupMenuItem[] = [{ value: '', label: '按分流规则（无单独设置）' }, { sep: true }, ...buildExitPopupItems()];
         openMacMenu(popTrigger, items, popTrigger.dataset.popupVal ?? null, nextVal => {
@@ -3141,7 +3197,10 @@ rules:
     }
     const editRuleBtn = target.closest<HTMLElement>('[data-edit-rule-idx]');
     if (editRuleBtn?.dataset.editRuleIdx) {
-      openRuleEditor(Number(editRuleBtn.dataset.editRuleIdx));
+      const index = Number(editRuleBtn.dataset.editRuleIdx);
+      const instance = liveProfile?.ruleInstances?.[index];
+      if (instance) openInstanceExit(editRuleBtn, instance);
+      else openRuleEditor(index);
       return;
     }
 

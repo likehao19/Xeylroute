@@ -22,6 +22,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - 策略组可手选、自动测速或故障切换，也可引用订阅来源。删除仍被规则或分组使用的订阅会先提示清理引用。连接记录从 Mihomo 日志流接收并保留本次会话最近 500 条路由事件。
 - 主窗口以普通权限运行。开启全局 TUN 时，先显示应用确认弹窗，再由 Windows 授权 TUN 后台。关闭 TUN 会停止该后台，并恢复常规本地代理监听。严格的仅指定程序接管仍待实现。
 - 「按软件」归并同一 Windows 安装包内的进程，以及可通过安装目录和文件名前缀确认的辅助程序。「按进程」逐项展示 PID 和线程数，软件行可以查看所属进程并选择要配置分流的可执行路径。
+- Windows 的「分流与程序 → 运行中的程序 → 按进程」可通过「本次运行」为一个实例单独选择出口。规则模式下，新连接须同时匹配 PID、启动时间和可执行路径。程序退出后规则自动停止匹配，分流页面显示「本次运行已结束」。
 
 ## 分流规则与实测
 
@@ -41,7 +42,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## 内核打包与验证
 
-桌面开发和打包会按目标架构获取官方 Mihomo v1.19.34，核对 SHA-256 后由 Tauri 随应用一起分发。支持 macOS、Windows、Linux 的 x64 和 arm64。首次安装后可直接进入「订阅管理」导入订阅或节点。本机验证也可以使用 [回环验证配置](./scripts/mihomo-loopback-example.json)。
+桌面开发和打包使用 Mihomo v1.19.34。Windows 使用 Go 1.26.11 和 Git，从锁定的官方源码构建带有进程实例规则的内核。macOS 和 Linux 继续使用经过 SHA-256 校验的官方二进制。各平台支持 x64 和 arm64，由 Tauri 把内核随应用一起分发。首次安装后可直接进入「订阅管理」导入订阅或节点。本机验证也可以使用 [回环验证配置](./scripts/mihomo-loopback-example.json)。 [Windows 内核补丁](./scripts/mihomo-process-instance.patch)
 
 运行 `npm run desktop -- build` 制作当前平台安装包。独立执行 Cargo 测试前先运行 `npm run core` 准备打包资源。内核版本与校验值在 `scripts/core-lock.json`，许可证随包附带。 [Mihomo 对应版本源码](https://github.com/MetaCubeX/mihomo/tree/v1.19.34)
 
@@ -69,4 +70,4 @@ Windows Server 2022 x64 已通过 47 项后端测试和单独执行的 WinINet �
 
 备选内核 sing-box 1.14.4 的实验在 TUN 上设置了 `include_package`。curl 与两个 Python 实例的连接都到达了受控出口，按端口分流的阳性对照也命中了指定出口。程序名对照未命中，因此这次实验无法确认按 PID 区分实例的能力。[对照实验日志](https://github.com/likehao19/Xeylroute/actions/runs/44766599122/job/136392754984)
 
-严格按软件限定 TUN 入站、只对某个 PID 实例生效的临时规则仍待实现。Windows 系统 UAC 的授权与取消、托盘菜单正常退出、Wi-Fi 与以太网实机切换，以及外部订阅线路测速仍待交互式验收。托管测试机没有暴露可操作的托盘图标时，工作流会在摘要中标注托盘验收未完成。
+严格按软件限定 TUN 入站仍待实现。Windows 系统 UAC 的授权与取消、托盘菜单正常退出、Wi-Fi 与以太网实机切换，以及外部订阅线路测速仍待交互式验收。托管测试机没有暴露可操作的托盘图标时，工作流会在摘要中标注托盘验收未完成。

@@ -1,4 +1,45 @@
-use serde::Serialize;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessInstance {
+    pub pid: u32,
+    pub started_at: String,
+    pub path: String,
+}
+
+impl ProcessInstance {
+    pub(crate) fn payload(&self) -> String {
+        format!("{}:{}:{}", self.pid, self.started_at, URL_SAFE_NO_PAD.encode(&self.path))
+    }
+
+    pub(crate) fn from_payload(payload: &str) -> Option<Self> {
+        let (pid, rest) = payload.split_once(':')?;
+        let (started_at, path) = rest.split_once(':')?;
+        let pid: u32 = pid.parse().ok()?;
+        let started: u64 = started_at.parse().ok()?;
+        let path = String::from_utf8(URL_SAFE_NO_PAD.decode(path).ok()?).ok()?;
+        if pid == 0 || started == 0 || path.is_empty() {
+            return None;
+        }
+        Some(Self { pid, started_at: started.to_string(), path })
+    }
+
+    pub(crate) fn is_live(&self) -> bool {
+        #[cfg(windows)]
+        return platform::instance_is_live(self);
+        #[cfg(not(windows))]
+        false
+    }
+}
+
+#[tauri::command]
+pub async fn check_process_instances(instances: Vec<ProcessInstance>) -> Result<Vec<bool>, String> {
+    tauri::async_runtime::spawn_blocking(move || instances.iter().map(ProcessInstance::is_live).collect())
+        .await
+        .map_err(|error| error.to_string())
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,10 +76,11 @@ pub async fn list_process_threads(pid: u32, started_at: String) -> Result<Vec<Th
 
 #[cfg(windows)]
 mod platform {
-    use super::{ProcessInfo, ThreadInfo};
+    use super::{ProcessInfo, ProcessInstance, ThreadInfo};
     use std::{collections::HashMap, io, mem::size_of, path::Path};
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE},
+        Foundation::{CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_TIMEOUT},
+        Storage::FileSystem::SYNCHRONIZE,
         System::{
             Diagnostics::ToolHelp::{
                 CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, Thread32First,
@@ -46,7 +88,7 @@ mod platform {
                 THREADENTRY32,
             },
             Threading::{
-                GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+                GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
                 PROCESS_QUERY_LIMITED_INFORMATION,
             },
         },
@@ -66,6 +108,25 @@ mod platform {
             return None;
         }
         let handle = OwnedHandle(handle);
+        process_info(&handle, pid)
+    }
+
+    pub(super) fn instance_is_live(instance: &ProcessInstance) -> bool {
+        let handle = unsafe {
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, instance.pid)
+        };
+        if handle.is_null() {
+            return false;
+        }
+        let handle = OwnedHandle(handle);
+        process_info(&handle, instance.pid).is_some_and(|current| {
+            current.started_at == instance.started_at
+                && current.path == instance.path
+                && unsafe { WaitForSingleObject(handle.0, 0) } == WAIT_TIMEOUT
+        })
+    }
+
+    fn process_info(handle: &OwnedHandle, pid: u32) -> Option<ProcessInfo> {
         let mut image = vec![0u16; 32768];
         let mut length = image.len() as u32;
         if unsafe { QueryFullProcessImageNameW(handle.0, 0, image.as_mut_ptr(), &mut length) } == 0
@@ -421,6 +482,42 @@ mod platform {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn process_instance_payload_preserves_paths_and_creation_ticks() {
+        let instance = super::ProcessInstance {
+            pid: 12345,
+            started_at: "134082867532586390".into(),
+            path: r"C:\Apps\示例, Test.exe".into(),
+        };
+        let payload = instance.payload();
+        assert!(!payload.contains(','));
+        let restored = super::ProcessInstance::from_payload(&payload).unwrap();
+        assert_eq!(restored.pid, instance.pid);
+        assert_eq!(restored.started_at, instance.started_at);
+        assert_eq!(restored.path, instance.path);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn saves_a_live_instance_rule_without_creating_a_path_rule() {
+        let process = super::platform::query_process(std::process::id()).unwrap();
+        let instance = super::ProcessInstance {
+            pid: process.pid,
+            started_at: process.started_at,
+            path: process.path,
+        };
+        let mut profile = serde_json::json!({"routepilot-created":true, "rules":["MATCH,DIRECT"]});
+        let line = format!("PROCESS-INSTANCE,{},REJECT", instance.payload());
+        crate::profile::edit_active(&mut profile, crate::profile::Edit::ProcessInstanceRule {
+            instance,
+            exit: Some("REJECT".into()),
+        }).unwrap();
+        let summary = crate::profile::summary(&profile);
+        assert_eq!(summary["effectiveRules"][0], line);
+        assert_eq!(summary["ruleInstances"][0]["pid"], process.pid);
+        assert!(summary["processRules"].as_array().unwrap().is_empty());
+    }
+
     #[cfg(windows)]
     #[test]
     fn verifies_real_windows_process_creation_time_before_reading_threads() {

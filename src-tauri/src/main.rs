@@ -1712,6 +1712,7 @@ fn main() {
             connection_log::connection_log_rows,
             processes::list_running_processes,
             processes::list_process_threads,
+            processes::check_process_instances,
             mihomo_api::active_routes,
             mihomo_api::mihomo_snapshot,
             mihomo_api::mihomo_delay,
