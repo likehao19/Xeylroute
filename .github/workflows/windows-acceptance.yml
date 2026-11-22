@@ -36,13 +36,6 @@ jobs:
           python scripts/smoke-routing.py $core
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/smoke-windows-process-instance.py $core
-      - name: Verify signed driver and selected software TUN
-        if: ${{ inputs.runner == 'windows-2022' }}
-        shell: pwsh
-        run: |
-          $sig = Get-AuthenticodeSignature src-tauri/binaries/WinDivert64.sys
-          if ($sig.Status -ne 'Valid') { throw "WinDivert signature: $($sig.Status)" }
-          python scripts/smoke-windows-process-tun.py src-tauri/binaries/xeylroute-mihomo-x86_64-pc-windows-msvc.exe
       - name: Build frontend
         run: npm ci && npm run build
         shell: cmd
@@ -55,6 +48,36 @@ jobs:
         id: desktop
         if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
         run: cargo build --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml
+      - name: Verify selected software TUN in the Windows installer
+        if: ${{ !cancelled() && steps.desktop.outcome == 'success' && inputs.runner == 'windows-2022' }}
+        shell: pwsh
+        run: |
+          npm run desktop -- bundle --debug --ci --no-sign --bundles nsis
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $installer = @(Get-ChildItem src-tauri/target/debug/bundle/nsis/*-setup.exe)
+          if ($installer.Count -ne 1) { throw 'Expected one Windows installer' }
+          $installed = Join-Path $env:RUNNER_TEMP 'RoutePilot acceptance'
+          $uninstaller = Join-Path $installed 'uninstall.exe'
+          try {
+            $setup = Start-Process $installer[0].FullName -ArgumentList "/S /D=$installed" -Wait -PassThru
+            if ($setup.ExitCode) { throw "Installation failed: $($setup.ExitCode)" }
+            foreach ($file in @('WinDivert.dll', 'WinDivert64.sys', 'licenses/WinDivert-LICENSE.txt', 'licenses/WinDivert-source.tar.gz')) {
+              if (!(Test-Path (Join-Path $installed $file) -PathType Leaf)) { throw "Missing installed resource: $file" }
+            }
+            $sig = Get-AuthenticodeSignature (Join-Path $installed 'WinDivert64.sys')
+            if ($sig.Status -ne 'Valid') { throw "WinDivert signature: $($sig.Status)" }
+            python scripts/smoke-windows-process-tun.py (Join-Path $installed 'xeylroute-mihomo.exe')
+            if ($LASTEXITCODE) { throw 'Selected software TUN smoke test failed' }
+          } finally {
+            if (Test-Path $uninstaller) {
+              $remove = Start-Process $uninstaller -ArgumentList '/S' -Wait -PassThru
+              if ($remove.ExitCode) { throw "Uninstall failed: $($remove.ExitCode)" }
+              foreach ($file in @('routepilot-desktop.exe', 'xeylroute-mihomo.exe', 'WinDivert.dll', 'WinDivert64.sys')) {
+                if (Test-Path (Join-Path $installed $file)) { throw "Uninstall left behind $file" }
+              }
+              Write-Host 'Uninstall removed the application and its driver files.'
+            }
+          }
       - name: Exercise the TUN worker and check Windows route cleanup
         if: ${{ !cancelled() && steps.desktop.outcome == 'success' }}
         run: python scripts/smoke-windows-tun.py src-tauri/target/debug/routepilot-desktop.exe
