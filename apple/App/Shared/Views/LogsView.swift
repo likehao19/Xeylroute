@@ -30,8 +30,10 @@ public struct LogsView: View {
 
                 Spacer()
 
+                #if os(iOS)
                 InlineSearchField(text: $filterText, placeholder: "搜索应用、目标或出口")
                     .frame(maxWidth: 220)
+                #endif
 
                 HStack(spacing: 6) {
                     InlineSearchField(text: $probeHost, placeholder: "测试域名")
@@ -75,6 +77,9 @@ public struct LogsView: View {
             }
         }
         .navigationTitle("连接记录")
+        #if os(macOS)
+        .searchable(text: $filterText, placement: .toolbar, prompt: "搜索应用、目标或出口")
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if selectedTab == .active {
@@ -117,18 +122,12 @@ public struct LogsView: View {
 
         return NativeCard(padding: 0) {
             if rows.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "text.magnifyingglass")
-                        .font(.system(size: 30))
-                        .foregroundStyle(.secondary)
-                    Text("暂无连接记录")
-                        .font(.headline)
-                    Text("内核运行时会实时接收路由日志并保留最近 500 条事件。")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(36)
+                CollectionEmptyState(
+                    title: "暂无连接记录",
+                    systemImage: "text.magnifyingglass",
+                    description: "内核运行时会实时接收路由日志并保留最近 500 条事件。",
+                    query: query
+                )
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in

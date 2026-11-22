@@ -41,8 +41,10 @@ public struct SplitRoutingView: View {
 
                 Spacer()
 
+                #if os(iOS)
                 InlineSearchField(text: $filterText, placeholder: selectedTab == .apps ? "搜索应用或路径" : "搜索规则或分组")
                     .frame(maxWidth: 220)
+                #endif
 
                 if selectedTab == .rules {
                     HStack(spacing: 6) {
@@ -95,6 +97,9 @@ public struct SplitRoutingView: View {
             }
         }
         .navigationTitle("分流与程序")
+        #if os(macOS)
+        .searchable(text: $filterText, placement: .toolbar, prompt: selectedTab == .apps ? "搜索应用或路径" : "搜索规则或分组")
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if selectedTab == .rules {
@@ -149,18 +154,12 @@ public struct SplitRoutingView: View {
 
         return NativeCard(padding: 0) {
             if items.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 30))
-                        .foregroundStyle(.secondary)
-                    Text("暂无分流规则")
-                        .font(.headline)
-                    Text("支持按程序路径、域名/后缀、IP/CIDR 网段和目标端口进行组合分流。")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(36)
+                CollectionEmptyState(
+                    title: "暂无分流规则",
+                    systemImage: "arrow.triangle.branch",
+                    description: "支持按程序路径、域名/后缀、IP/CIDR 网段和目标端口进行组合分流。",
+                    query: query
+                )
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { idx, rule in
@@ -231,18 +230,12 @@ public struct SplitRoutingView: View {
 
         return NativeCard(padding: 0) {
             if groups.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "folder.badge.gearshape")
-                        .font(.system(size: 30))
-                        .foregroundStyle(.secondary)
-                    Text("暂无自定义策略分组")
-                        .font(.headline)
-                    Text("策略组可设为手选 (select)、自动测速 (url-test) 或故障切换 (fallback)，并引用订阅来源。")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(36)
+                CollectionEmptyState(
+                    title: "暂无自定义策略分组",
+                    systemImage: "folder.badge.gearshape",
+                    description: "策略组可设为手选 (select)、自动测速 (url-test) 或故障切换 (fallback)，并引用订阅来源。",
+                    query: query
+                )
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(groups.enumerated()), id: \.element.id) { idx, group in

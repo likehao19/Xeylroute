@@ -5,9 +5,69 @@ import XeylrouteCore
 public struct ConnectView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
+    #if os(macOS)
+    @State private var showImport = false
+    #endif
     let requestEnableTUN: () -> Void
 
     public var body: some View {
+        Group {
+            #if os(macOS)
+            if !appState.status.configured && !appState.status.running {
+                ContentUnavailableView {
+                    Image("AppBrandLogo")
+                        .resizable()
+                        .frame(width: 72, height: 72)
+                        .accessibilityHidden(true)
+                    Text("添加第一个节点")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                } description: {
+                    Text("添加订阅或导入节点，即可查看流量并管理应用分流。")
+                } actions: {
+                    Button("导入订阅或节点…") { showImport = true }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    Button("管理订阅") { appState.selectedDestination = .subscriptions }
+                        .buttonStyle(.link)
+                }
+                .sheet(isPresented: $showImport) { ImportSubscriptionSheet() }
+            } else {
+                dashboard
+            }
+            #else
+            dashboard
+            #endif
+        }
+        .navigationTitle("连接")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                #if os(iOS)
+                StatusPill(
+                    text: appState.statusBadgeTitle,
+                    tint: (appState.status.systemProxyEnabled || appState.status.tunEnabled)
+                        ? .green
+                        : (appState.status.running ? .orange : .secondary),
+                    showDot: true
+                )
+                #endif
+                Button {
+                    Task { await appState.toggleLocalCore() }
+                } label: {
+                    Label(
+                        appState.status.running ? "停止内核" : "启动监听",
+                        systemImage: appState.status.running ? "stop.fill" : "play.fill"
+                    )
+                }
+                #if os(macOS)
+                .labelStyle(.titleAndIcon)
+                #endif
+                .disabled(appState.isBusy)
+            }
+        }
+    }
+
+    private var dashboard: some View {
         ScrollView {
             VStack(spacing: 16) {
                 if !appState.status.configured {
@@ -16,15 +76,26 @@ public struct ConnectView: View {
                     capturePromptBanner
                 }
 
+                #if os(iOS)
                 telemetryKPIBar
+                #endif
 
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 16) {
                         VStack(spacing: 16) {
+                            #if os(macOS)
+                            trafficChartCard
+                            defaultNodeSection
+                            #else
                             defaultNodeSection
                             trafficChartCard
+                            #endif
                         }
+                        #if os(macOS)
+                        .frame(minWidth: 335, maxWidth: .infinity)
+                        #else
                         .frame(maxWidth: .infinity)
+                        #endif
 
                         VStack(spacing: 16) {
                             if appState.runtime.supportsProcessRouting {
@@ -48,27 +119,6 @@ public struct ConnectView: View {
                 }
             }
             .padding(20)
-        }
-        .navigationTitle("连接")
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                StatusPill(
-                    text: appState.statusBadgeTitle,
-                    tint: (appState.status.systemProxyEnabled || appState.status.tunEnabled)
-                        ? .green
-                        : (appState.status.running ? .orange : .secondary),
-                    showDot: true
-                )
-                Button {
-                    Task { await appState.toggleLocalCore() }
-                } label: {
-                    Label(
-                        appState.status.running ? "停止内核" : "启动监听",
-                        systemImage: appState.status.running ? "stop.fill" : "play.fill"
-                    )
-                }
-                .disabled(appState.isBusy)
-            }
         }
     }
 
@@ -394,6 +444,14 @@ public struct ConnectView: View {
         NativeCard(padding: 16) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
+                    #if os(macOS)
+                    Text("网络流量").font(.headline)
+                    Spacer()
+                    Text(formatDuration(appState.elapsedSeconds))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .help("会话时长")
+                    #else
                     Text("已接管流量波形")
                         .font(.system(size: 13.5, weight: .semibold))
                     StatusPill(text: appState.profile.mode.fullTitle, tint: .secondary)
@@ -410,7 +468,14 @@ public struct ConnectView: View {
                     }
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    #endif
                 }
+                #if os(macOS)
+                HStack(spacing: 32) {
+                    trafficReading("下载", icon: "arrow.down", rate: appState.currentDownRate, tint: .blue)
+                    trafficReading("上传", icon: "arrow.up", rate: appState.currentUpRate, tint: .teal)
+                }
+                #endif
 
                 ZStack {
                     Chart(appState.trafficTracker.samples) { sample in
@@ -423,7 +488,8 @@ public struct ConnectView: View {
 
                         LineMark(
                             x: .value("时间", sample.id),
-                            y: .value("下载", sample.downloadBytesPerSec / 1024.0)
+                            y: .value("下载", sample.downloadBytesPerSec / 1024.0),
+                            series: .value("方向", "下载")
                         )
                         .foregroundStyle(.blue)
                         .lineStyle(StrokeStyle(lineWidth: 2))
@@ -431,7 +497,8 @@ public struct ConnectView: View {
 
                         LineMark(
                             x: .value("时间", sample.id),
-                            y: .value("上传", sample.uploadBytesPerSec / 1024.0)
+                            y: .value("上传", sample.uploadBytesPerSec / 1024.0),
+                            series: .value("方向", "上传")
                         )
                         .foregroundStyle(.teal)
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
@@ -469,9 +536,13 @@ public struct ConnectView: View {
 
                 HStack {
                     let peak = appState.trafficTracker.samples.map(\.downloadBytesPerSec).max() ?? 0
+                    #if os(macOS)
+                    Text("累计 \(TrafficTracker.formatBytes(appState.totalTrafficBytes))")
+                    Text("\(appState.activeRuleCount) 条规则")
+                    #endif
                     Text("峰值下载 \(TrafficTracker.formatRate(peak))")
                     Spacer()
-                    Text("127.0.0.1:\(appState.profile.mixedPort > 0 ? appState.profile.mixedPort : appState.profile.httpPort)")
+                    Text("127.0.0.1:\(String(appState.profile.mixedPort > 0 ? appState.profile.mixedPort : appState.profile.httpPort))")
                 }
                 .font(.system(size: 11, design: .monospaced))
                 .monospacedDigit()
@@ -479,6 +550,22 @@ public struct ConnectView: View {
             }
         }
     }
+
+    #if os(macOS)
+    private func trafficReading(_ title: String, icon: String, rate: Double, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label {
+                Text(title).foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: icon).foregroundStyle(tint)
+            }
+            .font(.caption)
+            Text(TrafficTracker.formatRate(rate))
+                .font(.title2.weight(.semibold))
+                .monospacedDigit()
+        }
+    }
+    #endif
 
     private var activeConnectionsChartCard: some View {
         NativeCard(padding: 16) {

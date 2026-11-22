@@ -26,6 +26,7 @@ struct XeylrouteAppleApp: App {
         MenuBarExtra {
             MenuBarPopoverView()
                 .environment(appState)
+                .preferredColorScheme(appState.appearance.colorScheme)
         } label: {
             Label {
                 Text("Xeylroute")
@@ -91,6 +92,8 @@ struct MenuBarPopoverView: View {
                     set: { on in Task { await appState.setTUN(on) } }
                 ))
             }
+            .toggleStyle(.switch)
+            .controlSize(.small)
             .disabled(appState.isBusy)
 
             Divider()
@@ -150,8 +153,8 @@ struct MenuBarPopoverView: View {
                 .foregroundStyle(.red)
             }
         }
-        .padding(14)
-        .frame(width: 280)
+        .padding(18)
+        .frame(width: 300)
     }
 }
 #endif

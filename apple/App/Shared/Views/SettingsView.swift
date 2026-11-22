@@ -254,9 +254,15 @@ public struct SettingsView: View {
                     }
                 }
             }
+            #if os(macOS)
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: .infinity)
+            #else
             .frame(maxWidth: 860, alignment: .leading)
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+            #endif
         }
         .navigationTitle("网络与设置")
         .toolbar {
@@ -323,6 +329,16 @@ public struct SettingsView: View {
     }
 
     private func portChip(_ label: String, text: Binding<String>) -> some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+            TextField(label, text: text)
+                .textFieldStyle(.roundedBorder)
+                .monospacedDigit()
+                .frame(width: 52)
+                .disabled(appState.status.running)
+        }
+        #else
         let palette = XeylPalette(colorScheme)
         return HStack(spacing: 4) {
             Text(label)
@@ -342,6 +358,7 @@ public struct SettingsView: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(palette.tileBorder, lineWidth: 0.75)
         )
+        #endif
     }
 
     private func savePorts() {

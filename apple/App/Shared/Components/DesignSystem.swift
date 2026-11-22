@@ -13,7 +13,11 @@ public struct XeylPalette {
 
     /// Main stage canvas behind cards
     public var canvasBackground: Color {
+        #if os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
         isDark ? Color(red: 0.095, green: 0.098, blue: 0.110) : Color(red: 0.942, green: 0.948, blue: 0.962)
+        #endif
     }
 
     /// Subtle ambient top-left skylight over canvas
@@ -23,12 +27,20 @@ public struct XeylPalette {
 
     /// Elevated card surface — clearly stepped above canvas
     public var cardSurface: Color {
+        #if os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+        #else
         isDark ? Color(red: 0.138, green: 0.142, blue: 0.158) : Color.white
+        #endif
     }
 
     /// Secondary inner tile / node pill surface
     public var tileSurface: Color {
+        #if os(macOS)
+        Color.primary.opacity(0.04)
+        #else
         isDark ? Color(red: 0.172, green: 0.178, blue: 0.198) : Color(red: 0.962, green: 0.966, blue: 0.976)
+        #endif
     }
 
     public var tileHover: Color {
@@ -42,7 +54,11 @@ public struct XeylPalette {
 
     /// Crisp 0.5–1pt structural hairlines
     public var cardBorder: Color {
+        #if os(macOS)
+        Color(nsColor: .separatorColor)
+        #else
         isDark ? Color.white.opacity(0.085) : Color.black.opacity(0.075)
+        #endif
     }
 
     public var cardTopSpecular: Color {
@@ -88,7 +104,11 @@ public struct StageCanvas<Content: View>: View {
         let palette = XeylPalette(colorScheme)
         ZStack {
             palette.canvasBackground
+                #if os(macOS)
+                .overlay(Color.primary.opacity(0.025))
+                #endif
                 .ignoresSafeArea()
+            #if os(iOS)
             RadialGradient(
                 colors: [palette.canvasHighlight, .clear],
                 center: .topLeading,
@@ -96,6 +116,7 @@ public struct StageCanvas<Content: View>: View {
                 endRadius: 680
             )
             .ignoresSafeArea()
+            #endif
             content
         }
     }
@@ -124,7 +145,11 @@ public struct NativeCard<Content: View>: View {
 
     public var body: some View {
         let palette = XeylPalette(colorScheme)
+        #if os(macOS)
+        let shape = RoundedRectangle(cornerRadius: min(radius, 10), style: .continuous)
+        #else
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        #endif
 
         content
             .padding(padding)
@@ -136,6 +161,7 @@ public struct NativeCard<Content: View>: View {
                     lineWidth: highlighted ? 1.25 : 0.75
                 )
             )
+            #if os(iOS)
             .overlay(alignment: .top) {
                 if palette.isDark {
                     shape
@@ -151,6 +177,7 @@ public struct NativeCard<Content: View>: View {
                 }
             }
             .shadow(color: palette.cardShadowColor, radius: palette.isDark ? 12 : 8, x: 0, y: palette.isDark ? 5 : 2)
+            #endif
     }
 }
 

@@ -18,12 +18,52 @@ public struct SectionHeaderBar<Trailing: View>: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
+                #if os(macOS)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                #else
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(.secondary)
+                #endif
             Spacer()
             trailing
         }
         .padding(.horizontal, 6)
+    }
+}
+
+struct CollectionEmptyState: View {
+    let title: String
+    let systemImage: String
+    let description: String
+    let query: String
+
+    var body: some View {
+        #if os(macOS)
+        if query.isEmpty {
+            ContentUnavailableView {
+                Label(title, systemImage: systemImage)
+            } description: {
+                Text(description)
+            }
+            .padding(.vertical, 28)
+        } else {
+            ContentUnavailableView.search(text: query)
+                .padding(.vertical, 28)
+        }
+        #else
+        VStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 30))
+                .foregroundStyle(.secondary)
+            Text(title).font(.headline)
+            Text(description)
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(36)
+        #endif
     }
 }
 

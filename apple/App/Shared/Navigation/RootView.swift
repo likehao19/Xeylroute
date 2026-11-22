@@ -58,10 +58,26 @@ public struct RootView: View {
     private var splitViewShell: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
+                #if os(macOS)
+                HStack(spacing: 9) {
+                    Image("AppBrandLogo")
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Xeylroute").font(.headline)
+                        Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                #else
                 sidebarControlHeader
                     .padding(.horizontal, 12)
                     .padding(.top, 6)
                     .padding(.bottom, 8)
+                #endif
 
                 List(selection: Binding<AppDestination?>(
                     get: { appState.selectedDestination },
@@ -81,12 +97,52 @@ public struct RootView: View {
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
 
+                #if os(macOS)
+                Divider()
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("路由模式", selection: Binding(
+                        get: { appState.profile.mode },
+                        set: { mode in Task { await appState.setMode(mode) } }
+                    )) {
+                        ForEach(RoutingMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Toggle(isOn: Binding(
+                        get: { appState.status.systemProxyEnabled },
+                        set: { on in Task { await appState.setSystemProxy(on) } }
+                    )) {
+                        Text("系统代理").frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Toggle(isOn: Binding(
+                        get: { appState.status.tunEnabled },
+                        set: { on in
+                            if on { showTunConfirm = true }
+                            else { Task { await appState.setTUN(false) } }
+                        }
+                    )) {
+                        Text("虚拟网卡").frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Divider()
+                    sidebarLiveFooter
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(appState.isBusy)
+                .padding(16)
+                #else
                 sidebarLiveFooter
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
                     .padding(.top, 4)
+                #endif
             }
+            #if os(macOS)
+            .navigationTitle("Xeylroute")
+            .navigationSplitViewColumnWidth(min: 186, ideal: 206, max: 260)
+            #else
             .navigationSplitViewColumnWidth(min: 224, ideal: 238, max: 272)
+            #endif
         } detail: {
             StageCanvas {
                 detailContent(for: appState.selectedDestination)
@@ -139,6 +195,7 @@ public struct RootView: View {
 
     // MARK: - Sidebar Subcomponents
 
+    #if os(iOS)
     private var sidebarControlHeader: some View {
         let palette = XeylPalette(colorScheme)
         return VStack(alignment: .leading, spacing: 10) {
@@ -238,9 +295,19 @@ public struct RootView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    #endif
+
+    @ViewBuilder
     private func navRow(_ dest: AppDestination, badge: Int? = nil) -> some View {
+        #if os(macOS)
+        Label(dest.title, systemImage: dest.systemImage)
+            .symbolVariant(.none)
+            .badge(badge ?? 0)
+            .padding(.vertical, 3)
+            .tag(dest)
+        #else
         let isSelected = appState.selectedDestination == dest
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
             Image(systemName: dest.systemImage)
                 .font(.system(size: 13.5, weight: .medium))
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(dest.tint))
@@ -260,6 +327,7 @@ public struct RootView: View {
         }
         .padding(.vertical, 1.5)
         .tag(dest)
+        #endif
     }
 
     private var sidebarLiveFooter: some View {
@@ -299,6 +367,7 @@ public struct RootView: View {
             .monospacedDigit()
             .foregroundStyle(.secondary)
         }
+        #if os(iOS)
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
         .background(palette.cardSurface.opacity(0.65), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -306,6 +375,7 @@ public struct RootView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(palette.cardBorder, lineWidth: 0.75)
         )
+        #endif
     }
 
     private var statusDotColor: Color {

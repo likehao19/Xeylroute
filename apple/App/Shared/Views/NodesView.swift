@@ -36,8 +36,10 @@ public struct NodesView: View {
 
                 Spacer()
 
+                #if os(iOS)
                 InlineSearchField(text: $filterText, placeholder: selectedTab == .sites ? "搜索网站" : "搜索节点或协议")
                     .frame(maxWidth: 220)
+                #endif
 
                 if let scope = appState.profile.subscriptionScope {
                     StatusPill(text: scope, tint: .blue)
@@ -62,6 +64,9 @@ public struct NodesView: View {
             }
         }
         .navigationTitle("代理组与节点")
+        #if os(macOS)
+        .searchable(text: $filterText, placement: .toolbar, prompt: selectedTab == .sites ? "搜索网站" : "搜索节点或协议")
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 switch selectedTab {
@@ -166,6 +171,17 @@ public struct NodesView: View {
         selectedName: String
     ) -> some View {
         let isExpanded = expandedGroups.contains(id)
+        func nodeRow(_ node: ProxyNode) -> some View {
+            NodeDrawerTile(
+                node: node,
+                isSelected: node.name == selectedName,
+                measurement: appState.nodeDelays[node.id],
+                isTesting: appState.testingNodes.contains(node.id),
+                onSelect: { Task { await appState.selectNode(node.name, inGroup: id) } },
+                onProbe: { Task { await appState.measureDelay(for: node) } }
+            )
+        }
+
         return NativeCard(padding: 0) {
             VStack(spacing: 0) {
                 Button {
@@ -195,19 +211,19 @@ public struct NodesView: View {
 
                 if isExpanded {
                     HairlineDivider(inset: 0)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
+                    #if os(macOS)
+                    LazyVStack(spacing: 0) {
                         ForEach(nodes) { node in
-                            NodeDrawerTile(
-                                node: node,
-                                isSelected: node.name == selectedName,
-                                measurement: appState.nodeDelays[node.id],
-                                isTesting: appState.testingNodes.contains(node.id),
-                                onSelect: { Task { await appState.selectNode(node.name, inGroup: id) } },
-                                onProbe: { Task { await appState.measureDelay(for: node) } }
-                            )
+                            nodeRow(node)
+                            if node.id != nodes.last?.id { HairlineDivider(inset: 52) }
                         }
                     }
+                    #else
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
+                        ForEach(nodes) { node in nodeRow(node) }
+                    }
                     .padding(14)
+                    #endif
                 }
             }
         }
@@ -348,7 +364,9 @@ private struct NodeDrawerTile: View {
 
     var body: some View {
         let palette = XeylPalette(colorScheme)
+        #if os(iOS)
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        #endif
 
         HStack(spacing: 9) {
             Button(action: onSelect) {
@@ -370,6 +388,14 @@ private struct NodeDrawerTile: View {
             }
             .buttonStyle(.plain)
 
+            #if os(macOS)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tint)
+                    .accessibilityLabel("当前节点")
+            }
+            #endif
             LatencyBadge(measurement: measurement, isTesting: isTesting)
 
             if !node.isPolicy || node.name == "AUTO" {
@@ -382,6 +408,11 @@ private struct NodeDrawerTile: View {
                 .help("测试延迟")
             }
         }
+        #if os(macOS)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
+        .background(isSelected ? palette.selectedFill : (isHovering ? palette.rowHover : .clear))
+        #else
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
         .background(
@@ -396,6 +427,7 @@ private struct NodeDrawerTile: View {
                 lineWidth: isSelected ? 1.2 : 0.75
             )
         )
+        #endif
         .onHover { isHovering = $0 }
     }
 }

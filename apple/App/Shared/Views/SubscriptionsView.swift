@@ -31,8 +31,10 @@ public struct SubscriptionsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     SectionHeaderBar("订阅来源") {
                         HStack(spacing: 12) {
+                            #if os(iOS)
                             InlineSearchField(text: $filterText, placeholder: "搜索订阅或节点")
                                 .frame(width: 200)
+                            #endif
                             Button("编辑完整配置…") {
                                 editorTarget = EditorTarget(title: "编辑完整配置", providerName: nil, isNew: false)
                             }
@@ -42,7 +44,9 @@ public struct SubscriptionsView: View {
                         }
                     }
 
-                    if providers.isEmpty {
+                    if providers.isEmpty && standalone.isEmpty && !query.isEmpty {
+                        ContentUnavailableView.search(text: filterText)
+                    } else if providers.isEmpty && query.isEmpty {
                         NativeCard(padding: 34) {
                             VStack(spacing: 10) {
                                 Image(systemName: "square.stack.3d.up")
@@ -110,6 +114,9 @@ public struct SubscriptionsView: View {
             .padding(20)
         }
         .navigationTitle("订阅管理")
+        #if os(macOS)
+        .searchable(text: $filterText, placement: .toolbar, prompt: "搜索订阅或节点")
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if !appState.profile.providers.isEmpty {
@@ -264,7 +271,7 @@ public struct SubscriptionsView: View {
     }
 }
 
-private struct ImportSubscriptionSheet: View {
+struct ImportSubscriptionSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
