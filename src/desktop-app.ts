@@ -125,6 +125,9 @@ export function mountDesktopApp(shell: ShellController): void {
     root.classList.remove('platform-macos', 'platform-windows', 'platform-linux');
     root.classList.add(`platform-${platform}`);
     $(platform === 'windows' ? 'windowTitlebar' : 'toolbarActions').append($('winControls'));
+    if (platform === 'windows') {
+      $('windowTitlebar').prepend(document.querySelector<HTMLElement>('.sidebar-top-brand')!);
+    }
   }
   const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
   applyPlatformClass(ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : 'linux');

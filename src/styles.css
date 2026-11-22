@@ -2560,6 +2560,16 @@
       background: var(--window-bg);
       border-bottom: 1px solid var(--win-line);
     }
+    .platform-windows .window-titlebar .sidebar-top-brand {
+      display: inline-flex;
+      height: 100%;
+      padding-left: 14px;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .platform-windows .window-titlebar .sidebar-top-brand img { width: 24px; height: 24px; }
+    .platform-windows .sidebar-brand-row > img,
+    .platform-windows .sidebar-brand-text strong { visibility: hidden; }
     .platform-windows .win-controls {
       position: absolute;
       top: 0;
