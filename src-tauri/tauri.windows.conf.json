@@ -6,11 +6,7 @@
       }
     },
     "resources": {
-      "licenses/Mihomo-COPYING": "licenses/Mihomo-COPYING",
-      "binaries/WinDivert.dll": "WinDivert.dll",
-      "binaries/WinDivert64.sys": "WinDivert64.sys",
-      "binaries/WinDivert-LICENSE.txt": "licenses/WinDivert-LICENSE.txt",
-      "binaries/WinDivert-source.tar.gz": "licenses/WinDivert-source.tar.gz"
+      "licenses/Mihomo-COPYING": "licenses/Mihomo-COPYING"
     }
   }
 }

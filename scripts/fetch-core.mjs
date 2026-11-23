@@ -205,7 +205,7 @@ async function main() {
   const destination = path.join(OUT_DIR, sidecarName(triple));
   fs.mkdirSync(OUT_DIR, { recursive: true });
   if (triple.includes('windows')) {
-    prepareWinDivert(lock);
+    if (args.includes('--with-windivert')) prepareWinDivert(lock);
     const binary = buildWindowsCore(triple, lock);
     if (!fs.existsSync(destination) || sha256(fs.readFileSync(destination)) !== sha256(binary)) {
       const temporary = `${destination}.${process.pid}.tmp`;

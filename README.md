@@ -60,9 +60,11 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 在「虚拟网卡设置」选择「仅指定分组和程序」。在「分流与程序」的「分组」为组成员开启 TUN，或在「按软件」为主程序选择开启、关闭或继承。软件设置优先于分组设置。停用的规则和分组不会使成员进入 TUN。切换到全局或直连模式会暂停指定软件接管。
 
-指定软件 TUN 使用随包提供的签名 WinDivert 2.2.2，只将可识别的所选程序的单播 TCP 和 UDP 送入 Mihomo 虚拟协议栈。系统默认路由和其他软件的出口保持原设置。回环、分片、组播以及由 Windows DNS Client 代发的系统 DNS 请求沿用系统路径。Windows ARM64、macOS 和 Linux 继续提供全局 TUN。[WinDivert 发布页](https://github.com/basil00/WinDivert/releases/tag/v2.2.2)
+指定软件 TUN 使用签名 WinDivert 2.2.2。普通桌面启动、普通代理和全局 TUN 不下载或准备 WinDivert。首次启用「仅指定分组和程序」TUN 时，应用从官方发布页下载驱动、许可证和源码，校验锁定的 SHA-256 后保存在当前用户的应用数据目录 `core` 下。后续启用会校验并复用驱动文件。下载、校验或安全软件隔离导致的失败只影响指定软件 TUN，不阻止应用启动。开发验收需要单独准备驱动时可运行 `npm run core -- --with-windivert`。
 
-退出应用会关闭本次接管使用的驱动句柄。Windows NSIS 安装和卸载需要管理员权限，安装包附带驱动许可证和源码。后台将校验过的签名驱动复制到系统驱动目录下的临时子目录，并登记在下次启动 Windows 时清理。安装目录里的文件可随应用卸载。可以在隔离的 Windows x64 环境运行 `python scripts/smoke-windows-process-tun.py <随包内核路径>` 验证所选程序、原网卡流量和退出恢复。
+指定软件 TUN 只将可识别的所选程序的单播 TCP 和 UDP 送入 Mihomo 虚拟协议栈。系统默认路由和其他软件的出口保持原设置。回环、分片、组播以及由 Windows DNS Client 代发的系统 DNS 请求沿用系统路径。Windows ARM64、macOS 和 Linux 继续提供全局 TUN。[WinDivert 发布页](https://github.com/basil00/WinDivert/releases/tag/v2.2.2)
+
+退出应用会关闭本次接管使用的驱动句柄。Windows NSIS 安装和卸载需要管理员权限。后台将校验过的签名驱动复制到系统驱动目录下的临时子目录，并登记在下次启动 Windows 时清理。可以在隔离的 Windows x64 环境准备驱动后运行 `python scripts/smoke-windows-process-tun.py <随包内核路径>` 验证所选程序、原网卡流量和退出恢复。
 
 可以通过 `python3 scripts/smoke-mihomo.py --binary <随包内核路径>` 验证本地转发、控制接口、订阅和测速。脚本只使用临时配置和回环端口。
 

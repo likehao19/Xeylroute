@@ -99,7 +99,7 @@ new file mode 100644
 index 0000000..c6fe802
 --- /dev/null
 +++ b/listener/sing_tun/process_capture_windows_amd64.go
-@@ -0,0 +1,391 @@
+@@ -0,0 +1,395 @@
 +//go:build with_gvisor
 +
 +package sing_tun
@@ -124,6 +124,7 @@ index 0000000..c6fe802
 +	"github.com/metacubex/gvisor/pkg/tcpip/link/channel"
 +	"github.com/metacubex/gvisor/pkg/tcpip/stack"
 +	"github.com/metacubex/mihomo/component/process"
++	C "github.com/metacubex/mihomo/constant"
 +	"github.com/metacubex/mihomo/log"
 +	tun "github.com/metacubex/sing-tun"
 +	"golang.org/x/sys/windows"
@@ -215,7 +216,10 @@ index 0000000..c6fe802
 +		return windows.MoveFileEx(name, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
 +	}
 +	for _, file := range files {
-+		data, err := os.ReadFile(filepath.Join(filepath.Dir(executable), file.name))
++		data, err := os.ReadFile(filepath.Join(C.Path.HomeDir(), file.name))
++		if os.IsNotExist(err) {
++			data, err = os.ReadFile(filepath.Join(filepath.Dir(executable), file.name))
++		}
 +		if err != nil {
 +			return "", err
 +		}

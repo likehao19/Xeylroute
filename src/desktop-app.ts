@@ -782,7 +782,7 @@ export function mountDesktopApp(shell: ShellController): void {
         if (action.enabled === current.tun) return;
         if (action.enabled) {
           if (current.tunScope === 'selected' && !current.selectedTunAvailable) {
-            throw new Error('指定软件 TUN 需要 Windows x64 和随安装包提供的签名驱动。');
+            throw new Error('指定软件 TUN 需要 Windows x64。');
           }
           const accepted = await confirmSheet({
             title: '开启虚拟网卡 (TUN)',

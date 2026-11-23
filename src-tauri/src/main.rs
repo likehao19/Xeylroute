@@ -14,6 +14,8 @@ mod share_links;
 mod system_proxy;
 mod tray;
 mod tun_worker;
+#[cfg(windows)]
+mod windivert;
 
 use mihomo_api::{Controller, LiveController};
 use serde::Serialize;
@@ -443,8 +445,8 @@ fn start_core(app: &AppHandle, tun: bool) -> Result<CoreStatus, String> {
         settings.insert("store-selected".into(), Value::Bool(true));
     }
     if tun {
-        if profile::tun_scope(&configured) == "selected" && !selected_tun_available(&dir) {
-            return Err("指定软件 TUN 需要 Windows x64 和随安装包提供的签名驱动。".into());
+        if profile::tun_scope(&configured) == "selected" {
+            prepare_selected_tun(&dir)?;
         }
         normalized["tun"] = tun_config(&configured)?;
     }
@@ -566,11 +568,16 @@ fn local_worker(dir: &Path) -> std::io::Result<()> {
 
 fn selected_tun_available(dir: &Path) -> bool {
     cfg!(all(windows, target_arch = "x86_64"))
-        && core_binary(dir).is_some_and(|binary| {
-            binary.parent().is_some_and(|folder| {
-                folder.join("WinDivert.dll").is_file() && folder.join("WinDivert64.sys").is_file()
-            })
-        })
+        && core_binary(dir).is_some()
+}
+
+fn prepare_selected_tun(dir: &Path) -> Result<(), String> {
+    if !selected_tun_available(dir) {
+        return Err("指定软件 TUN 需要 Windows x64。".into());
+    }
+    #[cfg(windows)]
+    tauri::async_runtime::block_on(windivert::ensure(dir))?;
+    Ok(())
 }
 
 fn tun_config(configured: &Value) -> Result<Value, String> {
@@ -1056,10 +1063,8 @@ fn update_profile(
             let active_tun = validated["tun"]["enable"] == true;
             let previous_tun = active_tun.then(|| tun_config(&original)).transpose()?;
             let next_tun = active_tun.then(|| tun_config(&config)).transpose()?;
-            if next_tun.as_ref().is_some_and(|value| value["windows-process-capture"] == true)
-                && !selected_tun_available(&dir)
-            {
-                return Err("未找到指定软件 TUN 的签名驱动。".into());
+            if next_tun.as_ref().is_some_and(|value| value["windows-process-capture"] == true) {
+                prepare_selected_tun(&dir)?;
             }
             let tun_changed = previous_tun != next_tun;
             let prepared = serde_json::to_string_pretty(&config).map_err(|err| err.to_string())?;
