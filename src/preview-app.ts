@@ -526,7 +526,7 @@ export function mountPreviewApp(shell: ShellController): void {
       const pct = Math.min(100, Math.round((sub.used / sub.quota) * 100));
       const cnt = state.nodes.filter(n => n.source === sub.name && !n.retired).length;
       return `
-        <div class="mac-card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="mac-card subscription-card" style="display:flex;flex-direction:column;gap:12px">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div style="display:flex;align-items:center;gap:10px">
               <span class="sq md ${sub.active ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
@@ -536,7 +536,7 @@ export function mountPreviewApp(shell: ShellController): void {
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:4px">
-              <button type="button" class="glass-btn-soft" data-ref-sub="${esc(sub.id)}">刷新</button>
+              <button type="button" class="sf-icon-btn" data-ref-sub="${esc(sub.id)}" aria-label="刷新订阅" data-tip="刷新订阅">${SF_REFRESH}</button>
               <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(sub.id)}" data-tip="移除订阅">${SF_TRASH}</button>
             </div>
           </div>

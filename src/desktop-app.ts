@@ -194,7 +194,6 @@ export function mountDesktopApp(shell: ShellController): void {
   let selectingNode = false;
   let changingMode = false;
   let changingSubscription = false;
-  let pendingSubscription = '';
   let batchTesting = false;
   let probeGeneration = 0;
   let probeRenderTimer = 0;
@@ -493,7 +492,6 @@ export function mountDesktopApp(shell: ShellController): void {
     if (changingSubscription || networkUpdating || selectingNode || changingMode) return false;
     probeGeneration++;
     changingSubscription = true;
-    pendingSubscription = name;
     renderAllSafe();
     try {
       const previous = liveProfile?.subscriptionScope || '';
@@ -504,7 +502,7 @@ export function mountDesktopApp(shell: ShellController): void {
           saveMap(KEY_GROUP_EXITS, groupSelections);
         }
       }
-      if (name && !mapping) {
+      if (name && !mapping && liveProfile?.sharedRules?.length) {
         const plan = await tauriApi.subscriptionMapping(name);
         if (plan.missing.length) {showScopeMapping(name,plan); return false;}
       }
@@ -520,9 +518,8 @@ export function mountDesktopApp(shell: ShellController): void {
       return false;
     } finally {
       changingSubscription = false;
-      pendingSubscription = '';
-      await reloadProfile();
-      await refreshLiveState(true);
+      renderAllSafe();
+      void refreshLiveState(true);
     }
   }
 
@@ -2075,7 +2072,8 @@ rules:
     const refreshAll = $<HTMLButtonElement>('refreshAllSubsBtn');
     refreshAll.hidden = !providers.some(p => p.type === 'http');
     refreshAll.disabled = !!providerRefresh || changingSubscription || networkUpdating;
-    refreshAll.textContent = providerRefresh?.batch ? `刷新中 ${providerRefresh.done}/${providerRefresh.total}` : '全部刷新';
+    refreshAll.innerHTML = SF_REFRESH;
+    refreshAll.dataset.tip = providerRefresh?.batch ? `刷新中 ${providerRefresh.done}/${providerRefresh.total}` : '刷新全部订阅';
     const q = shell.getSearch().trim().toLowerCase();
     const matches = providers.filter(p => [p.name, p.source, p.type === 'file' ? '本地文件' : '远程订阅'].join(' ').toLowerCase().includes(q));
     const cards = matches.length
@@ -2092,7 +2090,7 @@ rules:
           const updated = meta?.updatedAt ? new Date(meta.updatedAt).toLocaleDateString() : '待刷新';
           const result = refreshResults.get(saved.name);
           return `
-            <div class="mac-card sub-card-clickable ${selected ? 'active-sub' : ''}" data-select-sub="${esc(saved.name)}" style="display:flex;flex-direction:column;gap:12px">
+            <div class="mac-card subscription-card sub-card-clickable ${selected ? 'active-sub' : ''}" data-select-sub="${esc(saved.name)}" style="display:flex;flex-direction:column;gap:12px">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <div style="display:flex;align-items:center;gap:10px;min-width:0">
                   <span class="sq md ${selected ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
@@ -2103,17 +2101,18 @@ rules:
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex:none">
                   ${remote || saved.type === 'file' ? `<button type="button" class="sf-icon-btn" data-edit-sub="${esc(saved.name)}" aria-label="编辑订阅" data-tip="编辑订阅">${SF_EDIT}</button>` : ''}
-                  <button type="button" class="glass-btn-soft" data-ref-sub="${esc(saved.name)}" ${providerRefresh || changingSubscription || networkUpdating ? 'disabled' : ''}>刷新</button>
+                  <button type="button" class="sf-icon-btn" aria-label="刷新订阅" data-tip="刷新订阅" data-ref-sub="${esc(saved.name)}" ${providerRefresh || changingSubscription || networkUpdating ? 'disabled' : ''}>${SF_REFRESH}</button>
                   <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(saved.name)}" data-tip="移除订阅">${SF_TRASH}</button>
                 </div>
               </div>
-              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:var(--type-caption);color:var(--muted)">
-                <span>${esc(saved.source || (remote ? '远程来源' : '本地存储'))}</span>
+              <div class="subscription-source">
+                <span title="${esc(saved.source || '')}">${esc(saved.source || (remote ? '远程来源' : '本地存储'))}</span>
                 <span>更新 ${esc(updated)}</span>
               </div>
-              ${saved.ruleExitDisabled ? `<button type="button" class="glass-btn-soft" data-restore-sub-exit="${esc(saved.name)}">恢复规则出口</button>` : ''}
-              ${pendingSubscription === saved.name ? `<span style="font-size:var(--type-label);color:var(--accent)">正在切换订阅配置…</span>` : ''}
-              ${result ? `<span class="sub-refresh-result${result.failed ? ' failed' : ''}">${esc(result.message)}</span>` : ''}
+              <div class="subscription-status">
+                ${saved.ruleExitDisabled ? `<button type="button" class="glass-btn-soft compact" data-restore-sub-exit="${esc(saved.name)}">恢复规则出口</button>` : ''}
+                ${result ? `<span class="sub-refresh-result${result.failed ? ' failed' : ''}" title="${esc(result.message)}">${esc(result.message)}</span>` : ''}
+              </div>
               ${hasQuota ? `
                 <div>
                   <div style="display:flex;justify-content:space-between;font-size:var(--type-caption);color:var(--muted);margin-bottom:5px;font-family:var(--font-mono)">
@@ -2122,7 +2121,7 @@ rules:
                   </div>
                   <div class="mac-progress"><span style="width:${pct}%"></span></div>
                 </div>
-              ` : ''}
+              ` : `<div class="subscription-quota-placeholder">${remote ? '订阅未提供用量信息' : '本地配置文件'}</div>`}
             </div>
           `;
         }).join('')

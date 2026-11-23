@@ -2832,7 +2832,7 @@
     }
 
     #clearLogsBtn:disabled { opacity: .5; }
-    #subsGridPane > :only-child { grid-column: 1 / -1; }
+
     .modal-backdrop[inert] { visibility: hidden; }
 
     .page-actions { display: flex; align-items: center; gap: 8px; }
@@ -3153,3 +3153,16 @@ details[open] > summary > .rule-disclosure { transform: rotate(90deg); }
 .rule-empty { padding: 28px 14px; color: var(--muted); text-align: center; }
 
 #view-settings .search-miss { display: none !important; }
+
+    #subsGridPane .subscription-card { height: 190px; min-width: 0; }
+    .subscription-card > :first-child { min-height: 40px; flex: none; gap: 8px; }
+    .subscription-card > :last-child { margin-top: auto; }
+    .subscription-source {
+      display: flex; justify-content: space-between; gap: 12px;
+      font: var(--type-caption)/1.4 var(--font-mono); color: var(--muted);
+    }
+    .subscription-source > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .subscription-source > :last-child { flex: none; }
+    .subscription-status { display: flex; align-items: center; gap: 8px; height: 28px; flex: none; min-width: 0; }
+    .subscription-status .sub-refresh-result { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .subscription-quota-placeholder { min-height: 28px; font-size: var(--type-caption); color: var(--muted); }
