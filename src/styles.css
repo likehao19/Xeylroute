@@ -3075,8 +3075,6 @@
     }
     .modal-sheet:has(.doc-editor) :is(.sheet-hint, .sheet-error:not(:empty)) { padding: 8px 20px; margin: 0; }
     .modal-sheet:has(.doc-editor) .sheet-actions { padding: 11px 16px; border-top: 1px solid var(--inset-divider); }
-    .sub-refresh-result { font-size: var(--type-label); color: var(--muted); overflow-wrap: anywhere; }
-    .sub-refresh-result.failed { color: var(--red); }
 
 .rule-input-row { display: flex; gap: 8px; align-items: center; }
 .rule-input-row .sheet-input { flex: 1; min-width: 0; }
@@ -3154,7 +3152,7 @@ details[open] > summary > .rule-disclosure { transform: rotate(90deg); }
 
 #view-settings .search-miss { display: none !important; }
 
-    #subsGridPane .subscription-card { height: 190px; min-width: 0; }
+    #subsGridPane .subscription-card { height: 150px; min-width: 0; }
     .subscription-card > :first-child { min-height: 40px; flex: none; gap: 8px; }
     .subscription-card > :last-child { margin-top: auto; }
     .subscription-source {
@@ -3163,6 +3161,4 @@ details[open] > summary > .rule-disclosure { transform: rotate(90deg); }
     }
     .subscription-source > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .subscription-source > :last-child { flex: none; }
-    .subscription-status { display: flex; align-items: center; gap: 8px; height: 28px; flex: none; min-width: 0; }
-    .subscription-status .sub-refresh-result { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .subscription-quota-placeholder { min-height: 28px; font-size: var(--type-caption); color: var(--muted); }

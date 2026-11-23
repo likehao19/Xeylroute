@@ -176,7 +176,6 @@ export function mountDesktopApp(shell: ShellController): void {
   const subscriptionSelections = loadMap<string>(KEY_SUB_EXITS);
   const subscriptionCardData = loadMap<CardMeta>(KEY_SUB_CARD);
   const subscriptionCardReads = new Set<string>();
-  const refreshResults = new Map<string, { message: string; failed?: boolean }>();
   let providerRefresh: { total: number; done: number; batch: boolean } | null = null;
   let subscriptionCardsHtml = '';
   const groupSelections = loadMap<string>(KEY_GROUP_EXITS);
@@ -194,6 +193,7 @@ export function mountDesktopApp(shell: ShellController): void {
   let selectingNode = false;
   let changingMode = false;
   let changingSubscription = false;
+  let subscriptionIntent: string | null = null;
   let batchTesting = false;
   let probeGeneration = 0;
   let probeRenderTimer = 0;
@@ -410,7 +410,6 @@ export function mountDesktopApp(shell: ShellController): void {
   function applyProfile(profile: ProfileSummary): void {
     liveProfile = profile;
     const providerNames = new Set(profile.providers.map(p => p.name));
-    for (const name of refreshResults.keys()) if (!providerNames.has(name)) refreshResults.delete(name);
     for (const name of [...subscriptionCardData.keys()]) {
       if (!providerNames.has(name)) {
         subscriptionCardData.delete(name);
@@ -489,7 +488,14 @@ export function mountDesktopApp(shell: ShellController): void {
   }
 
   async function switchSubscription(name: string, mapping?: Record<string,string>): Promise<boolean> {
-    if (changingSubscription || networkUpdating || selectingNode || changingMode) return false;
+    if (changingSubscription) {
+      subscriptionIntent = name;
+      renderSubs();
+      return false;
+    }
+    if (networkUpdating || selectingNode || changingMode) return false;
+    subscriptionIntent = name;
+    profileSeq++;
     probeGeneration++;
     changingSubscription = true;
     renderAllSafe();
@@ -518,8 +524,11 @@ export function mountDesktopApp(shell: ShellController): void {
       return false;
     } finally {
       changingSubscription = false;
+      const queued = subscriptionIntent;
+      subscriptionIntent = null;
       renderAllSafe();
-      void refreshLiveState(true);
+      if (queued !== null && queued !== name && queued !== selectedSubscription) void switchSubscription(queued);
+      else void refreshLiveState(true);
     }
   }
 
@@ -2031,15 +2040,16 @@ rules:
     if (providerRefresh || changingSubscription || networkUpdating) return;
     const names = single ? [single] : (liveProfile?.providers || []).filter(p => p.type === 'http').map(p => p.name);
     if (!names.length) return;
+    const refreshResults = new Map<string, { message: string; failed?: boolean }>();
     const progress = { total: names.length, done: 0, batch: !single };
     providerRefresh = progress;
-    for (const name of names) refreshResults.set(name, { message: '等待刷新' });
+    notify(single ? `正在刷新「${single}」…` : `正在刷新订阅 0/${names.length}…`, false, true);
     renderView();
     let failed = 0;
     try {
       if (!await ensureLocalCore()) throw new Error('没有可刷新的代理配置');
       for (const name of names) {
-        refreshResults.set(name, { message: '正在刷新…' });
+        notify(`正在刷新「${name}」 ${progress.done + 1}/${progress.total}…`, false, true);
         renderView();
         try {
           await tauriApi.mihomoRefreshProvider(name);
@@ -2052,12 +2062,11 @@ rules:
         }
         progress.done++;
       }
-      await refreshLiveState(true);
+      void refreshLiveState(true);
       if (single) notify(refreshResults.get(single)?.message || '已刷新', failed > 0);
-      else notify(failed ? `已处理 ${names.length} 个订阅，${failed} 个有异常` : `已刷新 ${names.length} 个订阅`, failed > 0);
+      else notify(failed ? names.filter(name => refreshResults.get(name)?.failed).map(name => `${name}：${refreshResults.get(name)!.message}`).join('；') : `已刷新 ${names.length} 个订阅`, failed > 0);
     } catch (err) {
       const message = cleanError(err);
-      for (const name of names.slice(progress.done)) refreshResults.set(name, { message, failed: true });
       notify(message, true);
     } finally {
       providerRefresh = null;
@@ -2078,7 +2087,7 @@ rules:
     const matches = providers.filter(p => [p.name, p.source, p.type === 'file' ? '本地文件' : '远程订阅'].join(' ').toLowerCase().includes(q));
     const cards = matches.length
       ? matches.map(saved => {
-          const selected = selectedSubscription === saved.name;
+          const selected = (subscriptionIntent ?? selectedSubscription) === saved.name;
           const remote = saved.type === 'http';
           const meta = subscriptionCardData.get(saved.name);
           const usage = meta?.usage;
@@ -2088,7 +2097,6 @@ rules:
           const nodeCount = (liveCore?.providers?.providers?.[saved.name]?.proxies ?? subscriptionNodes.get(saved.name) ?? []).filter(isTestableNode).length;
           const expiry = remote && usage?.Expire ? new Date(usage.Expire * 1000).toLocaleDateString() : (remote ? '—' : '本地文件');
           const updated = meta?.updatedAt ? new Date(meta.updatedAt).toLocaleDateString() : '待刷新';
-          const result = refreshResults.get(saved.name);
           return `
             <div class="mac-card subscription-card sub-card-clickable ${selected ? 'active-sub' : ''}" data-select-sub="${esc(saved.name)}" style="display:flex;flex-direction:column;gap:12px">
               <div style="display:flex;justify-content:space-between;align-items:center">
@@ -2096,11 +2104,12 @@ rules:
                   <span class="sq md ${selected ? 'blue' : 'orange'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></span>
                   <div style="min-width:0">
                     <strong class="card-title" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(saved.name)}</strong>
-                    <small style="color:var(--muted);font-size:var(--type-caption)">${remote ? '远程订阅' : '本地订阅文件'} · ${nodeCount} 个节点${selected ? ' · 当前生效' : ''}</small>
+                    <small style="color:var(--muted);font-size:var(--type-caption)">${remote ? '远程订阅' : '本地订阅文件'} · ${nodeCount} 个节点${selectedSubscription === saved.name ? ' · 当前生效' : ''}</small>
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex:none">
                   ${remote || saved.type === 'file' ? `<button type="button" class="sf-icon-btn" data-edit-sub="${esc(saved.name)}" aria-label="编辑订阅" data-tip="编辑订阅">${SF_EDIT}</button>` : ''}
+                  ${saved.ruleExitDisabled ? `<button type="button" class="sf-icon-btn" data-restore-sub-exit="${esc(saved.name)}" aria-label="恢复规则出口" data-tip="恢复规则出口">${SF_DETAIL}</button>` : ''}
                   <button type="button" class="sf-icon-btn" aria-label="刷新订阅" data-tip="刷新订阅" data-ref-sub="${esc(saved.name)}" ${providerRefresh || changingSubscription || networkUpdating ? 'disabled' : ''}>${SF_REFRESH}</button>
                   <button type="button" class="sf-icon-btn danger" data-del-sub="${esc(saved.name)}" data-tip="移除订阅">${SF_TRASH}</button>
                 </div>
@@ -2108,10 +2117,6 @@ rules:
               <div class="subscription-source">
                 <span title="${esc(saved.source || '')}">${esc(saved.source || (remote ? '远程来源' : '本地存储'))}</span>
                 <span>更新 ${esc(updated)}</span>
-              </div>
-              <div class="subscription-status">
-                ${saved.ruleExitDisabled ? `<button type="button" class="glass-btn-soft compact" data-restore-sub-exit="${esc(saved.name)}">恢复规则出口</button>` : ''}
-                ${result ? `<span class="sub-refresh-result${result.failed ? ' failed' : ''}" title="${esc(result.message)}">${esc(result.message)}</span>` : ''}
               </div>
               ${hasQuota ? `
                 <div>
@@ -3412,7 +3417,7 @@ rules:
     const selectSubCard = target.closest<HTMLElement>('[data-select-sub]');
     if (selectSubCard?.dataset.selectSub) {
       const name = selectSubCard.dataset.selectSub;
-      if (name !== selectedSubscription) void switchSubscription(name);
+      if (name !== (subscriptionIntent ?? selectedSubscription)) void switchSubscription(name);
     }
   });
 

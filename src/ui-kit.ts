@@ -22,14 +22,14 @@ export function fmtTime(sec: number): string {
 }
 
 let toastTimer: number | null = null;
-export function notify(message: string, isError = false): void {
+export function notify(message: string, isError = false, persistent = false): void {
   const el = $('toast');
   if (!el) return;
   el.innerHTML = `<span class="toast-dot"></span><span>${esc(message)}</span>`;
   el.classList.toggle('error', isError);
   el.classList.add('show');
   if (toastTimer !== null) window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => el.classList.remove('show'), isError ? 3600 : 2300);
+  toastTimer = persistent ? null : window.setTimeout(() => el.classList.remove('show'), isError ? 3600 : 2300);
 }
 
 /* =========================================================================
