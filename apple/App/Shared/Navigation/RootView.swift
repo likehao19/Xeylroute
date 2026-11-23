@@ -58,15 +58,10 @@ public struct RootView: View {
     private var splitViewShell: some View {
         NavigationSplitView {
             #if os(macOS)
-            VStack(alignment: .leading, spacing: 0) {
-                sidebarNavigation
-                Divider()
-                macNetworkControls.padding(.horizontal, 15).padding(.vertical, 11)
-                Divider()
-                sidebarLiveFooter.padding(.horizontal, 15).padding(.vertical, 10)
-            }
-            .navigationTitle("Xeylroute")
-            .navigationSplitViewColumnWidth(min: 175, ideal: 192, max: 226)
+            sidebarNavigation
+                .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
+                .navigationTitle("Xeylroute")
+                .navigationSplitViewColumnWidth(min: 175, ideal: 192, max: 226)
             #else
             VStack(spacing: 0) {
                 sidebarControlHeader
@@ -119,6 +114,12 @@ public struct RootView: View {
                 navRow(.split, badge: appState.activeRuleCount)
                 navRow(.settings)
             }
+            Section("连接控制") {
+                macNetworkControls
+                macSidebarStatus
+                    .padding(.vertical, 5)
+                    .selectionDisabled()
+            }
             #else
             Section("代理与路由") {
                 navRow(.connect)
@@ -138,7 +139,7 @@ public struct RootView: View {
 
     #if os(macOS)
     private var macNetworkControls: some View {
-        VStack(spacing: 10) {
+        Group {
             HStack {
                 Label("路由模式", systemImage: "arrow.triangle.branch")
                 Spacer(minLength: 4)
@@ -147,25 +148,66 @@ public struct RootView: View {
                     set: { mode in Task { await appState.setMode(mode) } }
                 )) {
                     ForEach(RoutingMode.allCases) { Text($0.title).tag($0) }
-                }.labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                }
+                .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless)
+                .foregroundStyle(.primary).fixedSize()
             }
-            HStack {
-                Label("系统代理", systemImage: "globe")
-                Spacer()
-                Toggle("系统代理", isOn: Binding(get: { appState.status.systemProxyEnabled },
-                                           set: { on in Task { await appState.setSystemProxy(on) } }))
-                    .labelsHidden()
+            Toggle(isOn: Binding(
+                get: { appState.status.systemProxyEnabled },
+                set: { on in Task { await appState.setSystemProxy(on) } }
+            )) {
+                Label("系统代理", systemImage: "globe").frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack {
-                Label("虚拟网卡", systemImage: "shield")
-                Spacer()
-                Toggle("虚拟网卡", isOn: Binding(get: { appState.status.tunEnabled }, set: { on in
+            Toggle(isOn: Binding(
+                get: { appState.status.tunEnabled },
+                set: { on in
                     if on { showTunConfirm = true } else { Task { await appState.setTUN(false) } }
-                })).labelsHidden()
+                }
+            )) {
+                Label("虚拟网卡", systemImage: "shield").frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .toggleStyle(.switch).controlSize(.small).font(.callout)
-        .foregroundStyle(.secondary).disabled(appState.isBusy)
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .listItemTint(.monochrome)
+        .selectionDisabled()
+        .disabled(appState.isBusy)
+    }
+
+    private var macSidebarStatus: some View {
+        let status = HStack(spacing: 5) {
+            Circle().fill(statusDotColor).frame(width: 6, height: 6)
+            Text(appState.statusBadgeTitle).font(.callout.weight(.medium))
+        }
+        return VStack(alignment: .leading, spacing: 4) {
+            if appState.status.running {
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        status.fixedSize()
+                        Spacer(minLength: 5)
+                        Text(appState.status.coreVersionLabel.replacingOccurrences(of: "Mihomo ", with: ""))
+                            .font(.caption).foregroundStyle(.secondary).fixedSize()
+                    }
+                    status
+                }
+                let down = TrafficTracker.formatRate(appState.currentDownRate)
+                let up = TrafficTracker.formatRate(appState.currentUpRate)
+                HStack(spacing: 10) {
+                    Text("↓ \(down)").accessibilityLabel("下载速率 \(down)")
+                    Text("↑ \(up)").accessibilityLabel("上传速率 \(up)")
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            } else {
+                status
+                Text(appState.status.coreVersionLabel).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .help(appState.status.coreVersionLabel + " · " + appState.statusBadgeTitle)
     }
     #endif
 
@@ -318,8 +360,13 @@ public struct RootView: View {
     @ViewBuilder
     private func navRow(_ dest: AppDestination, badge: Int? = nil) -> some View {
         #if os(macOS)
-        Label(dest.desktopTitle, systemImage: dest.systemImage)
-        .symbolVariant(.none).symbolRenderingMode(.monochrome)
+        Label {
+            Text(dest.desktopTitle)
+        } icon: {
+            Image(systemName: dest.systemImage)
+                .symbolVariant(.none)
+                .foregroundColor(appState.selectedDestination == dest ? nil : .secondary)
+        }
         .badge(badge ?? 0).padding(.vertical, 2).tag(dest)
         #else
         let isSelected = appState.selectedDestination == dest
@@ -346,6 +393,7 @@ public struct RootView: View {
         #endif
     }
 
+    #if os(iOS)
     private var sidebarLiveFooter: some View {
         let palette = XeylPalette(colorScheme)
         return VStack(alignment: .leading, spacing: 6) {
@@ -366,19 +414,6 @@ public struct RootView: View {
                 }
                 palette.divider.frame(height: 0.5)
             }
-            #if os(macOS)
-            HStack(spacing: 8) {
-                Image("AppBrandLogo").resizable().frame(width: 23, height: 23).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Xeylroute").font(.callout.weight(.medium))
-                    Text(appState.statusBadgeTitle).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 3)
-                Circle().fill(statusDotColor).frame(width: 6, height: 6)
-                Text(appState.status.coreVersionLabel.replacingOccurrences(of: "Mihomo ", with: ""))
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
-            }.help(appState.status.coreVersionLabel + " · " + appState.statusBadgeTitle)
-            #else
             HStack(spacing: 6) {
                 Circle()
                     .fill(statusDotColor)
@@ -395,9 +430,7 @@ public struct RootView: View {
             .font(.system(size: 11, design: .monospaced))
             .monospacedDigit()
             .foregroundStyle(.secondary)
-            #endif
         }
-        #if os(iOS)
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
         .background(palette.cardSurface.opacity(0.65), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -405,8 +438,8 @@ public struct RootView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(palette.cardBorder, lineWidth: 0.75)
         )
-        #endif
     }
+    #endif
 
     private var statusDotColor: Color {
         if appState.status.systemProxyEnabled || appState.status.tunEnabled { return .green }
