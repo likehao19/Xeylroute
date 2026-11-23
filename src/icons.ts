@@ -79,10 +79,30 @@ const KNOWN_SITE_ICONS = new Set([
 ]);
 
 export function renderSiteIcon(host: string, label: string, tone: string): string {
-  const clean = host.toLowerCase();
-  if (KNOWN_SITE_ICONS.has(clean)) {
-    return `<span class="app-native-icon site"><img src="/site-icons/${clean}.ico" alt=""></span>`;
-  }
-  const initial = (label.trim().slice(0, 1) || clean.slice(0, 1) || 'W').toUpperCase();
-  return `<span class="sq md ${tone}" style="font-weight:700;font-size:var(--type-label)">${initial.replace(/[<>&]/g, '')}</span>`;
+  const initial = (label.trim().slice(0, 1) || 'W').toUpperCase().replace(/[<>&"']/g, '');
+  const fallback = `<span class="sq md ${tone}" style="font-weight:700;font-size:var(--type-label)">${initial}</span>`;
+  let clean: string;
+  try {
+    const value = host.trim().replace(/^(?:\*\.)|^\./, '');
+    const url = new URL(value.includes('://') ? value : `https://${value}`);
+    clean = url.hostname;
+    if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(clean)
+      || !['https:', 'http:'].includes(url.protocol)) return fallback;
+  } catch { return fallback; }
+  const local = KNOWN_SITE_ICONS.has(clean);
+  const src = local ? `/site-icons/${clean}.ico` : `https://${clean}/favicon.ico`;
+  return `<span class="app-native-icon site"><img src="${src}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-site-host="${clean}" data-site-stage="${local ? 0 : 1}" data-site-initial="${initial}"></span>`;
+}
+
+export function initSiteIcons(): void {
+  document.addEventListener('error', event => {
+    const img = event.target;
+    if (!(img instanceof HTMLImageElement) || !img.dataset.siteHost) return;
+    const host = img.dataset.siteHost;
+    const stage = Number(img.dataset.siteStage);
+    img.dataset.siteStage = String(stage + 1);
+    if (stage === 0) img.src = `https://${host}/favicon.ico`;
+    else if (stage === 1) img.src = `https://icons.duckduckgo.com/ip3/${host}.ico`;
+    else if (img.parentElement) img.parentElement.textContent = img.dataset.siteInitial || 'W';
+  }, true);
 }

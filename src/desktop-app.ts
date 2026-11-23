@@ -1758,8 +1758,8 @@ rules:
       const shortName = conditions ? conditionLabel(conditions) : isProc ? (target.split(/[\\/]/).at(-1) || target) : target;
       const iconHtml = isProc
         ? renderProgramIcon(processes.get(programRuleKey(target))?.icon, shortName)
-        : isDomain
-          ? renderSiteIcon(r.payload, shortName, 'blue')
+        : isDomain || (conditions?.target && !conditions.program && !isIp(conditions.target))
+          ? renderSiteIcon(conditions?.target || r.payload, shortName, 'blue')
           : `<span class="sq md gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>`;
       const editable = Boolean(conditions || r.instance);
       return `
@@ -1787,7 +1787,11 @@ rules:
     const openApps = new Set(Array.from($('splitRulesPane').querySelectorAll<HTMLDetailsElement>('details[open]'), el => el.dataset.app));
     $('splitRulesPane').innerHTML = `
       ${shared.map(r => `
-        <div class="mac-card flush"><div class="mac-row"><div class="mac-row-left"><div>
+        <div class="mac-card flush"><div class="mac-row"><div class="mac-row-left">
+        ${r.conditions?.target && !r.conditions.program && !isIp(r.conditions.target)
+          ? renderSiteIcon(r.conditions.target, r.conditions.target, 'blue')
+          : r.line.startsWith('DOMAIN,') || r.line.startsWith('DOMAIN-SUFFIX,')
+            ? renderSiteIcon(r.line.split(',')[1], r.line.split(',')[1], 'blue') : ''}<div>
         <span class="mac-row-title">${esc(r.conditions ? conditionLabel(r.conditions) : r.source)}</span>
         <span class="mac-row-sub">个人共享 · ${esc(r.line)}</span></div></div>
         <div class="rule-right-cols live-cols"><button class="sf-icon-btn" data-shared-inspect="${esc(r.line)}" aria-label="查看命中连接">${SF_DETAIL}</button>

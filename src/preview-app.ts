@@ -400,9 +400,9 @@ export function mountPreviewApp(shell: ShellController): void {
           return `
             <div class="mac-row">
               <div class="mac-row-left">
-                <span class="sq md ${iconTone}">
+                ${r.kind === 'website' ? renderSiteIcon(r.value, r.label, iconTone) : `<span class="sq md ${iconTone}">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
-                </span>
+                </span>`}
                 <div style="min-width:0">
                   <span class="mac-row-title">${esc(r.label)}</span>
                   <span class="mac-row-sub">${r.kind === 'website' ? '网站域名' : '软件 · 长期'} · <span style="font-family:var(--font-mono)">${esc(r.value)}</span></span>
