@@ -65,18 +65,32 @@ export function renderProgramIcon(icon?: string | null, name = '', fallbackTone?
   return `<span class="sq md ${tone}" style="font-weight:700;font-size:var(--type-label)">${letter.replace(/[<>&]/g, '')}</span>`;
 }
 
-const KNOWN_SITE_ICONS = new Set([
-  'baidu.com',
-  'bilibili.com',
-  'bing.com',
-  'feishu.cn',
-  'github.com',
-  'music.apple.com',
-  'slack.com',
-  'spotify.com',
-  'weibo.com',
-  'zhihu.com',
-]);
+const SITE_ICON_FILES: Record<string, string> = {
+  'baidu.com': 'baidu.com.ico',
+  'google.com': 'google.com.ico',
+  'bing.com': 'bing.com.ico',
+  'wikipedia.org': 'wikipedia.org.ico',
+  'duckduckgo.com': 'duckduckgo.com.ico',
+  'zhihu.com': 'zhihu.com.ico',
+  'github.com': 'github.com.ico',
+  'stackoverflow.com': 'stackoverflow.com.ico',
+  'npmjs.com': 'npmjs.com.png',
+  'chatgpt.com': 'chatgpt.com.png',
+  'claude.ai': 'claude.ai.ico',
+  'huggingface.co': 'huggingface.co.ico',
+  'bilibili.com': 'bilibili.com.ico',
+  'youtube.com': 'youtube.com.png',
+  'netflix.com': 'netflix.com.ico',
+  'spotify.com': 'spotify.com.ico',
+  'twitch.tv': 'twitch.tv.png',
+  'music.apple.com': 'music.apple.com.ico',
+  'feishu.cn': 'feishu.cn.ico',
+  'notion.so': 'notion.so.ico',
+  'slack.com': 'slack.com.ico',
+  'discord.com': 'discord.com.png',
+  'reddit.com': 'reddit.com.png',
+  'weibo.com': 'weibo.com.ico',
+};
 
 export function renderSiteIcon(host: string, label: string, tone: string): string {
   const initial = (label.trim().slice(0, 1) || 'W').toUpperCase().replace(/[<>&"']/g, '');
@@ -89,20 +103,15 @@ export function renderSiteIcon(host: string, label: string, tone: string): strin
     if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(clean)
       || !['https:', 'http:'].includes(url.protocol)) return fallback;
   } catch { return fallback; }
-  const local = KNOWN_SITE_ICONS.has(clean);
-  const src = local ? `/site-icons/${clean}.ico` : `https://${clean}/favicon.ico`;
-  return `<span class="app-native-icon site"><img src="${src}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-site-host="${clean}" data-site-stage="${local ? 0 : 1}" data-site-initial="${initial}"></span>`;
+  const file = SITE_ICON_FILES[clean];
+  if (!file) return fallback;
+  return `<span class="app-native-icon site"><img src="/site-icons/${file}" alt="" loading="lazy" decoding="async" data-site-initial="${initial}"></span>`;
 }
 
 export function initSiteIcons(): void {
   document.addEventListener('error', event => {
     const img = event.target;
-    if (!(img instanceof HTMLImageElement) || !img.dataset.siteHost) return;
-    const host = img.dataset.siteHost;
-    const stage = Number(img.dataset.siteStage);
-    img.dataset.siteStage = String(stage + 1);
-    if (stage === 0) img.src = `https://${host}/favicon.ico`;
-    else if (stage === 1) img.src = `https://icons.duckduckgo.com/ip3/${host}.ico`;
-    else if (img.parentElement) img.parentElement.textContent = img.dataset.siteInitial || 'W';
+    if (!(img instanceof HTMLImageElement) || !img.dataset.siteInitial) return;
+    if (img.parentElement) img.parentElement.textContent = img.dataset.siteInitial;
   }, true);
 }

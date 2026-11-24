@@ -25,24 +25,36 @@ export function createSiteCatalog(isLive: boolean): DemoSiteCategory[] {
   const ms = (v: number) => (isLive ? null : v);
   return [
     ['搜索与资讯', [
+      { n: '百度', h: 'baidu.com', ms: ms(18), c: 'blue' },
       { n: 'Google', h: 'google.com', ms: ms(34), c: 'blue' },
+      { n: 'Bing', h: 'bing.com', ms: ms(26), c: 'green' },
       { n: '维基百科', h: 'wikipedia.org', ms: ms(48), c: 'gray' },
+      { n: 'DuckDuckGo', h: 'duckduckgo.com', ms: ms(52), c: 'red' },
       { n: '知乎', h: 'zhihu.com', ms: ms(22), c: 'cyan' },
     ]],
     ['开发与 AI', [
       { n: 'GitHub', h: 'github.com', ms: ms(41), c: 'indigo' },
-      { n: 'Claude', h: 'claude.ai', ms: ms(56), c: 'orange' },
+      { n: 'Stack Overflow', h: 'stackoverflow.com', ms: ms(55), c: 'orange' },
+      { n: 'npm', h: 'npmjs.com', ms: ms(47), c: 'red' },
       { n: 'ChatGPT', h: 'chatgpt.com', ms: ms(63), c: 'green' },
+      { n: 'Claude', h: 'claude.ai', ms: ms(56), c: 'orange' },
+      { n: 'Hugging Face', h: 'huggingface.co', ms: ms(61), c: 'purple' },
     ]],
     ['影音娱乐', [
-      { n: 'YouTube', h: 'youtube.com', ms: ms(44), c: 'red' },
-      { n: 'Spotify', h: 'spotify.com', ms: ms(49), c: 'green' },
       { n: '哔哩哔哩', h: 'bilibili.com', ms: ms(19), c: 'cyan' },
+      { n: 'YouTube', h: 'youtube.com', ms: ms(44), c: 'red' },
+      { n: 'Netflix', h: 'netflix.com', ms: ms(57), c: 'red' },
+      { n: 'Spotify', h: 'spotify.com', ms: ms(49), c: 'green' },
+      { n: 'Twitch', h: 'twitch.tv', ms: ms(62), c: 'purple' },
+      { n: 'Apple Music', h: 'music.apple.com', ms: ms(38), c: 'red' },
     ]],
     ['办公社区', [
+      { n: '飞书', h: 'feishu.cn', ms: ms(21), c: 'blue' },
       { n: 'Notion', h: 'notion.so', ms: ms(67), c: 'gray' },
       { n: 'Slack', h: 'slack.com', ms: ms(58), c: 'purple' },
-      { n: '飞书', h: 'feishu.cn', ms: ms(21), c: 'blue' },
+      { n: 'Discord', h: 'discord.com', ms: ms(54), c: 'purple' },
+      { n: 'Reddit', h: 'reddit.com', ms: ms(59), c: 'orange' },
+      { n: '新浪微博', h: 'weibo.com', ms: ms(23), c: 'red' },
     ]],
   ];
 }

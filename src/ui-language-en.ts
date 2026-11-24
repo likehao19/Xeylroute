@@ -128,6 +128,8 @@ TUN 接管范围|TUN scope
 美国|United States
 香港|Hong Kong
 维基百科|Wikipedia
+百度|Baidu
+新浪微博|Weibo
 知乎|Zhihu
 哔哩哔哩|Bilibili
 飞书|Feishu
