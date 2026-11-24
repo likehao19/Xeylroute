@@ -175,7 +175,7 @@ export function initMacMenuListener(): void {
     if (item && !item.sep) cb(item.value, item.label);
   });
 
-  document.querySelector('.views-host')?.addEventListener('scroll', dismissMovedMenu, { passive: true });
+  document.querySelector('.views-host')?.addEventListener('scroll', dismissMovedMenu, { capture: true, passive: true });
 }
 
 /* =========================================================================

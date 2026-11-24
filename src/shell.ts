@@ -56,9 +56,7 @@ export function initShell(): ShellController {
   function switchView(viewId: ViewId, detail?: 'system' | 'tun'): void {
     closeMacMenu();
     const settings = $('view-settings');
-    if (viewId !== currentView || detail !== settings.dataset.detail) {
-      settings.parentElement!.scrollTop = 0;
-    }
+    const resetScroll = viewId !== currentView || detail !== settings.dataset.detail;
     if (detail) settings.dataset.detail = detail;
     else delete settings.dataset.detail;
     if (viewId !== currentView) syncSearch('');
@@ -79,6 +77,11 @@ export function initShell(): ShellController {
     }
     $('stageTitle').textContent = detail === 'system' ? '系统代理' : detail === 'tun' ? '虚拟网卡' : VIEW_TITLES[viewId];
     for (const cb of viewListeners) cb(viewId);
+    if (resetScroll) {
+      const nextView = $(`view-${viewId}`);
+      nextView.scrollTop = 0;
+      nextView.querySelectorAll('.view-scroll').forEach(pane => { pane.scrollTop = 0; });
+    }
   }
 
   function toggleSidebar(): void {

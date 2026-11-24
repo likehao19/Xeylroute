@@ -977,8 +977,10 @@
        ========================================================================= */
     .views-host {
       flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       padding: 0 18px 14px;
     }
     .view {
@@ -987,15 +989,30 @@
       max-width: none;
       margin: 0;
       padding-top: 58px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
     .view.active {
-      display: block;
-      animation: macViewIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    #view-connect.active {
       display: flex;
       flex-direction: column;
-      min-height: 100%;
+      animation: macViewIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .view > :not(.view-scroll) { flex-shrink: 0; }
+    .view > .view-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      padding: 4px;
+      margin: -4px -4px 0;
+    }
+    #view-settings.active {
+      display: block;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
     @media (min-width: 1320px) {
       .glass-toolbar { padding: 6px 24px 0; }

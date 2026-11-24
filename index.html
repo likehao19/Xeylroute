@@ -226,7 +226,7 @@
             </div>
           </div>
 
-          <div class="connect-grid">
+          <div class="connect-grid view-scroll">
             <div class="connect-col">
               <div class="home-nodes">
                 <div class="section-head">
@@ -357,10 +357,10 @@
             <strong>还没有代理节点</strong>
             <p>用右上角的导入按钮添加订阅链接、分享链接或配置文件。</p>
           </div>
-          <div id="nodesGroupsPane"></div>
-          <div id="nodesSitesPane" hidden></div>
+          <div class="view-scroll" id="nodesGroupsPane"></div>
+          <div class="view-scroll" id="nodesSitesPane" hidden></div>
           <input type="search" class="sheet-input list-search" id="portSearch" aria-label="搜索固定入口" placeholder="搜索节点、订阅或端口" hidden>
-          <div id="fixedSocksPane" hidden></div>
+          <div class="view-scroll" id="fixedSocksPane" hidden></div>
         </section>
 
         <!-- ===============================================================
@@ -386,9 +386,9 @@
               </div>
             </div>
           </div>
-          <div id="splitRulesPane"></div>
-          <div id="splitGroupsPane" hidden></div>
-          <div id="splitProcsPane" hidden></div>
+          <div class="view-scroll" id="splitRulesPane"></div>
+          <div class="view-scroll" id="splitGroupsPane" hidden></div>
+          <div class="view-scroll" id="splitProcsPane" hidden></div>
         </section>
 
         <!-- ===============================================================
@@ -406,7 +406,9 @@
           </form>
 
           <div class="section-head"><span class="section-label">最近记录</span><div><button type="button" class="section-link" id="activeRoutesBtn" hidden>查看活动连接</button> <button type="button" class="section-link" id="clearLogsBtn">清空记录</button></div></div>
-          <div class="mac-card flush" id="logsListCard"></div>
+          <div class="view-scroll">
+            <div class="mac-card flush" id="logsListCard"></div>
+          </div>
         </section>
 
         <!-- ===============================================================
@@ -418,13 +420,15 @@
             <button type="button" class="section-link" id="editConfigBtn" hidden>编辑完整配置…</button>
           </div>
           <input type="file" id="subFileInput" accept=".yaml,.yml,.txt,.conf,.b64,.base64,.json" hidden>
-          <div class="grid-2col" id="subsGridPane"></div>
-          <div id="standaloneNodesSection" hidden style="margin-top:18px">
-            <div class="section-head">
-              <span class="section-label">直接导入的独立节点</span>
-              <span style="font-size:var(--type-label);color:var(--muted)" id="standaloneNodesCount"></span>
+          <div class="view-scroll">
+            <div class="grid-2col" id="subsGridPane"></div>
+            <div id="standaloneNodesSection" hidden style="margin-top:18px">
+              <div class="section-head">
+                <span class="section-label">直接导入的独立节点</span>
+                <span style="font-size:var(--type-label);color:var(--muted)" id="standaloneNodesCount"></span>
+              </div>
+              <div class="mac-card flush" id="standaloneNodesList"></div>
             </div>
-            <div class="mac-card flush" id="standaloneNodesList"></div>
           </div>
         </section>
 
